@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { ArrowLeft, Search, RefreshCw } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { createClient } from '../utils/supabase/client';
+import { UserMenu } from './UserMenu';
 
 interface LocalDubsSetupProps {
   onBack: () => void;
@@ -10,6 +11,7 @@ interface LocalDubsSetupProps {
   userId: string;
   userProfilePic: string | null;
   userName: string;
+  onLogout: () => void;
 }
 
 interface PlayerProfile {
@@ -26,6 +28,7 @@ export function LocalDubsSetup({
   userId,
   userProfilePic,
   userName,
+  onLogout,
 }: LocalDubsSetupProps) {
   const [selectedPartner, setSelectedPartner] = useState<PlayerProfile | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -116,7 +119,12 @@ export function LocalDubsSetup({
             Local Doubles Setup
           </h1>
 
-          <div style={{ width: '100px' }} />
+          <UserMenu
+            profilePic={userProfilePic}
+            accentColor={accentColor}
+            userName={userName}
+            onLogout={onLogout}
+          />
         </div>
 
         {/* Team Display */}

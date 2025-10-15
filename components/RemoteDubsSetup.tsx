@@ -3,12 +3,16 @@ import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Badge } from './ui/badge';
 import { createClient } from '../utils/supabase/client';
+import { UserMenu } from './UserMenu';
 
 interface RemoteDubsSetupProps {
   onBack: () => void;
   onContinue: (partnerId: string) => void;
   accentColor: string;
   userId: string;
+  userProfilePic: string | null;
+  userName: string;
+  onLogout: () => void;
 }
 
 interface FriendProfile {
@@ -24,6 +28,9 @@ export function RemoteDubsSetup({
   onContinue,
   accentColor,
   userId,
+  userProfilePic,
+  userName,
+  onLogout,
 }: RemoteDubsSetupProps) {
   const [friends, setFriends] = useState<FriendProfile[]>([]);
   const [selectedFriend, setSelectedFriend] = useState<FriendProfile | null>(null);
@@ -173,7 +180,12 @@ export function RemoteDubsSetup({
             Select Remote Partner
           </h1>
 
-          <div style={{ width: '100px' }} />
+          <UserMenu
+            profilePic={userProfilePic}
+            accentColor={accentColor}
+            userName={userName}
+            onLogout={onLogout}
+          />
         </div>
 
         {/* Info Text */}
