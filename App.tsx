@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { LobbyCard } from './components/LobbyCard';
 import { Login } from './components/Login';
 import { OnlineLobby } from './components/OnlineLobby';
 import { LocalDubsSetup } from './components/LocalDubsSetup';
 import { RemoteDubsSetup } from './components/RemoteDubsSetup';
 import { Badge } from './components/ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from './components/ui/avatar';
+import { UserMenu } from './components/UserMenu';
 import {
   MapPin,
   Wifi,
@@ -15,9 +15,18 @@ import {
   Baby,
   Heart,
   User,
+  Bell,
   ChevronLeft,
   ChevronRight
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from './components/ui/dropdown-menu';
 import { createClient } from './utils/supabase/client';
 import { useBLE } from './contexts/BLEContext';
 import bluetoothIcon from './dashboardicon.png';
@@ -29,6 +38,14 @@ import localPlayDartIcon from './playerdart.png';
 import cashSetsIcon from './cashseticon.png';
 import tournamentDartIcon from './elitedart.png';
 import leagueDartIcon from './ghostdart.png';
+
+type GameRequestNotification = {
+  id: string;
+  fromPlayerId: string;
+  fromPlayerName: string;
+  createdAt: string;
+  schema: 'player' | 'youth';
+};
 
 export default function App() {
   const { isConnected: bleConnected, connect: bleConnect, disconnect: bleDisconnect, status: bleStatus } = useBLE();
@@ -49,8 +66,11 @@ export default function App() {
   const [userId, setUserId] = useState<string>('');
   const [userName, setUserName] = useState<string>('');
   const [doublesPartner, setDoublesPartner] = useState<{id: string; name: string} | null>(null);
+  const [missedRequests, setMissedRequests] = useState<GameRequestNotification[]>([]);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const supabase = createClient();
   const scrollContainerRef = useState<HTMLDivElement | null>(null)[0];
+  const currentViewRef = useRef(currentView);
 
   // Check authentication and fetch user's profile data from Supabase
   useEffect(() => {
@@ -237,6 +257,109 @@ export default function App() {
 
     checkAuthAndFetchProfile();
   }, []);
+
+  useEffect(() => {
+    currentViewRef.current = currentView;
+  }, [currentView]);
+
+  const handleLogout = async () => {
+    try {
+      setIsLoggingOut(true);
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      setIsLoggingOut(false);
+      setIsAuthenticated(false);
+      setUserId('');
+      setUserName('');
+      setProfilePic(null);
+      setAccentColor('#a855f7');
+      setDoublesPartner(null);
+      setHasActiveLeague(false);
+      setHasActiveTournament(false);
+      setHasParentPaired(false);
+      setCurrentView('lobby');
+      setMissedRequests([]);
+    }
+  };
+
+  useEffect(() => {
+    if (!isAuthenticated || !userId) {
+      return;
+    }
+
+    const schemas: Array<'player' | 'youth'> = ['player', 'youth'];
+
+    const channels = schemas.map(schema =>
+      supabase
+        .channel(`active-games-${schema}-${userId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema,
+            table: 'active_games',
+            filter: `player2_id=eq.${userId}`,
+          },
+          async payload => {
+            if (!payload.new) return;
+            if (currentViewRef.current === 'online-lobby') {
+              return;
+            }
+
+            const data = payload.new as Record<string, any>;
+            const challengerId = data.player1_id as string | undefined;
+            if (!challengerId) return;
+
+            const notificationId = `${schema}-${data.id}`;
+            let challengerName = 'Opponent';
+
+            try {
+              const profileQuery =
+                schema === 'youth'
+                  ? supabase.schema('youth').from('youth_profiles')
+                  : supabase.from('player_profiles');
+
+              const { data: profile } = await profileQuery
+                .select('granboard_name')
+                .eq('id', challengerId)
+                .single();
+
+              if (profile?.granboard_name) {
+                challengerName = profile.granboard_name;
+              }
+            } catch (error) {
+              console.error('Error fetching challenger name:', error);
+            }
+
+            setMissedRequests(prev => {
+              if (prev.some(notification => notification.id === notificationId)) {
+                return prev;
+              }
+
+              return [
+                ...prev,
+                {
+                  id: notificationId,
+                  fromPlayerId: challengerId,
+                  fromPlayerName: challengerName,
+                  createdAt: data.created_at || new Date().toISOString(),
+                  schema,
+                },
+              ];
+            });
+          }
+        )
+        .subscribe()
+    );
+
+    return () => {
+      channels.forEach(channel => {
+        supabase.removeChannel(channel);
+      });
+    };
+  }, [isAuthenticated, userId, supabase]);
 
   const handleLoginSuccess = () => {
     setIsAuthenticated(true);
@@ -433,6 +556,9 @@ export default function App() {
         isDoublesTeam={doublesPartner !== null}
         partnerId={doublesPartner?.id}
         partnerName={doublesPartner?.name}
+        profilePic={profilePic}
+        userName={userName}
+        onLogout={handleLogout}
       />
     );
   }
@@ -446,6 +572,7 @@ export default function App() {
         userId={userId}
         userProfilePic={profilePic}
         userName={userName}
+        onLogout={handleLogout}
       />
     );
   }
@@ -457,6 +584,9 @@ export default function App() {
         onContinue={handleRemoteDubsContinue}
         accentColor={accentColor}
         userId={userId}
+        userProfilePic={profilePic}
+        userName={userName}
+        onLogout={handleLogout}
       />
     );
   }

@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
-import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { ArrowLeft, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { createClient } from '../utils/supabase/client';
 import { PlayerGameSetup } from './PlayerGameSetup';
+import { UserMenu } from './UserMenu';
 
 interface OnlineLobbyProps {
   onBack: () => void;
@@ -13,6 +14,9 @@ interface OnlineLobbyProps {
   isDoublesTeam?: boolean;
   partnerId?: string;
   partnerName?: string;
+  profilePic: string | null;
+  userName: string;
+  onLogout: () => void;
 }
 
 interface AvailablePlayer {
@@ -120,17 +124,18 @@ export function OnlineLobby({
   }, [canAccess, userId]);
 
   // Fetch available players
-  async function fetchAvailablePlayers() {
+  const fetchAvailablePlayers = useCallback(async () => {
     try {
+      setLoading(true);
       console.log('Fetching available players...');
-      
-      // Fetch lobby entries (excluding current user) from public schema
+
       const { data: lobbyData, error: lobbyError } = await supabase
         .schema('public')
         .from('online_lobby')
         .select('*')
         .eq('status', 'waiting')
         .neq('player_id', userId)
+        .order('last_seen', { ascending: false })
         .order('created_at', { ascending: false });
 
       if (lobbyError) {
@@ -145,15 +150,11 @@ export function OnlineLobby({
         return;
       }
 
-      console.log('Lobby data:', lobbyData);
-
-      // Fetch profile and stats for each player
       const playersWithData = await Promise.all(
-        lobbyData.map(async (lobbyEntry) => {
+        lobbyData.map(async lobbyEntry => {
           const playerId = lobbyEntry.player_id;
           const isYouth = lobbyEntry.is_youth_player;
 
-          // Fetch profile
           const profileQuery = isYouth
             ? supabase.schema('youth').from('youth_profiles')
             : supabase.from('player_profiles');
@@ -168,7 +169,6 @@ export function OnlineLobby({
             return null;
           }
 
-          // Fetch stats
           const statsQuery = isYouth
             ? supabase.schema('youth').from('youth_stats')
             : supabase.from('player_stats');
@@ -183,8 +183,7 @@ export function OnlineLobby({
             return null;
           }
 
-          // If this is a doubles team, fetch partner name
-          let partnerName: string | undefined;
+          let partnerDisplayName: string | undefined;
           if (lobbyEntry.is_doubles_team && lobbyEntry.partner_id) {
             const partnerQuery = isYouth
               ? supabase.schema('youth').from('youth_profiles')
@@ -196,7 +195,7 @@ export function OnlineLobby({
               .single();
 
             if (partnerData) {
-              partnerName = partnerData.granboard_name;
+              partnerDisplayName = partnerData.granboard_name;
             }
           }
 
@@ -211,26 +210,40 @@ export function OnlineLobby({
             accentColor: profileData.profilecolor || '#a855f7',
             isDoublesTeam: lobbyEntry.is_doubles_team || false,
             partnerId: lobbyEntry.partner_id || undefined,
-            partnerName: partnerName,
+            partnerName: partnerDisplayName,
             soloGamesPlayed: statsData.solo_games_played || 0,
             soloWins: statsData.solo_wins || 0,
             soloWinRate: statsData.solo_win_rate || 0,
             soloHighestCheckout: statsData.solo_highest_checkout || 0,
-          };
+            lastSeen: lobbyEntry.last_seen || lobbyEntry.created_at,
+          } as AvailablePlayer & { lastSeen?: string };
         })
       );
 
-      // Filter out null entries
-      const validPlayers = playersWithData.filter((p): p is AvailablePlayer => p !== null);
-      console.log('Valid players:', validPlayers);
+      const validPlayers = playersWithData
+        .filter((p): p is AvailablePlayer & { lastSeen?: string } => p !== null)
+        .sort((a, b) => {
+          const timeA = a.lastSeen ?? '';
+          const timeB = b.lastSeen ?? '';
+          return timeB.localeCompare(timeA);
+        })
+        .map(({ lastSeen, ...rest }) => rest);
+
       setAvailablePlayers(validPlayers);
     } catch (err) {
       console.error('Error in fetchAvailablePlayers:', err);
       setAvailablePlayers([]);
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
-  }
+  }, [supabase, userId]);
+
+  const handleManualRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    setCurrentPage(0);
+    await fetchAvailablePlayers();
+  }, [fetchAvailablePlayers]);
 
   useEffect(() => {
     if (!canAccess) {
@@ -239,7 +252,6 @@ export function OnlineLobby({
 
     fetchAvailablePlayers();
 
-    // Set up real-time subscription for lobby changes
     const channel = supabase
       .channel('online-lobby-changes')
       .on(
@@ -249,8 +261,7 @@ export function OnlineLobby({
           schema: 'public',
           table: 'online_lobby',
         },
-        (payload) => {
-          console.log('Lobby changed:', payload);
+        () => {
           fetchAvailablePlayers();
         }
       )
@@ -259,7 +270,7 @@ export function OnlineLobby({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [canAccess]);
+  }, [canAccess, supabase, fetchAvailablePlayers]);
 
   // Calculate pagination
   const totalPages = Math.ceil(availablePlayers.length / CARDS_PER_PAGE);
@@ -404,7 +415,19 @@ export function OnlineLobby({
                 </p>
               </div>
             )}
-            {!isDoublesTeam && <div style={{ width: '100px' }} />}
+            <button
+              onClick={handleManualRefresh}
+              className="p-2 text-white hover:opacity-80 transition-opacity rounded-full border border-white/10"
+              aria-label="Refresh lobby"
+            >
+              <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+            </button>
+            <UserMenu
+              profilePic={profilePic}
+              accentColor={accentColor}
+              userName={userName}
+              onLogout={onLogout}
+            />
           </div>
         </div>
 

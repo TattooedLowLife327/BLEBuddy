@@ -7,7 +7,12 @@
       "Read(//c/Users/maehe/legitllogb/src/utils/**)",
       "Bash(npm install:*)",
       "Bash(npm run dev:*)",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "Bash(git remote add:*)",
+      "Bash(git branch:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []
