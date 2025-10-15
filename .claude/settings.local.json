@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Read(//c/Users/maehe/legitllogb/src/pages/**)",
+      "Read(//c/Users/maehe/legitllogb/src/components/ui/**)",
+      "Read(//c/Users/maehe/legitllogb/src/utils/**)",
+      "Bash(npm install:*)",
+      "Bash(npm run dev:*)",
+      "mcp__ide__getDiagnostics"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
