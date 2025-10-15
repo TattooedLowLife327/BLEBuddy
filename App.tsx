@@ -14,7 +14,6 @@ import {
   DollarSign,
   Baby,
   Heart,
-  User,
   Bell,
   ChevronLeft,
   ChevronRight
@@ -276,6 +275,10 @@ export default function App() {
       setProfilePic(null);
       setAccentColor('#a855f7');
       setDoublesPartner(null);
+      setIsYouthPlayer(false);
+      setUserRole(null);
+      setUserGender(null);
+      setUserAge(null);
       setHasActiveLeague(false);
       setHasActiveTournament(false);
       setHasParentPaired(false);
@@ -591,6 +594,8 @@ export default function App() {
     );
   }
 
+  const notificationCount = missedRequests.length;
+
   return (
     <div 
       className="h-screen w-full overflow-hidden"
@@ -644,15 +649,68 @@ export default function App() {
               </span>
             </button>
 
-            {/* User Profile Picture */}
-            <div>
-              {console.log('Rendering Avatar with profilePic:', profilePic)}
-              <Avatar className="w-14 h-14 border-2" style={{ borderColor: accentColor }}>
-                <AvatarImage src={profilePic || undefined} alt="Profile" />
-                <AvatarFallback className="bg-white/10">
-                  <User className="w-6 h-6 text-white" />
-                </AvatarFallback>
-              </Avatar>
+            {/* User Actions */}
+            <div className="flex items-center gap-4">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="relative p-2 rounded-full border border-white/10 text-white hover:opacity-80 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+                    aria-label={notificationCount ? `${notificationCount} missed requests` : 'No missed requests'}
+                  >
+                    <Bell className="w-5 h-5" />
+                    {notificationCount > 0 && (
+                      <span className="absolute -top-1 -right-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[11px] font-semibold text-white">
+                        {notificationCount > 9 ? '9+' : notificationCount}
+                      </span>
+                    )}
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  className="min-w-[240px] bg-zinc-900/95 text-white border border-zinc-700 backdrop-blur-md"
+                >
+                  <DropdownMenuLabel>Missed Requests</DropdownMenuLabel>
+                  <DropdownMenuSeparator className="bg-zinc-700" />
+                  {notificationCount === 0 ? (
+                    <DropdownMenuItem disabled className="text-zinc-400">
+                      No missed requests
+                    </DropdownMenuItem>
+                  ) : (
+                    <>
+                      {missedRequests.map(request => (
+                        <DropdownMenuItem
+                          key={request.id}
+                          className="focus:bg-zinc-800 focus:text-white cursor-default"
+                        >
+                          <div className="flex flex-col">
+                            <span className="text-sm font-medium">{request.fromPlayerName}</span>
+                            <span className="text-xs text-zinc-400">
+                              {new Date(request.createdAt).toLocaleTimeString()}
+                            </span>
+                          </div>
+                        </DropdownMenuItem>
+                      ))}
+                      <DropdownMenuSeparator className="bg-zinc-700" />
+                      <DropdownMenuItem
+                        onSelect={event => {
+                          event.preventDefault();
+                          setMissedRequests([]);
+                        }}
+                        className="focus:bg-red-500/20 focus:text-white text-red-400 cursor-pointer"
+                      >
+                        Clear all
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <UserMenu
+                profilePic={profilePic}
+                accentColor={accentColor}
+                userName={userName}
+                onLogout={handleLogout}
+              />
             </div>
           </div>
         </header>
