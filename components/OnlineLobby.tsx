@@ -33,20 +33,24 @@ interface AvailablePlayer {
   partnerName?: string;
 }
 
-export function OnlineLobby({ 
-  onBack, 
-  accentColor, 
-  userId, 
-  isYouthPlayer, 
+export function OnlineLobby({
+  onBack,
+  accentColor,
+  userId,
+  isYouthPlayer,
   hasParentPaired,
   isDoublesTeam = false,
   partnerId,
   partnerName,
+  profilePic,
+  userName,
+  onLogout,
 }: OnlineLobbyProps) {
   const [availablePlayers, setAvailablePlayers] = useState<AvailablePlayer[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(0);
   const [selectedPlayer, setSelectedPlayer] = useState<AvailablePlayer | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const supabase = createClient();
 
   const CARDS_PER_PAGE = 8;
