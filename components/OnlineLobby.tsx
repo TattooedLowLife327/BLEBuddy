@@ -67,7 +67,7 @@ export function OnlineLobby({
         console.log('Joining online lobby...');
         
         // Insert current user into online_lobby (public schema)
-        const { error: insertError } = await supabase
+        const { error: insertError } = await (supabase as any)
           .schema('public')
           .from('online_lobby')
           .insert({
@@ -93,7 +93,7 @@ export function OnlineLobby({
 
     // Cleanup: leave lobby when component unmounts
     return () => {
-      supabase
+      (supabase as any)
         .schema('public')
         .from('online_lobby')
         .delete()
@@ -113,7 +113,7 @@ export function OnlineLobby({
     if (!canAccess) return;
 
     const heartbeatInterval = setInterval(async () => {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .schema('public')
         .from('online_lobby')
         .update({ last_seen: new Date().toISOString() })
@@ -133,7 +133,7 @@ export function OnlineLobby({
       setLoading(true);
       console.log('Fetching available players...');
 
-      const { data: lobbyData, error: lobbyError } = await supabase
+      const { data: lobbyData, error: lobbyError } = await (supabase as any)
         .schema('public')
         .from('online_lobby')
         .select('*')
@@ -160,7 +160,7 @@ export function OnlineLobby({
           const isYouth = lobbyEntry.is_youth_player;
 
           const profileQuery = isYouth
-            ? supabase.schema('youth').from('youth_profiles')
+            ? (supabase as any).schema('youth').from('youth_profiles')
             : supabase.from('player_profiles');
 
           const { data: profileData, error: profileError } = await profileQuery
@@ -174,7 +174,7 @@ export function OnlineLobby({
           }
 
           const statsQuery = isYouth
-            ? supabase.schema('youth').from('youth_stats')
+            ? (supabase as any).schema('youth').from('youth_stats')
             : supabase.from('player_stats');
 
           const { data: statsData, error: statsError } = await statsQuery
@@ -190,7 +190,7 @@ export function OnlineLobby({
           let partnerDisplayName: string | undefined;
           if (lobbyEntry.is_doubles_team && lobbyEntry.partner_id) {
             const partnerQuery = isYouth
-              ? supabase.schema('youth').from('youth_profiles')
+              ? (supabase as any).schema('youth').from('youth_profiles')
               : supabase.from('player_profiles');
 
             const { data: partnerData } = await partnerQuery
@@ -305,7 +305,7 @@ export function OnlineLobby({
     // TODO: Create game in active_games table
     try {
       const schema = isYouthPlayer ? 'youth' : 'player';
-      const { data: gameData, error: gameError } = await supabase
+      const { data: gameData, error: gameError } = await (supabase as any)
         .schema(schema)
         .from('active_games')
         .insert({
