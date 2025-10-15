@@ -617,7 +617,10 @@ export default function App() {
                 if (bleConnected) {
                   await bleDisconnect();
                 } else {
-                  await bleConnect();
+                  const result = await bleConnect();
+                  if (!result.success && result.error) {
+                    alert(`BLE Connection Failed:\n\n${result.error}\n\nTroubleshooting:\n- Make sure your Granboard is powered on\n- Enable Bluetooth on your phone\n- Use Chrome or Edge browser\n- Make sure you're using HTTPS (deployed app) or localhost`);
+                  }
                 }
               }}
               className="flex items-center gap-3 transition-all hover:scale-105"

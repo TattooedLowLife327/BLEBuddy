@@ -56,27 +56,59 @@ class BLEConnection {
   // Connect to Granboard
   async connect(): Promise<{ success: boolean; device?: BluetoothDevice; error?: string }> {
     try {
+      // Check if Bluetooth is supported
+      if (!navigator.bluetooth) {
+        const error = 'Web Bluetooth is not supported in this browser or requires HTTPS';
+        console.error(error);
+        this.notifyStatusChange('error');
+        return { success: false, error };
+      }
+
+      console.log('Starting BLE connection...');
       this.notifyStatusChange('scanning');
 
-      // Request Bluetooth device
-      this.device = await navigator.bluetooth.requestDevice({
-        filters: [{ services: [SERVICE_UUID] }],
-        optionalServices: [SERVICE_UUID]
-      });
+      // Request Bluetooth device with more flexible options
+      console.log('Requesting Bluetooth device with service UUID:', SERVICE_UUID);
+      try {
+        this.device = await navigator.bluetooth.requestDevice({
+          filters: [{ services: [SERVICE_UUID] }],
+          optionalServices: [SERVICE_UUID]
+        });
+      } catch (deviceError) {
+        // If service filter fails, try with name filter
+        console.log('Service filter failed, trying name filter...');
+        this.device = await navigator.bluetooth.requestDevice({
+          filters: [{ namePrefix: 'GranBoard' }],
+          optionalServices: [SERVICE_UUID]
+        });
+      }
 
+      console.log('Device selected:', this.device.name);
       this.notifyStatusChange('connecting');
 
       // Connect to GATT server
-      this.server = await this.device.gatt!.connect();
+      if (!this.device.gatt) {
+        throw new Error('Device does not support GATT');
+      }
+
+      console.log('Connecting to GATT server...');
+      this.server = await this.device.gatt.connect();
+      console.log('GATT server connected');
 
       // Get service
+      console.log('Getting primary service...');
       this.service = await this.server.getPrimaryService(SERVICE_UUID);
+      console.log('Service obtained');
 
       // Get characteristic
+      console.log('Getting characteristic...');
       this.characteristic = await this.service.getCharacteristic(RX_UUID);
+      console.log('Characteristic obtained');
 
       // Start notifications
+      console.log('Starting notifications...');
       await this.characteristic.startNotifications();
+      console.log('Notifications started');
 
       // Listen for dart throws
       this.characteristic.addEventListener('characteristicvaluechanged', (event) => {
@@ -90,14 +122,29 @@ class BLEConnection {
 
       this.isConnected = true;
       this.notifyStatusChange('connected');
+      console.log('BLE connection successful!');
 
       return { success: true, device: this.device };
 
     } catch (error) {
       console.error('BLE Connection Error:', error);
+      console.error('Error name:', (error as Error).name);
+      console.error('Error message:', (error as Error).message);
+
+      let errorMessage = (error as Error).message;
+
+      // Provide more helpful error messages
+      if ((error as Error).name === 'NotFoundError') {
+        errorMessage = 'No Granboard device found. Make sure your board is powered on and in pairing mode.';
+      } else if ((error as Error).name === 'SecurityError') {
+        errorMessage = 'Bluetooth access denied. This app requires HTTPS or localhost to use Bluetooth.';
+      } else if ((error as Error).name === 'NotSupportedError') {
+        errorMessage = 'Web Bluetooth is not supported on this device or browser.';
+      }
+
       this.isConnected = false;
       this.notifyStatusChange('error');
-      return { success: false, error: (error as Error).message };
+      return { success: false, error: errorMessage };
     }
   }
 

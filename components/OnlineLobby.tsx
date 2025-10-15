@@ -163,7 +163,7 @@ export function OnlineLobby({
             ? (supabase as any).schema('youth').from('youth_profiles')
             : supabase.from('player_profiles');
 
-          const { data: profileData, error: profileError } = await profileQuery
+          const { data: rawProfileData, error: profileError } = await profileQuery
             .select('granboard_name, profilepic, profilecolor')
             .eq('id', playerId)
             .single();
@@ -173,11 +173,17 @@ export function OnlineLobby({
             return null;
           }
 
+          const profileData = (rawProfileData as {
+            granboard_name: string | null;
+            profilepic: string | null;
+            profilecolor: string | null;
+          }) || null;
+
           const statsQuery = isYouth
             ? (supabase as any).schema('youth').from('youth_stats')
             : supabase.from('player_stats');
 
-          const { data: statsData, error: statsError } = await statsQuery
+          const { data: rawStatsData, error: statsError } = await statsQuery
             .select('mpr_numeric, ppr_numeric, overall_numeric, solo_games_played, solo_wins, solo_win_rate, solo_highest_checkout')
             .eq('id', playerId)
             .single();
@@ -187,18 +193,30 @@ export function OnlineLobby({
             return null;
           }
 
+          const statsData = (rawStatsData as {
+            mpr_numeric: number | null;
+            ppr_numeric: number | null;
+            overall_numeric: number | null;
+            solo_games_played: number | null;
+            solo_wins: number | null;
+            solo_win_rate: number | null;
+            solo_highest_checkout: number | null;
+          }) || null;
+
           let partnerDisplayName: string | undefined;
           if (lobbyEntry.is_doubles_team && lobbyEntry.partner_id) {
             const partnerQuery = isYouth
               ? (supabase as any).schema('youth').from('youth_profiles')
               : supabase.from('player_profiles');
 
-            const { data: partnerData } = await partnerQuery
+            const { data: rawPartnerData } = await partnerQuery
               .select('granboard_name')
               .eq('id', lobbyEntry.partner_id)
               .single();
 
-            if (partnerData) {
+            const partnerData = rawPartnerData as { granboard_name: string | null } | null;
+
+            if (partnerData?.granboard_name) {
               partnerDisplayName = partnerData.granboard_name;
             }
           }
@@ -206,19 +224,19 @@ export function OnlineLobby({
           return {
             id: lobbyEntry.id,
             player_id: playerId,
-            granboardName: profileData.granboard_name || 'Unknown',
-            profilePic: profileData.profilepic || undefined,
-            mprNumeric: statsData.mpr_numeric || 0,
-            pprNumeric: statsData.ppr_numeric || 0,
-            overallNumeric: statsData.overall_numeric || 0,
-            accentColor: profileData.profilecolor || '#a855f7',
+            granboardName: profileData?.granboard_name || 'Unknown',
+            profilePic: profileData?.profilepic || undefined,
+            mprNumeric: statsData?.mpr_numeric ?? 0,
+            pprNumeric: statsData?.ppr_numeric ?? 0,
+            overallNumeric: statsData?.overall_numeric ?? 0,
+            accentColor: profileData?.profilecolor || '#a855f7',
             isDoublesTeam: lobbyEntry.is_doubles_team || false,
             partnerId: lobbyEntry.partner_id || undefined,
             partnerName: partnerDisplayName,
-            soloGamesPlayed: statsData.solo_games_played || 0,
-            soloWins: statsData.solo_wins || 0,
-            soloWinRate: statsData.solo_win_rate || 0,
-            soloHighestCheckout: statsData.solo_highest_checkout || 0,
+            soloGamesPlayed: statsData?.solo_games_played ?? 0,
+            soloWins: statsData?.solo_wins ?? 0,
+            soloWinRate: statsData?.solo_win_rate ?? 0,
+            soloHighestCheckout: statsData?.solo_highest_checkout ?? 0,
             lastSeen: lobbyEntry.last_seen || lobbyEntry.created_at,
           } as AvailablePlayer & { lastSeen?: string };
         })
@@ -256,7 +274,8 @@ export function OnlineLobby({
 
     fetchAvailablePlayers();
 
-    const channel = supabase
+    const supabaseAny = supabase as any;
+    const channel = supabaseAny
       .channel('online-lobby-changes')
       .on(
         'postgres_changes',
@@ -272,7 +291,7 @@ export function OnlineLobby({
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabaseAny.removeChannel(channel);
     };
   }, [canAccess, supabase, fetchAvailablePlayers]);
 
