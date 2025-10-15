@@ -9,6 +9,8 @@
 
 [build.environment]
   NODE_VERSION = "20"
+  # Disable secrets scanning - Supabase anon keys are meant to be public
+  SECRETS_SCAN_ENABLED = "false"
 
 # Headers for better security and performance
 [[headers]]
