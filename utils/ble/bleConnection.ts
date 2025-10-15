@@ -124,15 +124,28 @@ class BLEConnection {
       return { success: true, device: this.device };
 
     } catch (error) {
-      let errorMessage = (error as Error).message;
+      const err = error as Error;
+      let errorMessage = err.message || 'Unknown error';
+
+      // Log full error details for debugging
+      const errorDetails = {
+        name: err.name,
+        message: err.message,
+        stack: err.stack,
+        fullError: JSON.stringify(error, Object.getOwnPropertyNames(error))
+      };
 
       // Provide more helpful error messages
-      if ((error as Error).name === 'NotFoundError') {
-        errorMessage = 'No Granboard device found. Make sure your board is powered on and in pairing mode.';
-      } else if ((error as Error).name === 'SecurityError') {
-        errorMessage = 'Bluetooth access denied. This app requires HTTPS or localhost to use Bluetooth.';
-      } else if ((error as Error).name === 'NotSupportedError') {
-        errorMessage = 'Web Bluetooth is not supported on this device or browser.';
+      if (err.name === 'NotFoundError') {
+        errorMessage = `No Granboard device found.\n\nMake sure:\n- Board is powered on\n- Board is in pairing mode\n- Bluetooth is enabled\n\nError: ${err.message}`;
+      } else if (err.name === 'SecurityError') {
+        errorMessage = `Bluetooth access denied.\n\nError: ${err.message}\n\nThis app requires HTTPS and Bluetooth permissions.`;
+      } else if (err.name === 'NotSupportedError') {
+        errorMessage = `Web Bluetooth not supported.\n\nError: ${err.message}\n\nTry Microsoft Edge browser.`;
+      } else if (err.name === 'NotAllowedError') {
+        errorMessage = `Bluetooth permission denied.\n\nError: ${err.message}\n\nYou cancelled the Bluetooth pairing dialog or browser doesn't have permission.`;
+      } else {
+        errorMessage = `Connection failed: ${err.name}\n\n${err.message}\n\nDetails: ${errorDetails.fullError}`;
       }
 
       this.isConnected = false;
