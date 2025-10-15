@@ -58,7 +58,24 @@ class BLEConnection {
     try {
       // Check if Bluetooth is supported
       if (!navigator.bluetooth) {
-        const error = 'Web Bluetooth is not supported in this browser or requires HTTPS';
+        // Provide detailed error info
+        const isSecure = window.isSecureContext;
+        const protocol = window.location.protocol;
+
+        let error = 'Web Bluetooth is not available.\n\n';
+
+        if (!isSecure) {
+          error += 'Issue: Not a secure context (HTTPS required)\n';
+          error += `Current protocol: ${protocol}\n\n`;
+          error += 'Solution: Access this site via HTTPS';
+        } else {
+          error += 'Your browser may not support Web Bluetooth.\n\n';
+          error += 'Try:\n';
+          error += '1. Enable Web Bluetooth in chrome://flags\n';
+          error += '2. Update Chrome to latest version\n';
+          error += '3. Use Chrome or Edge browser';
+        }
+
         this.notifyStatusChange('error');
         return { success: false, error };
       }
