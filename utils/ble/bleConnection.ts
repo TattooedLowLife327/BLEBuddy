@@ -59,16 +59,13 @@ class BLEConnection {
       // Check if Bluetooth is supported
       if (!navigator.bluetooth) {
         const error = 'Web Bluetooth is not supported in this browser or requires HTTPS';
-        console.error(error);
         this.notifyStatusChange('error');
         return { success: false, error };
       }
 
-      console.log('Starting BLE connection...');
       this.notifyStatusChange('scanning');
 
       // Request Bluetooth device with more flexible options
-      console.log('Requesting Bluetooth device with service UUID:', SERVICE_UUID);
       try {
         this.device = await navigator.bluetooth.requestDevice({
           filters: [{ services: [SERVICE_UUID] }],
@@ -76,14 +73,12 @@ class BLEConnection {
         });
       } catch (deviceError) {
         // If service filter fails, try with name filter
-        console.log('Service filter failed, trying name filter...');
         this.device = await navigator.bluetooth.requestDevice({
           filters: [{ namePrefix: 'GranBoard' }],
           optionalServices: [SERVICE_UUID]
         });
       }
 
-      console.log('Device selected:', this.device.name);
       this.notifyStatusChange('connecting');
 
       // Connect to GATT server
@@ -91,24 +86,10 @@ class BLEConnection {
         throw new Error('Device does not support GATT');
       }
 
-      console.log('Connecting to GATT server...');
       this.server = await this.device.gatt.connect();
-      console.log('GATT server connected');
-
-      // Get service
-      console.log('Getting primary service...');
       this.service = await this.server.getPrimaryService(SERVICE_UUID);
-      console.log('Service obtained');
-
-      // Get characteristic
-      console.log('Getting characteristic...');
       this.characteristic = await this.service.getCharacteristic(RX_UUID);
-      console.log('Characteristic obtained');
-
-      // Start notifications
-      console.log('Starting notifications...');
       await this.characteristic.startNotifications();
-      console.log('Notifications started');
 
       // Listen for dart throws
       this.characteristic.addEventListener('characteristicvaluechanged', (event) => {
@@ -122,15 +103,10 @@ class BLEConnection {
 
       this.isConnected = true;
       this.notifyStatusChange('connected');
-      console.log('BLE connection successful!');
 
       return { success: true, device: this.device };
 
     } catch (error) {
-      console.error('BLE Connection Error:', error);
-      console.error('Error name:', (error as Error).name);
-      console.error('Error message:', (error as Error).message);
-
       let errorMessage = (error as Error).message;
 
       // Provide more helpful error messages
@@ -165,19 +141,16 @@ class BLEConnection {
         coordinates: throwData.coordinates
       };
 
-      console.log('🎯 Dart Hit:', enrichedThrow);
-
       // Notify all throw listeners
       this.onThrowCallbacks.forEach(cb => cb(enrichedThrow));
 
     } catch (error) {
-      console.error('Error parsing throw data:', error);
+      // Silently fail - invalid data from board
     }
   }
 
   // Handle disconnection
   private handleDisconnection(): void {
-    console.log('🔌 Dart board disconnected');
     this.isConnected = false;
     this.device = null;
     this.server = null;
@@ -205,7 +178,6 @@ class BLEConnection {
       device: 'Simulated'
     };
 
-    console.log('🧪 Simulated Throw:', testThrow);
     this.onThrowCallbacks.forEach(cb => cb(testThrow));
 
     return testThrow;

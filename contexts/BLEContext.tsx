@@ -41,7 +41,6 @@ export function BLEProvider({ children }: BLEProviderProps) {
     // Subscribe to throw events
     const handleThrow = (throwData: DartThrowData) => {
       setLastThrow(throwData);
-      console.log('🎯 Throw received in context:', throwData);
     };
 
     bleConnection.onStatusChange(handleStatusChange);
