@@ -623,3 +623,4 @@ class BLEConnection {
 
 export const bleConnection = new BLEConnection();
 export default bleConnection;
+(window as any).bleConnection = bleConnection;
