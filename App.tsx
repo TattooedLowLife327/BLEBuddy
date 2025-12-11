@@ -213,23 +213,26 @@ export default function App() {
             if (profileData?.profilepic) {
               console.log('Profile pic data from database:', profileData.profilepic);
               
-              // Check if it's already a full URL or a storage path
+              // Check if it's already a full URL
               if (profileData.profilepic.startsWith('http')) {
-                // Already a full URL
                 console.log('Using direct URL for profile pic');
                 setProfilePic(profileData.profilepic);
-              } else {
-                // It's a storage path in the 'profilepic' bucket
-                // Structure: profilepic/player/{id}/filename or profilepic/youth/{id}/filename
+              } 
+              // Check if it's a local asset path (store purchases or default)
+              else if (profileData.profilepic.startsWith('/assets') || profileData.profilepic.startsWith('assets') || profileData.profilepic === 'default-pfp.png') {
+                const localPath = profileData.profilepic.startsWith('/') ? profileData.profilepic : `/${profileData.profilepic}`;
+                console.log('Using local asset path:', localPath);
+                setProfilePic(localPath);
+              }
+              // It's a storage path in the 'profilepic' bucket
+              else {
                 const bucketName = 'profilepic';
-                
                 const { data: urlData } = supabase
                   .storage
                   .from(bucketName)
                   .getPublicUrl(profileData.profilepic);
                 
                 console.log(`Generated profile pic URL from bucket "${bucketName}":`, urlData.publicUrl);
-                console.log('Full storage path:', profileData.profilepic);
                 setProfilePic(urlData.publicUrl);
               }
             }
@@ -264,7 +267,9 @@ export default function App() {
   const handleLogout = async () => {
     try {
       setIsLoggingOut(true);
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: 'local' });
+      // Clear any persisted session data
+      localStorage.removeItem('sb-sndsyxxcnuwjmjgikzgg-auth-token');
     } catch (error) {
       console.error('Logout error:', error);
     } finally {

@@ -5,6 +5,23 @@ import { createClient } from '../utils/supabase/client';
 import { PlayerGameSetup } from './PlayerGameSetup';
 import { UserMenu } from './UserMenu';
 
+// Resolve profile pic URL from various formats
+const resolveProfilePicUrl = (profilepic: string | undefined): string | undefined => {
+  if (!profilepic) return undefined;
+  
+  // Already a full URL
+  if (profilepic.startsWith('http')) return profilepic;
+  
+  // Local asset path (store purchases or default)
+  if (profilepic.startsWith('/assets') || profilepic.startsWith('assets') || profilepic === 'default-pfp.png') {
+    return profilepic.startsWith('/') ? profilepic : `/${profilepic}`;
+  }
+  
+  // Storage path - construct Supabase public URL
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://sndsyxxcnuwjmjgikzgg.supabase.co';
+  return `${supabaseUrl}/storage/v1/object/public/profilepic/${profilepic}`;
+};
+
 interface OnlineLobbyProps {
   onBack: () => void;
   accentColor: string;
@@ -51,6 +68,8 @@ export function OnlineLobby({
   const [currentPage, setCurrentPage] = useState(0);
   const [selectedPlayer, setSelectedPlayer] = useState<AvailablePlayer | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [incomingRequest, setIncomingRequest] = useState<any | null>(null);
+  const [pendingOutgoingRequest, setPendingOutgoingRequest] = useState<any | null>(null);
   const supabase = createClient();
 
   const CARDS_PER_PAGE = 8;
@@ -66,18 +85,19 @@ export function OnlineLobby({
       try {
         console.log('Joining online lobby...');
         
-        // Insert current user into online_lobby (public schema)
+        // Insert current user into online_lobby (companion schema)
         const { error: insertError } = await (supabase as any)
-          .schema('public')
+          .schema('companion')
           .from('online_lobby')
-          .insert({
+          .upsert({
             player_id: userId,
-            is_youth_player: isYouthPlayer,
-            is_doubles_team: isDoublesTeam,
+            granboard_name: userName || 'Unknown',
+            is_youth: isYouthPlayer,
             partner_id: partnerId || null,
+            partner_granboard_name: partnerName || null,
             status: 'waiting',
             last_seen: new Date().toISOString(),
-          });
+          }, { onConflict: 'player_id' });
 
         if (insertError) {
           console.error('Error joining lobby:', insertError);
@@ -94,7 +114,7 @@ export function OnlineLobby({
     // Cleanup: leave lobby when component unmounts
     return () => {
       (supabase as any)
-        .schema('public')
+        .schema('companion')
         .from('online_lobby')
         .delete()
         .eq('player_id', userId)
@@ -106,7 +126,7 @@ export function OnlineLobby({
           }
         });
     };
-  }, [canAccess, userId, isYouthPlayer, isDoublesTeam, partnerId]);
+  }, [canAccess, userId, userName, isYouthPlayer, isDoublesTeam, partnerId, partnerName]);
 
   // Heartbeat: update last_seen every 30 seconds
   useEffect(() => {
@@ -114,7 +134,7 @@ export function OnlineLobby({
 
     const heartbeatInterval = setInterval(async () => {
       const { error } = await (supabase as any)
-        .schema('public')
+        .schema('companion')
         .from('online_lobby')
         .update({ last_seen: new Date().toISOString() })
         .eq('player_id', userId);
@@ -134,7 +154,7 @@ export function OnlineLobby({
       console.log('Fetching available players...');
 
       const { data: lobbyData, error: lobbyError } = await (supabase as any)
-        .schema('public')
+        .schema('companion')
         .from('online_lobby')
         .select('*')
         .eq('status', 'waiting')
@@ -157,7 +177,7 @@ export function OnlineLobby({
       const playersWithData = await Promise.all(
         lobbyData.map(async lobbyEntry => {
           const playerId = lobbyEntry.player_id;
-          const isYouth = lobbyEntry.is_youth_player;
+          const isYouth = lobbyEntry.is_youth;
 
           const profileQuery = isYouth
             ? (supabase as any).schema('youth').from('youth_profiles')
@@ -204,7 +224,7 @@ export function OnlineLobby({
           }) || null;
 
           let partnerDisplayName: string | undefined;
-          if (lobbyEntry.is_doubles_team && lobbyEntry.partner_id) {
+          if (lobbyEntry.partner_id) {
             const partnerQuery = isYouth
               ? (supabase as any).schema('youth').from('youth_profiles')
               : supabase.from('player_profiles');
@@ -230,7 +250,7 @@ export function OnlineLobby({
             pprNumeric: statsData?.ppr_numeric ?? 0,
             overallNumeric: statsData?.overall_numeric ?? 0,
             accentColor: profileData?.profilecolor || '#a855f7',
-            isDoublesTeam: lobbyEntry.is_doubles_team || false,
+            isDoublesTeam: !!lobbyEntry.partner_id,
             partnerId: lobbyEntry.partner_id || undefined,
             partnerName: partnerDisplayName,
             soloGamesPlayed: statsData?.solo_games_played ?? 0,
@@ -281,7 +301,7 @@ export function OnlineLobby({
         'postgres_changes',
         {
           event: '*',
-          schema: 'public',
+          schema: 'companion',
           table: 'online_lobby',
         },
         () => {
@@ -294,6 +314,69 @@ export function OnlineLobby({
       supabaseAny.removeChannel(channel);
     };
   }, [canAccess, supabase, fetchAvailablePlayers]);
+
+  // Listen for incoming game requests
+  useEffect(() => {
+    if (!canAccess) return;
+
+    const supabaseAny = supabase as any;
+    const gameChannel = supabaseAny
+      .channel('incoming-game-requests')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'companion',
+          table: 'active_games',
+          filter: `player2_id=eq.${userId}`,
+        },
+        (payload: any) => {
+          console.log('Incoming game request:', payload);
+          setIncomingRequest(payload.new);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabaseAny.removeChannel(gameChannel);
+    };
+  }, [canAccess, supabase, userId]);
+
+  // Listen for response to our outgoing game request
+  useEffect(() => {
+    if (!pendingOutgoingRequest) return;
+
+    const supabaseAny = supabase as any;
+    const responseChannel = supabaseAny
+      .channel('outgoing-game-response')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'companion',
+          table: 'active_games',
+          filter: `id=eq.${pendingOutgoingRequest.id}`,
+        },
+        (payload: any) => {
+          console.log('Game response received:', payload);
+          const newStatus = payload.new.status;
+          
+          if (newStatus === 'accepted') {
+            alert(`${pendingOutgoingRequest.player2_granboard_name} accepted! Game on! 🎯`);
+            // TODO: Navigate to game screen
+            setPendingOutgoingRequest(null);
+          } else if (newStatus === 'declined') {
+            alert(`${pendingOutgoingRequest.player2_granboard_name} declined the game.`);
+            setPendingOutgoingRequest(null);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabaseAny.removeChannel(responseChannel);
+    };
+  }, [supabase, pendingOutgoingRequest]);
 
   // Calculate pagination
   const totalPages = Math.ceil(availablePlayers.length / CARDS_PER_PAGE);
@@ -317,29 +400,68 @@ export function OnlineLobby({
     setSelectedPlayer(null);
   };
 
+  const handleAcceptGame = async () => {
+    if (!incomingRequest) return;
+    
+    try {
+      const { error } = await (supabase as any)
+        .schema('companion')
+        .from('active_games')
+        .update({ status: 'accepted', accepted_at: new Date().toISOString() })
+        .eq('id', incomingRequest.id);
+
+      if (error) {
+        console.error('Error accepting game:', error);
+      } else {
+        console.log('Game accepted!');
+        // TODO: Navigate to game screen
+      }
+    } catch (err) {
+      console.error('Error in handleAcceptGame:', err);
+    }
+    
+    setIncomingRequest(null);
+  };
+
+  const handleDeclineGame = async () => {
+    if (!incomingRequest) return;
+    
+    try {
+      const { error } = await (supabase as any)
+        .schema('companion')
+        .from('active_games')
+        .update({ status: 'declined' })
+        .eq('id', incomingRequest.id);
+
+      if (error) {
+        console.error('Error declining game:', error);
+      } else {
+        console.log('Game declined');
+      }
+    } catch (err) {
+      console.error('Error in handleDeclineGame:', err);
+    }
+    
+    setIncomingRequest(null);
+  };
+
   const handleStartGame = async (gameConfig: any) => {
     console.log('Starting game with config:', gameConfig);
     console.log('Against player:', selectedPlayer);
     
-    // TODO: Create game in active_games table
+    // Create game in active_games table
     try {
-      const schema = isYouthPlayer ? 'youth' : 'player';
       const { data: gameData, error: gameError } = await (supabase as any)
-        .schema(schema)
+        .schema('companion')
         .from('active_games')
         .insert({
           player1_id: userId,
-          player1_is_youth: isYouthPlayer,
-          player1_partner_id: partnerId || null,
+          player1_granboard_name: userName || 'Unknown',
           player2_id: selectedPlayer!.player_id,
-          player2_is_youth: selectedPlayer!.isDoublesTeam ? false : isYouthPlayer, // TODO: get actual youth status
+          player2_granboard_name: selectedPlayer!.granboardName,
+          is_doubles: isDoublesTeam || selectedPlayer!.isDoublesTeam,
+          player1_partner_id: partnerId || null,
           player2_partner_id: selectedPlayer!.partnerId || null,
-          medley_type: gameConfig.medleyType,
-          games_config: gameConfig.games,
-          handicap_enabled: gameConfig.handicap,
-          in_option: gameConfig.inOption,
-          out_option: gameConfig.outOption,
-          bull_option: gameConfig.bullOption,
           status: 'pending',
         })
         .select()
@@ -349,7 +471,7 @@ export function OnlineLobby({
         console.error('Error creating game:', gameError);
       } else {
         console.log('Game created:', gameData);
-        // TODO: Navigate to game screen or show waiting for acceptance
+        setPendingOutgoingRequest(gameData);
       }
     } catch (err) {
       console.error('Error in handleStartGame:', err);
@@ -408,6 +530,87 @@ export function OnlineLobby({
           isYouthPlayer={isYouthPlayer}
         />
       )}
+
+      {/* Incoming Game Request Modal */}
+      {incomingRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
+          <div
+            className="rounded-lg border p-8 text-center backdrop-blur-sm bg-black max-w-md mx-4"
+            style={{
+              borderColor: accentColor,
+              boxShadow: `0 0 40px rgba(168, 85, 247, 0.5)`,
+            }}
+          >
+            <h2
+              className="text-2xl mb-4 text-white"
+              style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
+            >
+              🎯 Game Request!
+            </h2>
+            <p className="text-gray-300 mb-2" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+              <span className="text-white font-bold">{incomingRequest.player1_granboard_name}</span>
+            </p>
+            <p className="text-gray-400 mb-6" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+              wants to play!
+            </p>
+            <div className="flex gap-4 justify-center">
+              <button
+                onClick={handleDeclineGame}
+                className="px-6 py-3 rounded-lg text-white transition-colors bg-red-600 hover:bg-red-700"
+                style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
+              >
+                Decline
+              </button>
+              <button
+                onClick={handleAcceptGame}
+                className="px-6 py-3 rounded-lg text-white transition-colors bg-green-600 hover:bg-green-700"
+                style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
+              >
+                Accept
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Waiting for Response Modal */}
+      {pendingOutgoingRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
+          <div
+            className="rounded-lg border p-8 text-center backdrop-blur-sm bg-black max-w-md mx-4"
+            style={{
+              borderColor: accentColor,
+              boxShadow: `0 0 40px rgba(168, 85, 247, 0.5)`,
+            }}
+          >
+            <h2
+              className="text-2xl mb-4 text-white"
+              style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
+            >
+              ⏳ Waiting...
+            </h2>
+            <p className="text-gray-300 mb-6" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+              Waiting for <span className="text-white font-bold">{pendingOutgoingRequest.player2_granboard_name}</span> to respond...
+            </p>
+            <button
+              onClick={() => {
+                // Cancel the request
+                (supabase as any)
+                  .schema('companion')
+                  .from('active_games')
+                  .update({ status: 'cancelled' })
+                  .eq('id', pendingOutgoingRequest.id)
+                  .then(() => setPendingOutgoingRequest(null));
+              }}
+              className="px-6 py-3 rounded-lg text-white transition-colors bg-gray-600 hover:bg-gray-700"
+              style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="h-screen w-full overflow-hidden bg-black">
         <div className="h-full flex flex-col p-6 max-w-[1400px] mx-auto">
         {/* Header */}
@@ -509,7 +712,7 @@ export function OnlineLobby({
                           boxShadow: `0 0 30px ${hexToRgbaPlayer(playerAccentColor, 0.8)}`,
                         }}
                       >
-                        <AvatarImage src={player.profilePic} />
+                        <AvatarImage src={resolveProfilePicUrl(player.profilePic)} />
                         <AvatarFallback className="bg-white/10 text-white text-xl">
                           {player.granboardName.charAt(0)}
                         </AvatarFallback>

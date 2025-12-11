@@ -1,6 +1,9 @@
 # Screenshots
 screenshots/
 
+# Firebase Example (reference only - do not commit)
+EXAMPLE/
+
 # Dependencies
 node_modules/
 
@@ -31,3 +34,7 @@ yarn-error.log*
 # OS files
 .DS_Store
 Thumbs.db
+
+
+#Ignore insiders AI rules
+.github\instructions\codacy.instructions.md
