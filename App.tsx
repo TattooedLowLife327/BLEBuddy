@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { LobbyCard } from './components/LobbyCard';
 import { Login } from './components/Login';
-import { OnlineLobby } from './components/OnlineLobby';
+import { OnlineLobby, type GameData } from './components/OnlineLobby';
 import { LocalDubsSetup } from './components/LocalDubsSetup';
 import { RemoteDubsSetup } from './components/RemoteDubsSetup';
+import { CorkScreen } from './components/CorkScreen';
 import { Badge } from './components/ui/badge';
 import { UserMenu } from './components/UserMenu';
 import {
@@ -61,7 +62,19 @@ export default function App() {
   const [hasParentPaired, setHasParentPaired] = useState(false);
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [flippingCard, setFlippingCard] = useState<string | null>(null);
-  const [currentView, setCurrentView] = useState<'lobby' | 'online-lobby' | 'local-dubs-setup' | 'remote-dubs-setup'>('lobby');
+  // Restore view state from sessionStorage on initial load
+  const [currentView, setCurrentView] = useState<'lobby' | 'online-lobby' | 'local-dubs-setup' | 'remote-dubs-setup' | 'cork'>(() => {
+    const saved = sessionStorage.getItem('blebuddy_view');
+    if (saved === 'cork' || saved === 'online-lobby') return saved;
+    return 'lobby';
+  });
+  const [activeGame, setActiveGame] = useState<GameData | null>(() => {
+    const saved = sessionStorage.getItem('blebuddy_game');
+    if (saved) {
+      try { return JSON.parse(saved); } catch { return null; }
+    }
+    return null;
+  });
   const [userId, setUserId] = useState<string>('');
   const [userName, setUserName] = useState<string>('');
   const [doublesPartner, setDoublesPartner] = useState<{id: string; name: string} | null>(null);
@@ -262,7 +275,18 @@ export default function App() {
 
   useEffect(() => {
     currentViewRef.current = currentView;
+    // Persist view to sessionStorage
+    sessionStorage.setItem('blebuddy_view', currentView);
   }, [currentView]);
+
+  // Persist active game to sessionStorage
+  useEffect(() => {
+    if (activeGame) {
+      sessionStorage.setItem('blebuddy_game', JSON.stringify(activeGame));
+    } else {
+      sessionStorage.removeItem('blebuddy_game');
+    }
+  }, [activeGame]);
 
   const handleLogout = async () => {
     try {
@@ -270,6 +294,8 @@ export default function App() {
       await supabase.auth.signOut({ scope: 'local' });
       // Clear any persisted session data
       localStorage.removeItem('sb-sndsyxxcnuwjmjgikzgg-auth-token');
+      sessionStorage.removeItem('blebuddy_view');
+      sessionStorage.removeItem('blebuddy_game');
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
@@ -501,6 +527,28 @@ export default function App() {
   const handleBackToLobby = () => {
     setCurrentView('lobby');
     setDoublesPartner(null);
+    setActiveGame(null);
+  };
+
+  const handleGameAccepted = (gameData: GameData) => {
+    console.log('Game accepted, navigating to cork:', gameData);
+    setActiveGame(gameData);
+    setCurrentView('cork');
+  };
+
+  const handleCorkComplete = (firstPlayerId: string) => {
+    console.log('Cork complete, first player:', firstPlayerId);
+    // TODO: Navigate to actual game screen
+    // For now, just alert and go back to lobby
+    alert(`${firstPlayerId === userId ? 'You throw' : 'Opponent throws'} first! Game screen coming soon...`);
+    setCurrentView('lobby');
+    setActiveGame(null);
+  };
+
+  const handleCorkCancel = () => {
+    console.log('Cork cancelled');
+    setCurrentView('online-lobby');
+    setActiveGame(null);
   };
 
   const handleLocalDubsContinue = async (partnerId: string, userGoesFirst: boolean) => {
@@ -553,6 +601,30 @@ export default function App() {
   };
 
   // Render different views based on currentView
+  if (currentView === 'cork' && activeGame) {
+    return (
+      <CorkScreen
+        player1={{
+          id: userId,
+          name: userName,
+          profilePic: profilePic || undefined,
+          accentColor: accentColor,
+        }}
+        player2={{
+          id: activeGame.opponentId,
+          name: activeGame.opponentName,
+          profilePic: activeGame.opponentProfilePic,
+          accentColor: activeGame.opponentAccentColor,
+        }}
+        gameId={activeGame.gameId}
+        visiblePlayerId={userId}
+        isInitiator={activeGame.isInitiator}
+        onCorkComplete={handleCorkComplete}
+        onCancel={handleCorkCancel}
+      />
+    );
+  }
+
   if (currentView === 'online-lobby') {
     return (
       <OnlineLobby
@@ -567,6 +639,7 @@ export default function App() {
         profilePic={profilePic}
         userName={userName}
         onLogout={handleLogout}
+        onGameAccepted={handleGameAccepted}
       />
     );
   }

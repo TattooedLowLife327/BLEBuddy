@@ -44,26 +44,60 @@ class WebRTCManager {
   }
 
   async getLocalStream(): Promise<MediaStream | null> {
-    if (this.localStream) return this.localStream;
+    // If we already have a stream, stop it first to release the camera
+    if (this.localStream) {
+      this.localStream.getTracks().forEach(track => track.stop());
+      this.localStream = null;
+    }
+
     try {
+      // Try with preferred constraints first
       this.localStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
         audio: false,
       });
       return this.localStream;
-    } catch (err) {
-      console.error('Failed to get camera:', err);
+    } catch (err: any) {
+      console.error('Failed to get camera with constraints:', err);
+
+      // If NotReadableError, try with minimal constraints as fallback
+      if (err.name === 'NotReadableError' || err.name === 'AbortError') {
+        console.log('Retrying with minimal video constraints...');
+        try {
+          this.localStream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false,
+          });
+          return this.localStream;
+        } catch (fallbackErr) {
+          console.error('Fallback camera access also failed:', fallbackErr);
+        }
+      }
+
       return null;
     }
   }
 
+  getLastError(): string | null {
+    return this._lastError;
+  }
+
+  private _lastError: string | null = null;
+
   async initialize(gameId: string, localPlayerId: string, remotePlayerId: string): Promise<boolean> {
+    // Clean up any existing connection first
+    await this.disconnect();
+
     this.gameId = gameId;
     this.localPlayerId = localPlayerId;
     this.remotePlayerId = remotePlayerId;
+    this._lastError = null;
 
     const stream = await this.getLocalStream();
-    if (!stream) return false;
+    if (!stream) {
+      this._lastError = 'Camera unavailable - close other apps using camera';
+      return false;
+    }
 
     this.peerConnection = new RTCPeerConnection({ iceServers: this.ICE_SERVERS });
 

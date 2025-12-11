@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useBLE } from '../contexts/BLEContext';
 import { useWebRTC } from '../hooks/useWebRTC';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
+import { Bluetooth, X } from 'lucide-react';
 import type { DartThrowData } from '../utils/ble/bleConnection';
 
 interface CorkScreenProps {
@@ -26,12 +27,12 @@ function getCorkScore(throwData: DartThrowData): { score: number; valid: boolean
   if (segmentType === 'SINGLE_INNER') return { score: baseValue, valid: true, display: `${baseValue}` };
   if (segmentType === 'BULL') return { score: 25, valid: true, display: 'BULL' };
   if (segmentType === 'DBL_BULL') return { score: 50, valid: true, display: 'D-BULL' };
-  
+
   let display = '0';
-  if (segmentType === 'TRIPLE') display = `T${baseValue} → 0`;
-  else if (segmentType === 'DOUBLE') display = `D${baseValue} → 0`;
-  else if (segmentType === 'SINGLE_OUTER') display = `outer ${baseValue} → 0`;
-  else if (segmentType === 'MISS') display = 'MISS → 0';
+  if (segmentType === 'TRIPLE') display = `T${baseValue} -> 0`;
+  else if (segmentType === 'DOUBLE') display = `D${baseValue} -> 0`;
+  else if (segmentType === 'SINGLE_OUTER') display = `outer ${baseValue} -> 0`;
+  else if (segmentType === 'MISS') display = 'MISS -> 0';
   return { score: 0, valid: false, display };
 }
 
@@ -44,7 +45,7 @@ const resolveProfilePicUrl = (pic?: string): string | undefined => {
 };
 
 export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitiator, onCorkComplete, onCancel }: CorkScreenProps) {
-  const { lastThrow, isConnected } = useBLE();
+  const { lastThrow, isConnected, connect, status: bleStatus } = useBLE();
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
 
@@ -53,8 +54,8 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
     gameId, localPlayerId: visiblePlayerId, remotePlayerId, isInitiator
   });
 
-  const [p1State, setP1State] = useState<PlayerCorkState>({ status: 'waiting', score: null, wasValid: false, display: '—' });
-  const [p2State, setP2State] = useState<PlayerCorkState>({ status: 'waiting', score: null, wasValid: false, display: '—' });
+  const [p1State, setP1State] = useState<PlayerCorkState>({ status: 'waiting', score: null, wasValid: false, display: '--' });
+  const [p2State, setP2State] = useState<PlayerCorkState>({ status: 'waiting', score: null, wasValid: false, display: '--' });
   const [tieAlert, setTieAlert] = useState(false);
   const [winner, setWinner] = useState<string | null>(null);
   const [revealed, setRevealed] = useState(false);
@@ -93,8 +94,8 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
         setTieAlert(true);
         setTimeout(() => {
           setTieAlert(false); setRevealed(false);
-          setP1State({ status: 'waiting', score: null, wasValid: false, display: '—' });
-          setP2State({ status: 'waiting', score: null, wasValid: false, display: '—' });
+          setP1State({ status: 'waiting', score: null, wasValid: false, display: '--' });
+          setP2State({ status: 'waiting', score: null, wasValid: false, display: '--' });
           setCurrentThrower(1);
         }, 2500);
       }
@@ -102,39 +103,51 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
   }, [p1State, p2State]);
 
   const getDisplay = (state: PlayerCorkState, pid: string) => {
-    if (state.status === 'waiting') return '—';
+    if (state.status === 'waiting') return '--';
     if (revealed) return state.display;
-    return pid === visiblePlayerId ? state.display : '✓';
+    return pid === visiblePlayerId ? state.display : 'OK';
   };
 
   const isP1Local = player1.id === visiblePlayerId;
 
+  const handleBLEConnect = async () => {
+    const result = await connect();
+    if (!result.success && result.error) {
+      alert(`Connection failed: ${result.error}`);
+    }
+  };
+
   const renderPlayer = (player: typeof player1, state: PlayerCorkState, pNum: 1 | 2, isLocal: boolean) => {
     const isThrowing = currentThrower === pNum && state.status === 'waiting';
     const showResult = revealed || player.id === visiblePlayerId;
-    const borderColor = isThrowing ? 'border-white' : state.status === 'thrown' && showResult ? (state.wasValid ? 'border-green-500/50' : 'border-red-500/50') : 'border-zinc-700';
+    const borderColor = isThrowing ? 'border-yellow-400' : state.status === 'thrown' && showResult ? (state.wasValid ? 'border-green-500' : 'border-red-500') : 'border-zinc-700';
 
     return (
-      <div className={`flex-1 p-4 rounded-2xl border-2 ${borderColor}`} style={{ backgroundColor: 'rgba(39,39,42,0.5)' }}>
+      <div className={`flex-1 p-3 rounded-xl border-2 ${borderColor} transition-colors`} style={{ backgroundColor: 'rgba(39,39,42,0.6)' }}>
         <div className="flex flex-col items-center">
-          <div className="w-full aspect-video bg-zinc-900 rounded-lg mb-3 overflow-hidden relative" style={{ borderColor: player.accentColor, borderWidth: '2px' }}>
+          {/* Video feed */}
+          <div className="w-full aspect-video bg-zinc-900 rounded-lg mb-2 overflow-hidden relative" style={{ borderColor: player.accentColor, borderWidth: '2px' }}>
             {isLocal ? (
               localStream ? <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
-              : <div className="w-full h-full flex items-center justify-center text-zinc-500 text-sm">{error || 'Starting camera...'}</div>
+              : <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs p-2 text-center">{error || 'Starting camera...'}</div>
             ) : (
               remoteStream ? <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
               : <div className="w-full h-full flex items-center justify-center">
-                  <Avatar className="w-16 h-16"><AvatarImage src={resolveProfilePicUrl(player.profilePic)} /><AvatarFallback className="bg-zinc-800 text-white text-xl">{player.name.charAt(0)}</AvatarFallback></Avatar>
+                  <Avatar className="w-12 h-12"><AvatarImage src={resolveProfilePicUrl(player.profilePic)} /><AvatarFallback className="bg-zinc-800 text-white text-lg">{player.name.charAt(0)}</AvatarFallback></Avatar>
                 </div>
             )}
-            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
-              <p className="text-white font-semibold text-sm truncate">{player.name}</p>
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-2 py-1">
+              <p className="text-white font-semibold text-xs truncate">{player.name}</p>
             </div>
           </div>
-          <p className={`text-sm mb-2 ${isThrowing ? 'text-yellow-400' : 'text-zinc-400'}`}>
-            {state.status === 'thrown' ? (revealed ? '' : 'Thrown!') : isThrowing ? 'Throw now!' : 'Waiting...'}
+
+          {/* Status */}
+          <p className={`text-xs mb-1 ${isThrowing ? 'text-yellow-400 font-bold' : 'text-zinc-500'}`}>
+            {state.status === 'thrown' ? (revealed ? '' : 'Thrown!') : isThrowing ? 'THROW NOW' : 'Waiting...'}
           </p>
-          <div className="text-3xl font-bold" style={{ color: state.status === 'waiting' ? '#71717a' : showResult ? (state.wasValid ? '#22c55e' : '#ef4444') : '#a1a1aa' }}>
+
+          {/* Score */}
+          <div className="text-2xl font-bold" style={{ color: state.status === 'waiting' ? '#71717a' : showResult ? (state.wasValid ? '#22c55e' : '#ef4444') : '#a1a1aa' }}>
             {getDisplay(state, player.id)}
           </div>
         </div>
@@ -143,27 +156,66 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
   };
 
   return (
-    <div className="fixed inset-0 bg-black/95 z-50 flex flex-col items-center justify-center p-4">
-      <div className="text-center mb-4">
-        <h1 className="text-2xl font-bold text-white mb-1">CORK FOR FIRST</h1>
-        <p className="text-zinc-500 text-xs">Inner singles & bulls = face value | Others = 0</p>
+    <div className="fixed inset-0 bg-black z-50 flex flex-col">
+      {/* Header with Leave button and BLE status */}
+      <div className="flex items-center justify-between p-3 border-b border-zinc-800">
+        <button
+          onClick={onCancel}
+          className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold transition-colors"
+        >
+          <X className="w-4 h-4" />
+          Leave Match
+        </button>
+
+        <h1 className="text-lg font-bold text-white">CORK FOR FIRST</h1>
+
+        {/* BLE Status/Connect */}
+        {isConnected ? (
+          <div className="flex items-center gap-2 px-3 py-2 bg-green-600/20 border border-green-600 rounded-lg">
+            <Bluetooth className="w-4 h-4 text-green-400" />
+            <span className="text-green-400 text-xs font-medium">Connected</span>
+          </div>
+        ) : (
+          <button
+            onClick={handleBLEConnect}
+            disabled={bleStatus === 'connecting' || bleStatus === 'scanning'}
+            className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white rounded-lg text-xs font-semibold transition-colors"
+          >
+            <Bluetooth className="w-4 h-4" />
+            {bleStatus === 'connecting' || bleStatus === 'scanning' ? 'Connecting...' : 'Connect Board'}
+          </button>
+        )}
       </div>
 
-      {tieAlert && <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-yellow-600 text-black px-8 py-4 rounded-xl animate-pulse"><p className="text-xl font-bold">TIE! Both rethrow!</p></div>}
-      {winner && <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-green-600 text-white px-8 py-4 rounded-xl"><p className="text-xl font-bold">{winner === player1.id ? player1.name : player2.name} throws first!</p></div>}
+      {/* Main content */}
+      <div className="flex-1 flex flex-col items-center justify-center p-3 relative">
+        {/* Rules hint */}
+        <p className="text-zinc-600 text-xs mb-3 text-center">Inner singles & bulls = face value | Others = 0</p>
 
-      <div className="flex items-stretch justify-center gap-4 w-full max-w-4xl">
-        {renderPlayer(player1, p1State, 1, isP1Local)}
-        <div className="flex items-center"><div className="text-zinc-600 text-xl font-bold">VS</div></div>
-        {renderPlayer(player2, p2State, 2, !isP1Local)}
+        {/* Tie/Winner overlays */}
+        {tieAlert && (
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-yellow-600 text-black px-6 py-3 rounded-xl animate-pulse">
+            <p className="text-lg font-bold">TIE! Both rethrow!</p>
+          </div>
+        )}
+        {winner && (
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-green-600 text-white px-6 py-3 rounded-xl">
+            <p className="text-lg font-bold">{winner === player1.id ? player1.name : player2.name} throws first!</p>
+          </div>
+        )}
+
+        {/* Players side by side */}
+        <div className="flex items-stretch justify-center gap-3 w-full max-w-3xl">
+          {renderPlayer(player1, p1State, 1, isP1Local)}
+          <div className="flex items-center">
+            <div className="text-zinc-700 text-lg font-bold">VS</div>
+          </div>
+          {renderPlayer(player2, p2State, 2, !isP1Local)}
+        </div>
+
+        {/* Video status */}
+        <p className="text-zinc-700 text-xs mt-3">Video: {connectionState}</p>
       </div>
-
-      <div className="mt-4 text-center">
-        {!isConnected ? <p className="text-red-400 text-xs">⚠️ Board not connected</p> : <p className="text-green-400 text-xs">✓ Board connected</p>}
-        <p className="text-zinc-600 text-xs mt-1">Video: {connectionState}</p>
-      </div>
-
-      <button onClick={onCancel} className="mt-4 px-6 py-2 text-zinc-400 hover:text-white text-sm">Cancel</button>
     </div>
   );
 }

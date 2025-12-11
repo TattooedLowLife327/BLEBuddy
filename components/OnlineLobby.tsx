@@ -22,6 +22,15 @@ const resolveProfilePicUrl = (profilepic: string | undefined): string | undefine
   return `${supabaseUrl}/storage/v1/object/public/profilepic/${profilepic}`;
 };
 
+export interface GameData {
+  gameId: string;
+  opponentId: string;
+  opponentName: string;
+  opponentProfilePic?: string;
+  opponentAccentColor: string;
+  isInitiator: boolean;
+}
+
 interface OnlineLobbyProps {
   onBack: () => void;
   accentColor: string;
@@ -34,6 +43,7 @@ interface OnlineLobbyProps {
   profilePic: string | null;
   userName: string;
   onLogout: () => void;
+  onGameAccepted?: (gameData: GameData) => void;
 }
 
 interface AvailablePlayer {
@@ -62,6 +72,7 @@ export function OnlineLobby({
   profilePic,
   userName,
   onLogout,
+  onGameAccepted,
 }: OnlineLobbyProps) {
   const [availablePlayers, setAvailablePlayers] = useState<AvailablePlayer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -360,10 +371,19 @@ export function OnlineLobby({
         (payload: any) => {
           console.log('Game response received:', payload);
           const newStatus = payload.new.status;
-          
+
           if (newStatus === 'accepted') {
-            alert(`${pendingOutgoingRequest.player2_granboard_name} accepted! Game on! 🎯`);
-            // TODO: Navigate to game screen
+            // Navigate to cork screen - we are the initiator
+            if (onGameAccepted) {
+              onGameAccepted({
+                gameId: pendingOutgoingRequest.id,
+                opponentId: pendingOutgoingRequest.player2_id,
+                opponentName: pendingOutgoingRequest.player2_granboard_name,
+                opponentProfilePic: undefined, // Will be fetched
+                opponentAccentColor: '#a855f7', // Default, will be fetched
+                isInitiator: true,
+              });
+            }
             setPendingOutgoingRequest(null);
           } else if (newStatus === 'declined') {
             alert(`${pendingOutgoingRequest.player2_granboard_name} declined the game.`);
@@ -402,7 +422,7 @@ export function OnlineLobby({
 
   const handleAcceptGame = async () => {
     if (!incomingRequest) return;
-    
+
     try {
       const { error } = await (supabase as any)
         .schema('companion')
@@ -414,12 +434,22 @@ export function OnlineLobby({
         console.error('Error accepting game:', error);
       } else {
         console.log('Game accepted!');
-        // TODO: Navigate to game screen
+        // Navigate to cork screen - we are NOT the initiator (we accepted)
+        if (onGameAccepted) {
+          onGameAccepted({
+            gameId: incomingRequest.id,
+            opponentId: incomingRequest.player1_id,
+            opponentName: incomingRequest.player1_granboard_name,
+            opponentProfilePic: undefined,
+            opponentAccentColor: '#a855f7',
+            isInitiator: false,
+          });
+        }
       }
     } catch (err) {
       console.error('Error in handleAcceptGame:', err);
     }
-    
+
     setIncomingRequest(null);
   };
 

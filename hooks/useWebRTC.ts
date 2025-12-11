@@ -39,7 +39,8 @@ export function useWebRTC(options: UseWebRTCOptions | null): UseWebRTCReturn {
     );
 
     if (!success) {
-      setError('Failed to initialize - camera access denied?');
+      const lastError = webRTCManager.getLastError();
+      setError(lastError || 'Failed to initialize - camera access denied or in use by another app');
       setConnectionState('idle');
       return;
     }
