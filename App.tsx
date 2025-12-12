@@ -93,6 +93,23 @@ export default function App() {
   const scrollContainerRef = useState<HTMLDivElement | null>(null)[0];
   const currentViewRef = useRef(currentView);
 
+  // Lock screen orientation to landscape when possible
+  useEffect(() => {
+    const lockOrientation = async () => {
+      try {
+        // Try to lock to landscape using Screen Orientation API
+        if (screen.orientation && 'lock' in screen.orientation) {
+          await screen.orientation.lock('landscape');
+          console.log('Screen orientation locked to landscape');
+        }
+      } catch (err) {
+        // Orientation lock not supported or failed - CSS fallback handles this
+        console.log('Screen orientation lock not supported, using CSS fallback');
+      }
+    };
+    lockOrientation();
+  }, []);
+
   // Check authentication and fetch user's profile data from Supabase
   useEffect(() => {
     async function checkAuthAndFetchProfile() {
