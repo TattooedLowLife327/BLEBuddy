@@ -85,6 +85,8 @@ class WebRTCManager {
   private _lastError: string | null = null;
 
   async initialize(gameId: string, localPlayerId: string, remotePlayerId: string): Promise<boolean> {
+    console.log(`[WebRTC] Initializing - gameId: ${gameId}, local: ${localPlayerId}, remote: ${remotePlayerId}`);
+
     // Clean up any existing connection first
     await this.disconnect();
 
@@ -93,79 +95,135 @@ class WebRTCManager {
     this.remotePlayerId = remotePlayerId;
     this._lastError = null;
 
+    console.log('[WebRTC] Getting local stream...');
     const stream = await this.getLocalStream();
     if (!stream) {
       this._lastError = 'Camera unavailable - close other apps using camera';
+      console.error('[WebRTC] Failed to get local stream');
       return false;
     }
+    console.log(`[WebRTC] Got local stream with ${stream.getTracks().length} tracks`);
 
     this.peerConnection = new RTCPeerConnection({ iceServers: this.ICE_SERVERS });
+    console.log('[WebRTC] Created peer connection');
 
     stream.getTracks().forEach(track => {
+      console.log(`[WebRTC] Adding track to peer connection: ${track.kind}`);
       this.peerConnection!.addTrack(track, stream);
     });
 
     this.peerConnection.ontrack = (event) => {
+      console.log(`[WebRTC] Received remote track! streams: ${event.streams.length}`);
       this.remoteStream = event.streams[0];
       this.onRemoteStreamCallbacks.forEach(cb => cb(this.remoteStream!));
     };
 
     this.peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
+        console.log('[WebRTC] Got ICE candidate, sending...');
         this.sendSignal({ type: 'ice-candidate', payload: event.candidate.toJSON(), from: this.localPlayerId, to: this.remotePlayerId, gameId: this.gameId });
+      } else {
+        console.log('[WebRTC] ICE gathering complete');
       }
     };
 
     this.peerConnection.onconnectionstatechange = () => {
       const state = this.peerConnection?.connectionState || 'closed';
+      console.log(`[WebRTC] Connection state changed: ${state}`);
       this.onConnectionStateCallbacks.forEach(cb => cb(state as RTCPeerConnectionState));
     };
 
+    this.peerConnection.oniceconnectionstatechange = () => {
+      console.log(`[WebRTC] ICE connection state: ${this.peerConnection?.iceConnectionState}`);
+    };
+
+    this.peerConnection.onicegatheringstatechange = () => {
+      console.log(`[WebRTC] ICE gathering state: ${this.peerConnection?.iceGatheringState}`);
+    };
+
     await this.subscribeToSignaling();
+    console.log('[WebRTC] Initialization complete');
     return true;
   }
 
   private async subscribeToSignaling(): Promise<void> {
-    this.signalChannel = supabase.channel(`webrtc:${this.gameId}`, { config: { broadcast: { self: false } } });
+    const channelName = `webrtc:${this.gameId}`;
+    console.log(`[WebRTC] Subscribing to channel: ${channelName}`);
 
-    this.signalChannel
-      .on('broadcast', { event: 'signal' }, async ({ payload }) => {
-        const message = payload as SignalMessage;
-        if (message.to !== this.localPlayerId) return;
-        await this.handleSignal(message);
-      })
-      .subscribe();
+    this.signalChannel = supabase.channel(channelName, { config: { broadcast: { self: false } } });
+
+    return new Promise((resolve) => {
+      this.signalChannel!
+        .on('broadcast', { event: 'signal' }, async ({ payload }) => {
+          const message = payload as SignalMessage;
+          console.log(`[WebRTC] Received signal: ${message.type} from ${message.from} to ${message.to}`);
+          if (message.to !== this.localPlayerId) {
+            console.log(`[WebRTC] Ignoring signal - not for me (I am ${this.localPlayerId})`);
+            return;
+          }
+          await this.handleSignal(message);
+        })
+        .subscribe((status) => {
+          console.log(`[WebRTC] Channel subscription status: ${status}`);
+          if (status === 'SUBSCRIBED') {
+            console.log(`[WebRTC] Successfully subscribed to ${channelName}`);
+            resolve();
+          }
+        });
+    });
   }
 
   private async sendSignal(message: SignalMessage): Promise<void> {
-    if (!this.signalChannel) return;
-    await this.signalChannel.send({ type: 'broadcast', event: 'signal', payload: message });
+    if (!this.signalChannel) {
+      console.error('[WebRTC] Cannot send signal - no channel');
+      return;
+    }
+    console.log(`[WebRTC] Sending signal: ${message.type} from ${message.from} to ${message.to}`);
+    const result = await this.signalChannel.send({ type: 'broadcast', event: 'signal', payload: message });
+    console.log(`[WebRTC] Signal send result:`, result);
   }
 
   private async handleSignal(message: SignalMessage): Promise<void> {
-    if (!this.peerConnection) return;
+    if (!this.peerConnection) {
+      console.error('[WebRTC] Cannot handle signal - no peer connection');
+      return;
+    }
+
+    console.log(`[WebRTC] Handling signal: ${message.type}`);
 
     if (message.type === 'offer') {
+      console.log('[WebRTC] Setting remote description from offer...');
       await this.peerConnection.setRemoteDescription(new RTCSessionDescription(message.payload as RTCSessionDescriptionInit));
+      console.log('[WebRTC] Creating answer...');
       const answer = await this.peerConnection.createAnswer();
       await this.peerConnection.setLocalDescription(answer);
+      console.log('[WebRTC] Sending answer...');
       await this.sendSignal({ type: 'answer', payload: answer, from: this.localPlayerId, to: this.remotePlayerId, gameId: this.gameId });
     } else if (message.type === 'answer') {
+      console.log('[WebRTC] Setting remote description from answer...');
       await this.peerConnection.setRemoteDescription(new RTCSessionDescription(message.payload as RTCSessionDescriptionInit));
+      console.log('[WebRTC] Remote description set from answer');
     } else if (message.type === 'ice-candidate') {
       try {
+        console.log('[WebRTC] Adding ICE candidate...');
         await this.peerConnection.addIceCandidate(new RTCIceCandidate(message.payload as RTCIceCandidateInit));
       } catch (err) {
-        console.error('ICE error:', err);
+        console.error('[WebRTC] ICE error:', err);
       }
     }
   }
 
   async startCall(): Promise<void> {
-    if (!this.peerConnection) return;
+    if (!this.peerConnection) {
+      console.error('[WebRTC] Cannot start call - no peer connection');
+      return;
+    }
+    console.log('[WebRTC] Starting call - creating offer...');
     const offer = await this.peerConnection.createOffer();
     await this.peerConnection.setLocalDescription(offer);
+    console.log('[WebRTC] Offer created, sending...');
     await this.sendSignal({ type: 'offer', payload: offer, from: this.localPlayerId, to: this.remotePlayerId, gameId: this.gameId });
+    console.log('[WebRTC] Offer sent, waiting for answer...');
   }
 
   getLocalMediaStream(): MediaStream | null { return this.localStream; }

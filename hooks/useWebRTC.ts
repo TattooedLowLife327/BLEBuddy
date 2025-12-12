@@ -28,7 +28,8 @@ export function useWebRTC(options: UseWebRTCOptions | null): UseWebRTCReturn {
 
   const initialize = useCallback(async () => {
     if (!options) return;
-    
+
+    console.log(`[useWebRTC] Initializing - isInitiator: ${options.isInitiator}`);
     setConnectionState('initializing');
     setError(null);
 
@@ -48,7 +49,13 @@ export function useWebRTC(options: UseWebRTCOptions | null): UseWebRTCReturn {
     setLocalStream(webRTCManager.getLocalMediaStream());
 
     if (options.isInitiator) {
+      // Wait a bit for the receiver to subscribe before sending offer
+      console.log('[useWebRTC] Initiator waiting 2s for receiver to be ready...');
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      console.log('[useWebRTC] Initiator starting call...');
       await webRTCManager.startCall();
+    } else {
+      console.log('[useWebRTC] Receiver ready, waiting for offer...');
     }
   }, [options]);
 

@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useBLE } from '../contexts/BLEContext';
 import { useWebRTC } from '../hooks/useWebRTC';
+import { useGameStatus } from '../hooks/useGameStatus';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
-import { Bluetooth, X } from 'lucide-react';
+import { Bluetooth, X, WifiOff } from 'lucide-react';
 import type { DartThrowData } from '../utils/ble/bleConnection';
 
 interface CorkScreenProps {
@@ -50,8 +51,20 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
 
   const remotePlayerId = visiblePlayerId === player1.id ? player2.id : player1.id;
+  const remotePlayerName = visiblePlayerId === player1.id ? player2.name : player1.name;
+
   const { localStream, remoteStream, connectionState, error, initialize, disconnect } = useWebRTC({
     gameId, localPlayerId: visiblePlayerId, remotePlayerId, isInitiator
+  });
+
+  const { isOpponentOnline, disconnectCountdown, leaveMatch, opponentLeftMessage } = useGameStatus({
+    gameId,
+    localPlayerId: visiblePlayerId,
+    remotePlayerId,
+    remotePlayerName,
+    onOpponentLeft: onCancel,
+    onOpponentDisconnected: () => console.log('[CorkScreen] Opponent disconnected'),
+    onOpponentReconnected: () => console.log('[CorkScreen] Opponent reconnected'),
   });
 
   const [p1State, setP1State] = useState<PlayerCorkState>({ status: 'waiting', score: null, wasValid: false, display: '--' });
@@ -61,6 +74,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
   const [revealed, setRevealed] = useState(false);
   const [currentThrower, setCurrentThrower] = useState<1 | 2>(1);
   const [lastTs, setLastTs] = useState<string | null>(null);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
 
   useEffect(() => { initialize(); return () => { disconnect(); }; }, []);
 
@@ -117,6 +131,20 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
     }
   };
 
+  const handleLeaveClick = () => {
+    setShowLeaveConfirm(true);
+  };
+
+  const handleConfirmLeave = async () => {
+    setShowLeaveConfirm(false);
+    await leaveMatch();
+    onCancel();
+  };
+
+  const handleCancelLeave = () => {
+    setShowLeaveConfirm(false);
+  };
+
   const renderPlayer = (player: typeof player1, state: PlayerCorkState, pNum: 1 | 2, isLocal: boolean) => {
     const isThrowing = currentThrower === pNum && state.status === 'waiting';
     const showResult = revealed || player.id === visiblePlayerId;
@@ -157,10 +185,71 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
 
   return (
     <div className="fixed inset-0 bg-black z-50 flex flex-col">
+      {/* Leave Confirmation Dialog */}
+      {showLeaveConfirm && (
+        <div className="absolute inset-0 z-[60] bg-black/80 flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 max-w-sm w-full">
+            <h2 className="text-white text-lg font-bold mb-2">Leave Match?</h2>
+            <p className="text-zinc-400 text-sm mb-4">
+              Your opponent will be notified and the match will be cancelled.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={handleCancelLeave}
+                className="flex-1 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg text-sm font-semibold transition-colors"
+              >
+                Stay
+              </button>
+              <button
+                onClick={handleConfirmLeave}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold transition-colors"
+              >
+                Leave
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Opponent Disconnected Countdown Overlay */}
+      {disconnectCountdown !== null && (
+        <div className="absolute inset-0 z-[60] bg-black/80 flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-yellow-600 rounded-xl p-6 max-w-sm w-full text-center">
+            <WifiOff className="w-12 h-12 text-yellow-500 mx-auto mb-3" />
+            <h2 className="text-white text-lg font-bold mb-2">Opponent Disconnected</h2>
+            <p className="text-zinc-400 text-sm mb-4">
+              Waiting for {remotePlayerName} to reconnect...
+            </p>
+            <div className="text-4xl font-bold text-yellow-500 mb-2">
+              {disconnectCountdown}s
+            </div>
+            <p className="text-zinc-500 text-xs">
+              Match will end if they don't return
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Opponent Left Message Overlay */}
+      {opponentLeftMessage && (
+        <div className="absolute inset-0 z-[60] bg-black/80 flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-red-600 rounded-xl p-6 max-w-sm w-full text-center">
+            <X className="w-12 h-12 text-red-500 mx-auto mb-3" />
+            <h2 className="text-white text-lg font-bold mb-2">Match Ended</h2>
+            <p className="text-zinc-400 text-sm">
+              {opponentLeftMessage}
+            </p>
+            <p className="text-zinc-500 text-xs mt-3">
+              Returning to lobby...
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Header with Leave button and BLE status */}
       <div className="flex items-center justify-between p-3 border-b border-zinc-800">
         <button
-          onClick={onCancel}
+          onClick={handleLeaveClick}
           className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold transition-colors"
         >
           <X className="w-4 h-4" />
@@ -186,6 +275,14 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
           </button>
         )}
       </div>
+
+      {/* Opponent offline indicator in header area */}
+      {!isOpponentOnline && disconnectCountdown === null && (
+        <div className="bg-yellow-600/20 border-b border-yellow-600 px-3 py-1 flex items-center justify-center gap-2">
+          <WifiOff className="w-3 h-3 text-yellow-500" />
+          <span className="text-yellow-500 text-xs">{remotePlayerName} appears offline</span>
+        </div>
+      )}
 
       {/* Main content */}
       <div className="flex-1 flex flex-col items-center justify-center p-3 relative">

@@ -80,6 +80,12 @@ export default function App() {
   const [doublesPartner, setDoublesPartner] = useState<{id: string; name: string} | null>(null);
   const [missedRequests, setMissedRequests] = useState<GameRequestNotification[]>([]);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [pendingRejoinGame, setPendingRejoinGame] = useState<{
+    gameId: string;
+    opponentId: string;
+    opponentName: string;
+    isInitiator: boolean;
+  } | null>(null);
   const supabase = createClient();
   const scrollContainerRef = useState<HTMLDivElement | null>(null)[0];
   const currentViewRef = useRef(currentView);
@@ -253,6 +259,33 @@ export default function App() {
             if (profileError && !profileData) {
               console.error('Error fetching profile data:', profileError);
             }
+
+            // Check for active games to rejoin
+            try {
+              const { data: activeGames } = await (supabase as any)
+                .schema('companion')
+                .from('active_games')
+                .select('id, player1_id, player2_id, player1_granboard_name, player2_granboard_name, status')
+                .or(`player1_id.eq.${session.user.id},player2_id.eq.${session.user.id}`)
+                .in('status', ['accepted', 'playing']);
+
+              if (activeGames && activeGames.length > 0) {
+                const game = activeGames[0];
+                const isPlayer1 = game.player1_id === session.user.id;
+                const opponentId = isPlayer1 ? game.player2_id : game.player1_id;
+                const opponentName = isPlayer1 ? game.player2_granboard_name : game.player1_granboard_name;
+
+                console.log('Found active game to potentially rejoin:', game);
+                setPendingRejoinGame({
+                  gameId: game.id,
+                  opponentId,
+                  opponentName: opponentName || 'Opponent',
+                  isInitiator: isPlayer1, // player1 was the original challenger
+                });
+              }
+            } catch (err) {
+              console.error('Error checking for active games:', err);
+            }
           } catch (profileFetchError) {
             console.error('Error during profile fetch:', profileFetchError);
             // Continue anyway - we're authenticated even if profile fetch fails
@@ -401,6 +434,46 @@ export default function App() {
     window.location.reload();
   };
 
+  // Handle rejoin to active game - defined early for use in early return
+  const handleRejoinGame = () => {
+    if (!pendingRejoinGame) return;
+
+    console.log('Rejoining game:', pendingRejoinGame);
+    setActiveGame({
+      gameId: pendingRejoinGame.gameId,
+      opponentId: pendingRejoinGame.opponentId,
+      opponentName: pendingRejoinGame.opponentName,
+      opponentProfilePic: undefined,
+      opponentAccentColor: '#a855f7',
+      isInitiator: pendingRejoinGame.isInitiator,
+    });
+    setCurrentView('cork');
+    setPendingRejoinGame(null);
+  };
+
+  // Handle abandon active game - defined early for use in early return
+  const handleAbandonGame = async () => {
+    if (!pendingRejoinGame) return;
+
+    console.log('Abandoning game:', pendingRejoinGame.gameId);
+    try {
+      await (supabase as any)
+        .schema('companion')
+        .from('active_games')
+        .update({
+          status: 'cancelled',
+          cancelled_at: new Date().toISOString(),
+          cancel_reason: 'player_abandoned',
+        })
+        .eq('id', pendingRejoinGame.gameId);
+    } catch (err) {
+      console.error('Error abandoning game:', err);
+    }
+
+    setPendingRejoinGame(null);
+    setCurrentView('lobby');
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen w-full bg-black flex items-center justify-center">
@@ -413,6 +486,37 @@ export default function App() {
 
   if (!isAuthenticated) {
     return <Login onLoginSuccess={handleLoginSuccess} />;
+  }
+
+  // Show rejoin prompt if there's an active game
+  if (pendingRejoinGame) {
+    return (
+      <div className="fixed inset-0 bg-black z-50 flex items-center justify-center p-4">
+        <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 max-w-md w-full">
+          <h2 className="text-white text-xl font-bold mb-2">Active Match Found</h2>
+          <p className="text-zinc-400 text-sm mb-4">
+            You have an ongoing match with <span className="text-white font-semibold">{pendingRejoinGame.opponentName}</span>.
+          </p>
+          <p className="text-zinc-500 text-xs mb-6">
+            Would you like to rejoin the match or abandon it?
+          </p>
+          <div className="flex gap-3">
+            <button
+              onClick={handleAbandonGame}
+              className="flex-1 px-4 py-3 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg text-sm font-semibold transition-colors"
+            >
+              Abandon Match
+            </button>
+            <button
+              onClick={handleRejoinGame}
+              className="flex-1 px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold transition-colors"
+            >
+              Rejoin Match
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // Check if user is admin team (can see all cards)

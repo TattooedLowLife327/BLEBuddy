@@ -1,6 +1,6 @@
 # BLE Buddy - Claude Context
 
-**Last Updated**: December 11, 2025
+**Last Updated**: December 11, 2025 (Leave/disconnect handling, rejoin prompt added)
 
 ---
 
@@ -251,39 +251,37 @@ const { localStream, remoteStream, connectionState, initialize, disconnect } = u
 - Granboard segment mapping (all segments)
 - Online lobby with presence
 - Profile pic resolution (including store purchases)
-- Cork screen with BLE integration
-- WebRTC manager and hook
+- Cork screen with BLE integration + mobile-first layout
+- WebRTC manager and hook with detailed logging
 - Video feed slots in cork screen
+- PWA setup (landscape, service worker, manifest)
+- Game request flow (challenge -> accept/decline)
+- Cork screen wired into app flow
+- Session persistence (refresh won't lose game state)
+- Database tables exist: `companion.active_games`, `companion.game_throws`, `companion.online_lobby`
+- **Leave Match** with confirmation dialog and opponent notification
+- **Network disconnect detection** with 60-second countdown before auto-kick
+- **Rejoin prompt** on app load for active games (rejoin or abandon)
+- **useGameStatus hook** for presence tracking and game status communication
 - Build passing
 
 ### ⏳ In Progress / TODO
-1. **Game Request Flow**
-   - Challenge player from lobby
-   - Accept/decline UI
-   - Create game record
+1. **WebRTC Testing**
+   - Video streaming between two real devices
+   - Debug signaling if needed (detailed logging added)
 
-2. **Wire Cork Into App**
-   - After accept → show CorkScreen
-   - Cork complete → start game
-
-3. **Game Screen**
+2. **Game Screen**
    - Score tracking (501/301/Cricket)
    - Turn management
    - Checkout logic
    - Game over detection
 
-4. **Game State Sync**
+3. **Game State Sync**
    - Realtime score sync between devices
    - Throw broadcasting
-   - Disconnect handling
 
-5. **Database Tables**
-   - `companion.games`
-   - `companion.game_requests`
-
-6. **Testing**
-   - WebRTC between two real devices
-   - Full game flow
+4. **End-to-end Testing**
+   - Full game flow from challenge to game completion
 
 ---
 
