@@ -138,40 +138,9 @@ export function OnlineLobby({
   // Check if youth player can access
   const canAccess = !isYouthPlayer || hasParentPaired;
 
-  // Calculate card scale based on viewport
+  // Card scale is now fixed at 1 - we use CSS grid auto-fit for responsive layout
   useEffect(() => {
-    const calculateScale = () => {
-      // Check if we're in portrait mode (CSS rotates to landscape)
-      const isPortrait = window.matchMedia('(orientation: portrait)').matches;
-
-      // When in portrait, CSS rotates content so swap width/height for calculations
-      const viewWidth = isPortrait ? window.innerHeight : window.innerWidth;
-      const viewHeight = isPortrait ? window.innerWidth : window.innerHeight;
-
-      // Base card is 120x160px, target 5 columns with gaps
-      const availableWidth = viewWidth - 64; // px-8 = 32px each side
-      const availableHeight = viewHeight - 120; // header + py-4 padding
-      const cardBaseWidth = 120;
-      const cardBaseHeight = 160;
-      const columns = 5;
-      const rows = 2;
-      const gap = 12;
-
-      const maxWidthScale = (availableWidth - (gap * (columns - 1))) / (cardBaseWidth * columns);
-      const maxHeightScale = (availableHeight - gap) / (cardBaseHeight * rows);
-
-      setCardScale(Math.min(maxWidthScale, maxHeightScale, 2)); // Cap at 2x
-    };
-
-    calculateScale();
-    window.addEventListener('resize', calculateScale);
-    // Also listen for orientation changes
-    const orientationQuery = window.matchMedia('(orientation: portrait)');
-    orientationQuery.addEventListener('change', calculateScale);
-    return () => {
-      window.removeEventListener('resize', calculateScale);
-      orientationQuery.removeEventListener('change', calculateScale);
-    };
+    setCardScale(1);
   }, []);
 
   // Reset activity timestamp on any user interaction
@@ -856,11 +825,12 @@ export function OnlineLobby({
             </div>
           ) : (
             <div
-              className={`grid grid-cols-5 transition-opacity duration-200 ${isRefreshing ? 'opacity-50' : 'opacity-100'}`}
+              className={`grid transition-opacity duration-200 ${isRefreshing ? 'opacity-50' : 'opacity-100'}`}
               style={{
-                columnGap: `${12 * cardScale}px`,
-                rowGap: `${24 * cardScale}px`,
-                justifyContent: 'center',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+                gap: '16px',
+                justifyItems: 'center',
               }}
             >
               {availablePlayers.map((player) => {
@@ -890,8 +860,8 @@ export function OnlineLobby({
                     key={player.id}
                     className="flex items-center justify-center"
                     style={{
-                      width: `${120 * cardScale}px`,
-                      height: `${160 * cardScale}px`,
+                      width: '140px',
+                      height: '185px',
                     }}
                   >
                     <div
@@ -899,9 +869,8 @@ export function OnlineLobby({
                       className={`relative rounded-lg overflow-hidden ${isInMatch ? 'cursor-not-allowed' : 'cursor-pointer hover:scale-[1.05]'} transition-transform origin-center`}
                       style={{
                         filter: isIdle || isInMatch ? 'grayscale(0.7) brightness(0.6)' : 'none',
-                        width: '120px',
-                        height: '160px',
-                        transform: `scale(${cardScale})`,
+                        width: '140px',
+                        height: '185px',
                       }}
                     >
                     {/* SVG Countdown Border for Idle Players */}
@@ -942,9 +911,9 @@ export function OnlineLobby({
                     />
 
                     {/* Card Content - Vertical layout */}
-                    <div className="relative z-[5] flex flex-col items-center p-3">
+                    <div className="relative z-[5] flex flex-col items-center justify-center h-full p-3">
                       {/* Profile Picture */}
-                      <div className="relative mb-2">
+                      <div className="relative mb-3">
                         {isWaiting && (
                           <div
                             className="absolute inset-0 rounded-full blur-md"
@@ -956,13 +925,13 @@ export function OnlineLobby({
                           />
                         )}
                         <Avatar
-                          className="relative w-12 h-12 border-2"
+                          className="relative w-16 h-16 border-2"
                           style={{
                             borderColor: isIdle ? '#52525b' : playerAccentColor,
                           }}
                         >
                           <AvatarImage src={resolveProfilePicUrl(player.profilePic)} />
-                          <AvatarFallback className="bg-zinc-800 text-white text-sm">
+                          <AvatarFallback className="bg-zinc-800 text-white text-lg">
                             {player.granboardName.charAt(0)}
                           </AvatarFallback>
                         </Avatar>
@@ -970,7 +939,7 @@ export function OnlineLobby({
 
                       {/* Granboard Name */}
                       <h3
-                        className="text-white text-xs font-bold truncate max-w-full text-center"
+                        className="text-white text-sm font-bold truncate max-w-full text-center"
                         style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}
                       >
                         {player.granboardName}
@@ -978,22 +947,22 @@ export function OnlineLobby({
 
                       {/* Team indicator */}
                       {player.isDoublesTeam && player.partnerName && (
-                        <p className="text-[10px] text-gray-400 truncate max-w-full text-center" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                        <p className="text-xs text-gray-400 truncate max-w-full text-center" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
                           + {player.partnerName}
                         </p>
                       )}
 
                       {/* Status indicator for idle/in_match */}
                       {isIdle && (
-                        <p className="text-yellow-500 text-[10px] font-semibold">IDLE</p>
+                        <p className="text-yellow-500 text-xs font-semibold">IDLE</p>
                       )}
                       {isInMatch && (
-                        <p className="text-red-400 text-[10px] font-semibold">IN MATCH</p>
+                        <p className="text-red-400 text-xs font-semibold">IN MATCH</p>
                       )}
 
                       {/* Stats - no background, just text */}
                       {isWaiting && (
-                        <p className="text-[10px] text-gray-500 mt-1" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                        <p className="text-xs text-gray-500 mt-1" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
                           {player.mprNumeric.toFixed(1)} / {player.pprNumeric.toFixed(1)}
                         </p>
                       )}
