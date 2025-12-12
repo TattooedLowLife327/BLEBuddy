@@ -211,7 +211,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
       `}</style>
 
       <div
-        className="min-h-screen flex flex-col items-center justify-center bg-black text-white overflow-hidden"
+        className="h-screen flex flex-col items-center justify-center bg-black text-white overflow-hidden"
         style={{
           backgroundImage: `url(${backgroundImage})`,
           backgroundSize: 'cover',
@@ -236,25 +236,16 @@ export function Login({ onLoginSuccess }: LoginProps) {
             }}
           >
             {/* Left - Banner + Info */}
-            <div className="w-[55%] flex flex-col items-center justify-center p-4 bg-black/30">
+            <div className="w-[55%] flex flex-col items-center justify-center p-4 bg-black/50">
               <img
                 src={bannerImage}
                 alt="LowLife Banner"
                 className="w-full h-auto rounded-lg mb-3"
               />
-              <p className="text-center text-xs text-zinc-400 leading-relaxed px-2">
-                BLE Buddy is the gameplay companion for the{' '}
-                <a
-                  href="https://www.lowlifesofgranboard.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-purple-400 hover:text-purple-300"
-                >
-                  LLOGB
-                </a>{' '}
-                app. Use your same login credentials.
+              <p className="text-center text-sm text-zinc-400 leading-relaxed px-2">
+                BLE Buddy is the gameplay companion for the LLOGB app. Use your same login credentials.
               </p>
-              <p className="text-center text-xs pt-2 text-gray-500">
+              <p className="text-center text-sm pt-2 text-gray-500">
                 Not a LowLife yet?{' '}
                 <a
                   href="https://www.lowlifesofgranboard.com/launch"
@@ -269,9 +260,9 @@ export function Login({ onLoginSuccess }: LoginProps) {
             </div>
 
             {/* Right - Form */}
-            <div className="w-[45%] p-4 flex flex-col justify-center overflow-y-auto">
-              <h2 className="text-lg font-semibold text-center mb-4">LowLife Login</h2>
-              <form action="#" onSubmit={handleLogin} className="space-y-4" autoComplete="on">
+            <div className="w-[45%] p-4 flex flex-col justify-center overflow-y-auto bg-white/5">
+              <h2 className="text-3xl font-bold text-center mb-4">LOWLIFE LOGIN</h2>
+              <form action="#" onSubmit={handleLogin} className="space-y-4 px-4" autoComplete="on">
                 {/* --- Animated Email Input --- */}
                 <div className="relative w-full max-w-full">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none z-20">
