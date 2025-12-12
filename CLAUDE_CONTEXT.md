@@ -321,7 +321,7 @@ VITE_SUPABASE_ANON_KEY=sb_publishable_YR80q8me3afbdERJ6w7rFg_Uajm8Jj1
 3. **BLE warmup**: 2-second warmup period after connection (ignores initial events)
 4. **iOS**: Safari does NOT support Web Bluetooth - use Bluefy browser
 5. **Supabase client**: Use `createClient()` from `utils/supabase/client.ts`
-6. **Game cleanup**: Use DELETE not UPDATE on `active_games` - UPDATE causes 400 errors
+6. **Game cleanup**: Use DELETE not UPDATE on `active_games` - UPDATE causes 400 errors. Include `.or('player1_id.eq.{userId},player2_id.eq.{userId}')` filter for RLS compatibility
 
 ---
 
