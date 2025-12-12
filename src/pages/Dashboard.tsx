@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { ChevronLeft, ChevronRight, Bluetooth } from 'lucide-react';
 import { LobbyCard } from '../components/LobbyCard';
 import { AppHeader } from '../components/AppHeader';
@@ -69,29 +69,6 @@ export function Dashboard({
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [flippingCard, setFlippingCard] = useState<string | null>(null);
   const [showBLEPrompt, setShowBLEPrompt] = useState(false);
-  const [scale, setScale] = useState(1);
-
-  useEffect(() => {
-    const calculateScale = () => {
-      const isPortrait = window.matchMedia('(orientation: portrait)').matches;
-      const viewWidth = isPortrait ? window.innerHeight : window.innerWidth;
-      const viewHeight = isPortrait ? window.innerWidth : window.innerHeight;
-      const baseWidth = 1280;
-      const baseHeight = 720;
-      const scaleX = viewWidth / baseWidth;
-      const scaleY = viewHeight / baseHeight;
-      setScale(Math.min(scaleX, scaleY, 1.5));
-    };
-
-    calculateScale();
-    window.addEventListener('resize', calculateScale);
-    const orientationQuery = window.matchMedia('(orientation: portrait)');
-    orientationQuery.addEventListener('change', calculateScale);
-    return () => {
-      window.removeEventListener('resize', calculateScale);
-      orientationQuery.removeEventListener('change', calculateScale);
-    };
-  }, []);
 
   const isAdminTeam = userRole === 'owner' || userRole === 'the_man' || userRole === 'admin' || userRole === 'mod';
 
@@ -245,7 +222,7 @@ export function Dashboard({
         </div>
       )}
 
-      <div className="relative z-10 h-full flex flex-col px-8 py-4 max-w-[1400px] mx-auto">
+      <div className="relative z-10 h-full flex flex-col px-4 sm:px-8 py-4 max-w-[1400px] mx-auto">
         <AppHeader
           title="Dashboard"
           bleConnected={bleConnected}
@@ -261,13 +238,7 @@ export function Dashboard({
         />
 
         <main className="flex-1 flex flex-col justify-center items-center">
-          <div
-            className="relative"
-            style={{
-              transform: `scale(${scale})`,
-              transformOrigin: 'center center',
-            }}
-          >
+          <div className="relative w-full max-w-[1100px] flex items-center justify-center">
             <button
               onClick={prevCard}
               style={{

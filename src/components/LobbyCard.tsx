@@ -76,10 +76,16 @@ export function LobbyCard({
     ? `0 0 20px ${hexToRgba(accentColor, 0.6)}, 0 0 40px ${hexToRgba(accentColor, 0.35)}, inset 0 0 20px ${hexToRgba(accentColor, 0.15)}`
     : 'none';
 
+  const cardSize = {
+    width: 'clamp(260px, 70vw, 360px)',
+    height: 'clamp(230px, 58vw, 300px)',
+  };
+
   return (
     <div
-      className="relative bg-black rounded-lg border text-center w-80 h-64 overflow-hidden"
+      className="relative bg-black rounded-lg border text-center overflow-hidden"
       style={{
+        ...cardSize,
         borderColor: isCenter ? accentColor : '#4b5563',
         boxShadow,
         transformStyle: 'preserve-3d',
@@ -120,7 +126,7 @@ export function LobbyCard({
           <div className="flex items-center justify-center mb-0" style={{ marginTop: '-1rem' }}>
             {(id === 'local-play' || id === 'ladies-only') ? (
               // Special styling for local play, ladies - bigger, full width, sideways, no border/background
-              <div className="w-full flex items-center justify-center" style={{ height: '180px' }}>
+              <div className="w-full flex items-center justify-center" style={{ height: 'clamp(140px, 40vw, 200px)' }}>
                 {customIcon && (
                   <img 
                     src={customIcon} 
@@ -142,7 +148,7 @@ export function LobbyCard({
               </div>
             ) : id === 'cash-sets' ? (
             // Cash sets - smaller and NOT sideways with padding for spacing
-            <div className="w-full flex items-center justify-center py-8" style={{ height: '180px' }}>
+            <div className="w-full flex items-center justify-center py-8" style={{ height: 'clamp(140px, 40vw, 200px)' }}>
               {customIcon && (
                 <img 
                   src={customIcon} 
@@ -166,7 +172,7 @@ export function LobbyCard({
             </div>
           ) : id === 'online-play' ? (
             // Online play - larger icon with less padding
-            <div className="w-full flex items-center justify-center py-4" style={{ height: '180px' }}>
+            <div className="w-full flex items-center justify-center py-4" style={{ height: 'clamp(140px, 40vw, 200px)' }}>
               {customIcon && (
                 <img 
                   src={customIcon} 
@@ -190,7 +196,7 @@ export function LobbyCard({
             </div>
           ) : (
             // All other cards - standard sizing with padding
-            <div className="w-full flex items-center justify-center py-8" style={{ height: '180px' }}>
+            <div className="w-full flex items-center justify-center py-8" style={{ height: 'clamp(140px, 40vw, 200px)' }}>
               {customIcon && (
                 <img 
                   src={customIcon} 
