@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { ArrowLeft, ChevronLeft, ChevronRight, RefreshCw, Bell, Clock } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { createClient } from '../utils/supabase/client';
 import { PlayerGameSetup } from './PlayerGameSetup';
@@ -31,6 +31,13 @@ export interface GameData {
   isInitiator: boolean;
 }
 
+interface MissedRequest {
+  id: string;
+  challengerName: string;
+  challengerId: string;
+  timestamp: string;
+}
+
 interface OnlineLobbyProps {
   onBack: () => void;
   accentColor: string;
@@ -44,6 +51,8 @@ interface OnlineLobbyProps {
   userName: string;
   onLogout: () => void;
   onGameAccepted?: (gameData: GameData) => void;
+  missedRequests?: MissedRequest[];
+  onClearMissedRequests?: () => void;
 }
 
 interface AvailablePlayer {
@@ -73,6 +82,8 @@ export function OnlineLobby({
   userName,
   onLogout,
   onGameAccepted,
+  missedRequests = [],
+  onClearMissedRequests,
 }: OnlineLobbyProps) {
   const [availablePlayers, setAvailablePlayers] = useState<AvailablePlayer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,12 +92,102 @@ export function OnlineLobby({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [incomingRequest, setIncomingRequest] = useState<any | null>(null);
   const [pendingOutgoingRequest, setPendingOutgoingRequest] = useState<any | null>(null);
+  const [showIdleWarning, setShowIdleWarning] = useState(false);
+  const [idleCountdown, setIdleCountdown] = useState(300); // 5 minutes in seconds
+  const [showNotifications, setShowNotifications] = useState(false);
   const supabase = createClient();
 
+  const lastActivityRef = useRef<number>(Date.now());
+  const idleCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const idleCountdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
   const CARDS_PER_PAGE = 8;
+  const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+  const IDLE_WARNING_DURATION_S = 300; // 5 minutes in seconds
 
   // Check if youth player can access
   const canAccess = !isYouthPlayer || hasParentPaired;
+
+  // Reset activity timestamp on any user interaction
+  const resetActivity = useCallback(() => {
+    lastActivityRef.current = Date.now();
+    // If warning is showing, dismiss it and reset
+    if (showIdleWarning) {
+      setShowIdleWarning(false);
+      setIdleCountdown(IDLE_WARNING_DURATION_S);
+      // Clear countdown interval
+      if (idleCountdownIntervalRef.current) {
+        clearInterval(idleCountdownIntervalRef.current);
+        idleCountdownIntervalRef.current = null;
+      }
+      // Update status back to 'waiting' in database
+      (supabase as any)
+        .schema('companion')
+        .from('online_lobby')
+        .update({ status: 'waiting', last_seen: new Date().toISOString() })
+        .eq('player_id', userId);
+    }
+  }, [showIdleWarning, supabase, userId]);
+
+  // Start idle countdown when warning shows
+  const startIdleCountdown = useCallback(() => {
+    setIdleCountdown(IDLE_WARNING_DURATION_S);
+    idleCountdownIntervalRef.current = setInterval(() => {
+      setIdleCountdown(prev => {
+        if (prev <= 1) {
+          // Time's up - remove from lobby
+          if (idleCountdownIntervalRef.current) {
+            clearInterval(idleCountdownIntervalRef.current);
+            idleCountdownIntervalRef.current = null;
+          }
+          onBack(); // Leave lobby
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }, [onBack]);
+
+  // Idle detection effect
+  useEffect(() => {
+    if (!canAccess) return;
+
+    // Check for idle every 30 seconds
+    idleCheckIntervalRef.current = setInterval(() => {
+      const timeSinceActivity = Date.now() - lastActivityRef.current;
+      if (timeSinceActivity >= IDLE_TIMEOUT_MS && !showIdleWarning) {
+        console.log('[OnlineLobby] User idle for 15 minutes, showing warning');
+        setShowIdleWarning(true);
+        // Update status to 'idle' in database
+        (supabase as any)
+          .schema('companion')
+          .from('online_lobby')
+          .update({ status: 'idle', last_seen: new Date().toISOString() })
+          .eq('player_id', userId);
+        startIdleCountdown();
+      }
+    }, 30000); // Check every 30 seconds
+
+    // Activity listeners
+    const handleActivity = () => resetActivity();
+    window.addEventListener('click', handleActivity);
+    window.addEventListener('touchstart', handleActivity);
+    window.addEventListener('keydown', handleActivity);
+    window.addEventListener('scroll', handleActivity, true);
+
+    return () => {
+      if (idleCheckIntervalRef.current) {
+        clearInterval(idleCheckIntervalRef.current);
+      }
+      if (idleCountdownIntervalRef.current) {
+        clearInterval(idleCountdownIntervalRef.current);
+      }
+      window.removeEventListener('click', handleActivity);
+      window.removeEventListener('touchstart', handleActivity);
+      window.removeEventListener('keydown', handleActivity);
+      window.removeEventListener('scroll', handleActivity, true);
+    };
+  }, [canAccess, showIdleWarning, resetActivity, startIdleCountdown, supabase, userId]);
 
   // Join lobby on mount
   useEffect(() => {
@@ -597,7 +698,7 @@ export function OnlineLobby({
               className="text-2xl mb-4 text-white"
               style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
             >
-              ⏳ Waiting...
+              Waiting...
             </h2>
             <p className="text-gray-300 mb-6" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
               Waiting for <span className="text-white font-bold">{pendingOutgoingRequest.player2_granboard_name}</span> to respond...
@@ -616,6 +717,28 @@ export function OnlineLobby({
               style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
             >
               Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Idle Warning Modal */}
+      {showIdleWarning && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80">
+          <div className="bg-zinc-900 border border-yellow-600 rounded-xl p-6 max-w-sm w-full mx-4 text-center">
+            <Clock className="w-12 h-12 text-yellow-500 mx-auto mb-3" />
+            <h2 className="text-white text-lg font-bold mb-2">Are You Still There?</h2>
+            <p className="text-zinc-400 text-sm mb-4">
+              You've been idle for 15 minutes. Tap anywhere to stay in the lobby.
+            </p>
+            <div className="text-3xl font-bold text-yellow-500 mb-4">
+              {Math.floor(idleCountdown / 60)}:{(idleCountdown % 60).toString().padStart(2, '0')}
+            </div>
+            <button
+              onClick={resetActivity}
+              className="w-full px-4 py-3 bg-yellow-600 hover:bg-yellow-700 text-black font-semibold rounded-lg transition-colors"
+            >
+              I'm Still Here
             </button>
           </div>
         </div>
@@ -790,6 +913,57 @@ export function OnlineLobby({
         </div>
       </div>
     </div>
+
+      {/* Notification Bell - Bottom Right */}
+      <div className="fixed bottom-6 right-6 z-40">
+        <button
+          onClick={() => setShowNotifications(!showNotifications)}
+          className="relative p-3 bg-zinc-800 hover:bg-zinc-700 rounded-full shadow-lg transition-colors"
+        >
+          <Bell className="w-6 h-6 text-white" />
+          {missedRequests.length > 0 && (
+            <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-xs text-white font-bold">
+              {missedRequests.length > 9 ? '9+' : missedRequests.length}
+            </span>
+          )}
+        </button>
+
+        {/* Notification Dropdown */}
+        {showNotifications && (
+          <div className="absolute bottom-16 right-0 w-72 bg-zinc-900 border border-zinc-700 rounded-xl shadow-xl overflow-hidden">
+            <div className="p-3 border-b border-zinc-700 flex items-center justify-between">
+              <h3 className="text-white font-semibold text-sm">Missed Requests</h3>
+              {missedRequests.length > 0 && onClearMissedRequests && (
+                <button
+                  onClick={onClearMissedRequests}
+                  className="text-xs text-zinc-400 hover:text-white transition-colors"
+                >
+                  Clear All
+                </button>
+              )}
+            </div>
+            <div className="max-h-64 overflow-y-auto">
+              {missedRequests.length === 0 ? (
+                <div className="p-4 text-center text-zinc-500 text-sm">
+                  No missed requests
+                </div>
+              ) : (
+                missedRequests.map((request) => (
+                  <div
+                    key={request.id}
+                    className="p-3 border-b border-zinc-800 last:border-b-0 hover:bg-zinc-800/50"
+                  >
+                    <p className="text-white text-sm font-medium">{request.challengerName}</p>
+                    <p className="text-zinc-500 text-xs">
+                      {new Date(request.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+      </div>
   </>
   );
 }

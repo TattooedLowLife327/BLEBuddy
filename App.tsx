@@ -764,6 +764,13 @@ export default function App() {
         userName={userName}
         onLogout={handleLogout}
         onGameAccepted={handleGameAccepted}
+        missedRequests={missedRequests.map(r => ({
+          id: r.id,
+          challengerName: r.fromPlayerName,
+          challengerId: r.fromPlayerId,
+          timestamp: r.createdAt,
+        }))}
+        onClearMissedRequests={() => setMissedRequests([])}
       />
     );
   }
