@@ -79,17 +79,18 @@ export function useGameStatus(options: UseGameStatusOptions): UseGameStatusRetur
       });
     }
 
-    // Update game status in database
+    // Delete game from database (simpler than update, avoids RLS issues)
     try {
       const { error } = await (supabase as any)
         .schema('companion')
         .from('active_games')
-        .update({ status: 'cancelled' })
+        .delete()
         .eq('id', options.gameId);
 
-      if (error) console.error('[GameStatus] Error updating game status:', error);
+      if (error) console.error('[GameStatus] Error deleting game:', error);
+      else console.log('[GameStatus] Game deleted successfully');
     } catch (err) {
-      console.error('[GameStatus] Error updating game status:', err);
+      console.error('[GameStatus] Error deleting game:', err);
     }
   }, [options.gameId, options.localPlayerId]);
 

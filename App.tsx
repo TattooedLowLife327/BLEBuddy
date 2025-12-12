@@ -457,13 +457,15 @@ export default function App() {
 
     console.log('Abandoning game:', pendingRejoinGame.gameId);
     try {
+      // Delete the game instead of updating (simpler, avoids RLS issues)
       const { error } = await (supabase as any)
         .schema('companion')
         .from('active_games')
-        .update({ status: 'cancelled' })
+        .delete()
         .eq('id', pendingRejoinGame.gameId);
 
       if (error) console.error('Error abandoning game:', error);
+      else console.log('Game abandoned successfully');
     } catch (err) {
       console.error('Error abandoning game:', err);
     }
