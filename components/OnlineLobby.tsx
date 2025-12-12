@@ -55,6 +55,8 @@ interface OnlineLobbyProps {
   onClearMissedRequests?: () => void;
 }
 
+type PlayerStatus = 'waiting' | 'idle' | 'in_match';
+
 interface AvailablePlayer {
   id: string;
   player_id: string;
@@ -67,7 +69,23 @@ interface AvailablePlayer {
   isDoublesTeam: boolean;
   partnerId?: string;
   partnerName?: string;
+  status: PlayerStatus;
+  idleTimeRemaining?: number; // seconds remaining in idle countdown (0-300)
 }
+
+// Mock players for development UI
+const MOCK_PLAYERS: AvailablePlayer[] = [
+  { id: 'mock-1', player_id: 'mock-1', granboardName: 'DartMaster99', profilePic: undefined, mprNumeric: 2.8, pprNumeric: 45.2, overallNumeric: 75, accentColor: '#ef4444', isDoublesTeam: false, status: 'waiting' },
+  { id: 'mock-2', player_id: 'mock-2', granboardName: 'TripleTwenty', profilePic: undefined, mprNumeric: 3.1, pprNumeric: 52.8, overallNumeric: 82, accentColor: '#22c55e', isDoublesTeam: false, status: 'waiting' },
+  { id: 'mock-3', player_id: 'mock-3', granboardName: 'BullseyeQueen', profilePic: undefined, mprNumeric: 2.5, pprNumeric: 38.5, overallNumeric: 68, accentColor: '#3b82f6', isDoublesTeam: false, status: 'waiting' },
+  { id: 'mock-4', player_id: 'mock-4', granboardName: 'SteelTipSteve', profilePic: undefined, mprNumeric: 2.9, pprNumeric: 48.1, overallNumeric: 78, accentColor: '#f59e0b', isDoublesTeam: false, status: 'idle', idleTimeRemaining: 180 },
+  { id: 'mock-5', player_id: 'mock-5', granboardName: 'NineDarter', profilePic: undefined, mprNumeric: 3.5, pprNumeric: 61.2, overallNumeric: 91, accentColor: '#ec4899', isDoublesTeam: false, status: 'waiting' },
+  { id: 'mock-6', player_id: 'mock-6', granboardName: 'CricketKing', profilePic: undefined, mprNumeric: 2.2, pprNumeric: 35.0, overallNumeric: 62, accentColor: '#8b5cf6', isDoublesTeam: true, partnerName: 'DartBuddy', status: 'waiting' },
+  { id: 'mock-7', player_id: 'mock-7', granboardName: 'CheckoutChamp', profilePic: undefined, mprNumeric: 2.7, pprNumeric: 44.3, overallNumeric: 73, accentColor: '#06b6d4', isDoublesTeam: false, status: 'idle', idleTimeRemaining: 60 },
+  { id: 'mock-8', player_id: 'mock-8', granboardName: 'T20Hunter', profilePic: undefined, mprNumeric: 3.0, pprNumeric: 50.5, overallNumeric: 80, accentColor: '#84cc16', isDoublesTeam: false, status: 'in_match' },
+  { id: 'mock-9', player_id: 'mock-9', granboardName: 'DoubleTrouble', profilePic: undefined, mprNumeric: 2.4, pprNumeric: 40.2, overallNumeric: 66, accentColor: '#f97316', isDoublesTeam: false, status: 'waiting' },
+  { id: 'mock-10', player_id: 'mock-10', granboardName: 'LegFinisher', profilePic: undefined, mprNumeric: 2.6, pprNumeric: 42.8, overallNumeric: 70, accentColor: '#14b8a6', isDoublesTeam: false, status: 'in_match' },
+];
 
 export function OnlineLobby({
   onBack,
@@ -101,9 +119,10 @@ export function OnlineLobby({
   const idleCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const idleCountdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const CARDS_PER_PAGE = 8;
+  const CARDS_PER_PAGE = 10; // 2 rows x 5 columns
   const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
   const IDLE_WARNING_DURATION_S = 300; // 5 minutes in seconds
+  const USE_MOCK_DATA = true; // Toggle for development UI
 
   // Check if youth player can access
   const canAccess = !isYouthPlayer || hasParentPaired;
@@ -259,17 +278,33 @@ export function OnlineLobby({
     return () => clearInterval(heartbeatInterval);
   }, [canAccess, userId]);
 
+  // Sort players by status priority: waiting -> idle -> in_match
+  const sortByStatus = (players: AvailablePlayer[]) => {
+    const statusPriority: Record<PlayerStatus, number> = { waiting: 0, idle: 1, in_match: 2 };
+    return [...players].sort((a, b) => statusPriority[a.status] - statusPriority[b.status]);
+  };
+
   // Fetch available players
   const fetchAvailablePlayers = useCallback(async () => {
     try {
       setLoading(true);
       console.log('Fetching available players...');
 
+      // Use mock data for development UI
+      if (USE_MOCK_DATA) {
+        const sorted = sortByStatus(MOCK_PLAYERS);
+        setAvailablePlayers(sorted);
+        setLoading(false);
+        setIsRefreshing(false);
+        return;
+      }
+
+      // Fetch all statuses (waiting, idle, in_match)
       const { data: lobbyData, error: lobbyError } = await (supabase as any)
         .schema('companion')
         .from('online_lobby')
         .select('*')
-        .eq('status', 'waiting')
+        .in('status', ['waiting', 'idle', 'in_match'])
         .neq('player_id', userId)
         .order('last_seen', { ascending: false })
         .order('created_at', { ascending: false });
@@ -290,6 +325,16 @@ export function OnlineLobby({
         lobbyData.map(async lobbyEntry => {
           const playerId = lobbyEntry.player_id;
           const isYouth = lobbyEntry.is_youth;
+          const playerStatus = (lobbyEntry.status as PlayerStatus) || 'waiting';
+
+          // Calculate idle time remaining for idle players
+          let idleTimeRemaining: number | undefined;
+          if (playerStatus === 'idle' && lobbyEntry.idle_started_at) {
+            const idleStarted = new Date(lobbyEntry.idle_started_at).getTime();
+            const now = Date.now();
+            const elapsedSeconds = Math.floor((now - idleStarted) / 1000);
+            idleTimeRemaining = Math.max(0, IDLE_WARNING_DURATION_S - elapsedSeconds);
+          }
 
           const profileQuery = isYouth
             ? (supabase as any).schema('youth').from('youth_profiles')
@@ -365,25 +410,16 @@ export function OnlineLobby({
             isDoublesTeam: !!lobbyEntry.partner_id,
             partnerId: lobbyEntry.partner_id || undefined,
             partnerName: partnerDisplayName,
-            soloGamesPlayed: statsData?.solo_games_played ?? 0,
-            soloWins: statsData?.solo_wins ?? 0,
-            soloWinRate: statsData?.solo_win_rate ?? 0,
-            soloHighestCheckout: statsData?.solo_highest_checkout ?? 0,
-            lastSeen: lobbyEntry.last_seen || lobbyEntry.created_at,
-          } as AvailablePlayer & { lastSeen?: string };
+            status: playerStatus,
+            idleTimeRemaining,
+          } as AvailablePlayer;
         })
       );
 
-      const validPlayers = playersWithData
-        .filter((p): p is AvailablePlayer & { lastSeen?: string } => p !== null)
-        .sort((a, b) => {
-          const timeA = a.lastSeen ?? '';
-          const timeB = b.lastSeen ?? '';
-          return timeB.localeCompare(timeA);
-        })
-        .map(({ lastSeen, ...rest }) => rest);
+      const validPlayers = playersWithData.filter((p): p is AvailablePlayer => p !== null);
+      const sorted = sortByStatus(validPlayers);
 
-      setAvailablePlayers(validPlayers);
+      setAvailablePlayers(sorted);
     } catch (err) {
       console.error('Error in fetchAvailablePlayers:', err);
       setAvailablePlayers([]);
@@ -816,10 +852,23 @@ export function OnlineLobby({
                 </button>
               )}
 
-              {/* Players Grid - 2 rows x 4 columns */}
-              <div className="grid grid-cols-4 gap-4 auto-rows-fr">
+              {/* Players Grid - 2 rows x 5 columns */}
+              <div className="grid grid-cols-5 gap-3">
                 {currentPlayers.map((player) => {
                   const playerAccentColor = player.accentColor;
+                  const isIdle = player.status === 'idle';
+                  const isInMatch = player.status === 'in_match';
+                  const isWaiting = player.status === 'waiting';
+
+                  // Calculate idle progress (0-1, where 1 = full time remaining)
+                  const idleProgress = isIdle && player.idleTimeRemaining !== undefined
+                    ? player.idleTimeRemaining / IDLE_WARNING_DURATION_S
+                    : 0;
+
+                  // SVG circle properties for countdown border
+                  const strokeDasharray = 400; // circumference approx
+                  const strokeDashoffset = strokeDasharray * (1 - idleProgress);
+
                   const hexToRgbaPlayer = (hex: string, alpha: number) => {
                     const r = parseInt(hex.slice(1, 3), 16);
                     const g = parseInt(hex.slice(3, 5), 16);
@@ -830,60 +879,116 @@ export function OnlineLobby({
                   return (
                     <div
                       key={player.id}
-                      onClick={() => handlePlayerClick(player)}
-                      className="rounded-lg border backdrop-blur-sm bg-black p-4 flex flex-col items-center text-center cursor-pointer hover:scale-105 transition-transform"
+                      onClick={() => !isInMatch && handlePlayerClick(player)}
+                      className={`relative aspect-square rounded-lg overflow-hidden ${isInMatch ? 'cursor-not-allowed' : 'cursor-pointer hover:scale-105'} transition-transform`}
                       style={{
-                        borderColor: playerAccentColor,
-                        boxShadow: `0 0 20px ${hexToRgbaPlayer(playerAccentColor, 0.6)}, 0 0 40px ${hexToRgbaPlayer(playerAccentColor, 0.35)}, inset 0 0 20px ${hexToRgbaPlayer(playerAccentColor, 0.15)}`,
+                        filter: isIdle || isInMatch ? 'grayscale(0.7) brightness(0.6)' : 'none',
                       }}
                     >
-                      {/* Profile Picture */}
-                      <Avatar 
-                        className="w-20 h-20 border-4 mb-3" 
-                        style={{ 
-                          borderColor: playerAccentColor,
-                          boxShadow: `0 0 30px ${hexToRgbaPlayer(playerAccentColor, 0.8)}`,
-                        }}
-                      >
-                        <AvatarImage src={resolveProfilePicUrl(player.profilePic)} />
-                        <AvatarFallback className="bg-white/10 text-white text-xl">
-                          {player.granboardName.charAt(0)}
-                        </AvatarFallback>
-                      </Avatar>
-
-                      {/* Granboard Name */}
-                      <h3
-                        className="text-white mb-1"
-                        style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
-                      >
-                        {player.granboardName}
-                      </h3>
-
-                      {/* Team indicator */}
-                      {player.isDoublesTeam && player.partnerName && (
-                        <p className="text-xs text-gray-400 mb-2" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                          + {player.partnerName}
-                        </p>
+                      {/* SVG Countdown Border for Idle Players */}
+                      {isIdle && (
+                        <svg
+                          className="absolute inset-0 w-full h-full pointer-events-none z-10"
+                          viewBox="0 0 100 100"
+                          preserveAspectRatio="none"
+                        >
+                          <rect
+                            x="2"
+                            y="2"
+                            width="96"
+                            height="96"
+                            rx="8"
+                            ry="8"
+                            fill="none"
+                            stroke={playerAccentColor}
+                            strokeWidth="3"
+                            strokeDasharray={strokeDasharray}
+                            strokeDashoffset={strokeDashoffset}
+                            style={{
+                              transition: 'stroke-dashoffset 1s linear',
+                            }}
+                          />
+                        </svg>
                       )}
 
-                      {/* Stats */}
-                      <div className="flex gap-4 text-gray-300 text-sm">
-                        <div>
-                          <p className="text-gray-400 text-xs mb-1" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                            01 AVG
-                          </p>
-                          <p className="text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}>
-                            {player.mprNumeric.toFixed(1)}
-                          </p>
+                      {/* Card Background with border */}
+                      <div
+                        className={`absolute inset-0 rounded-lg border-2 bg-zinc-900/90 ${isIdle ? 'border-zinc-600' : ''}`}
+                        style={{
+                          borderColor: isIdle ? '#52525b' : playerAccentColor,
+                          boxShadow: isWaiting
+                            ? `0 0 15px ${hexToRgbaPlayer(playerAccentColor, 0.5)}, 0 0 30px ${hexToRgbaPlayer(playerAccentColor, 0.3)}`
+                            : 'none',
+                        }}
+                      />
+
+                      {/* Card Content */}
+                      <div className="relative z-[5] h-full flex flex-col items-center justify-center p-2">
+                        {/* Profile Picture with glow for waiting players */}
+                        <div className="relative mb-2">
+                          {isWaiting && (
+                            <div
+                              className="absolute inset-0 rounded-full blur-lg"
+                              style={{
+                                backgroundColor: playerAccentColor,
+                                opacity: 0.6,
+                                transform: 'scale(1.3)',
+                              }}
+                            />
+                          )}
+                          <Avatar
+                            className="relative w-14 h-14 border-2"
+                            style={{
+                              borderColor: isIdle ? '#52525b' : playerAccentColor,
+                            }}
+                          >
+                            <AvatarImage src={resolveProfilePicUrl(player.profilePic)} />
+                            <AvatarFallback className="bg-zinc-800 text-white text-lg">
+                              {player.granboardName.charAt(0)}
+                            </AvatarFallback>
+                          </Avatar>
                         </div>
-                        <div>
-                          <p className="text-gray-400 text-xs mb-1" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                            CR AVG
+
+                        {/* Granboard Name */}
+                        <h3
+                          className="text-white text-sm font-bold truncate max-w-full px-1"
+                          style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}
+                        >
+                          {player.granboardName}
+                        </h3>
+
+                        {/* Team indicator */}
+                        {player.isDoublesTeam && player.partnerName && (
+                          <p className="text-xs text-gray-400 truncate max-w-full" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                            + {player.partnerName}
                           </p>
-                          <p className="text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}>
-                            {player.pprNumeric.toFixed(2)}
-                          </p>
-                        </div>
+                        )}
+
+                        {/* Status indicator for idle/in_match */}
+                        {isIdle && (
+                          <p className="text-yellow-500 text-xs mt-1 font-semibold">IDLE</p>
+                        )}
+                        {isInMatch && (
+                          <p className="text-red-400 text-xs mt-1 font-semibold">IN MATCH</p>
+                        )}
+
+                        {/* Stats - only show for waiting players */}
+                        {isWaiting && (
+                          <div className="flex gap-3 mt-1 text-xs">
+                            <div className="text-center">
+                              <p className="text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>01</p>
+                              <p className="text-white font-bold" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                {player.mprNumeric.toFixed(1)}
+                              </p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>CR</p>
+                              <p className="text-white font-bold" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                                {player.pprNumeric.toFixed(2)}
+                              </p>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );

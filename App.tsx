@@ -30,6 +30,7 @@ import {
 } from './components/ui/dropdown-menu';
 import { createClient } from './utils/supabase/client';
 import { useBLE } from './contexts/BLEContext';
+import { isDevMode } from './utils/devMode';
 import bluetoothIcon from './dashboardicon.png';
 
 import dartsIcon from './5darts.png';
@@ -625,7 +626,8 @@ export default function App() {
   };
 
   const handleNavigateToOnlineLobby = () => {
-    if (!bleConnected) {
+    // Dev mode bypasses BLE requirement
+    if (!bleConnected && !isDevMode()) {
       setShowBLEPrompt(true);
       return;
     }

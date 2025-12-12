@@ -5,6 +5,7 @@ import { useGameStatus } from '../hooks/useGameStatus';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Bluetooth, X, WifiOff } from 'lucide-react';
 import type { DartThrowData } from '../utils/ble/bleConnection';
+import { isDevMode } from '../utils/devMode';
 
 interface CorkScreenProps {
   player1: { id: string; name: string; profilePic?: string; accentColor: string };
@@ -75,6 +76,33 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
   const [currentThrower, setCurrentThrower] = useState<1 | 2>(1);
   const [lastTs, setLastTs] = useState<string | null>(null);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const devMode = isDevMode();
+
+  // Dev mode: simulate a throw
+  const simulateThrow = (type: 'inner' | 'bull' | 'dblbull' | 'miss', value: number = 20) => {
+    const segmentTypes: Record<string, DartThrowData['segmentType']> = {
+      inner: 'SINGLE_INNER',
+      bull: 'BULL',
+      dblbull: 'DBL_BULL',
+      miss: 'MISS',
+    };
+    const fakeThrow: DartThrowData = {
+      segment: type === 'bull' ? 'BULL' : type === 'dblbull' ? 'DBL_BULL' : `S${value}`,
+      score: type === 'bull' ? 25 : type === 'dblbull' ? 50 : type === 'miss' ? 0 : value,
+      multiplier: type === 'dblbull' ? 2 : 1,
+      baseValue: type === 'bull' || type === 'dblbull' ? 25 : value,
+      segmentType: segmentTypes[type],
+      dartNum: 1,
+      timestamp: new Date().toISOString(),
+    };
+    const { score, valid, display } = getCorkScore(fakeThrow);
+    if (currentThrower === 1 && p1State.status === 'waiting') {
+      setP1State({ status: 'thrown', score, wasValid: valid, display });
+      setCurrentThrower(2);
+    } else if (currentThrower === 2 && p2State.status === 'waiting') {
+      setP2State({ status: 'thrown', score, wasValid: valid, display });
+    }
+  };
 
   useEffect(() => { initialize(); return () => { disconnect(); }; }, []);
 
@@ -164,7 +192,9 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
           <div className="w-full aspect-video bg-zinc-900 rounded-lg mb-2 overflow-hidden relative" style={{ borderColor: player.accentColor, borderWidth: '2px' }}>
             {isLocal ? (
               localStream ? <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
-              : <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs p-2 text-center">{error || 'Starting camera...'}</div>
+              : <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs p-2 text-center">
+                  {devMode ? 'No camera (dev mode)' : error || 'Starting camera...'}
+                </div>
             ) : (
               remoteStream ? <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
               : <div className="w-full h-full flex items-center justify-center">
@@ -253,8 +283,8 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
         </div>
       )}
 
-      {/* BLE Disconnected Overlay - blocks gameplay until reconnected */}
-      {!isConnected && (
+      {/* BLE Disconnected Overlay - skip in dev mode */}
+      {!isConnected && !devMode && (
         <div className="absolute inset-0 z-[60] bg-black/80 flex items-center justify-center p-4">
           <div className="bg-zinc-900 border border-blue-600 rounded-xl p-6 max-w-sm w-full text-center">
             <Bluetooth className="w-12 h-12 text-blue-500 mx-auto mb-3" />
@@ -339,6 +369,42 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
 
         {/* Video status */}
         <p className="text-zinc-700 text-xs mt-3">Video: {connectionState}</p>
+
+        {/* Dev Mode Throw Simulator */}
+        {devMode && (
+          <div className="mt-4 p-3 bg-orange-900/30 border border-orange-600 rounded-lg">
+            <p className="text-orange-400 text-xs font-bold mb-2">DEV MODE - Throw Simulator</p>
+            <div className="flex flex-wrap gap-2 justify-center">
+              {[1, 5, 10, 15, 20].map(v => (
+                <button
+                  key={v}
+                  onClick={() => simulateThrow('inner', v)}
+                  className="px-3 py-1 bg-zinc-700 hover:bg-zinc-600 text-white text-xs rounded"
+                >
+                  {v}
+                </button>
+              ))}
+              <button
+                onClick={() => simulateThrow('bull')}
+                className="px-3 py-1 bg-green-700 hover:bg-green-600 text-white text-xs rounded"
+              >
+                BULL
+              </button>
+              <button
+                onClick={() => simulateThrow('dblbull')}
+                className="px-3 py-1 bg-red-700 hover:bg-red-600 text-white text-xs rounded"
+              >
+                D-BULL
+              </button>
+              <button
+                onClick={() => simulateThrow('miss')}
+                className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 text-xs rounded"
+              >
+                MISS
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
