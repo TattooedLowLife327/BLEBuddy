@@ -235,13 +235,36 @@ export function Login({ onLoginSuccess }: LoginProps) {
               transform: `scale(${loginScale})`,
             }}
           >
-            {/* Left - Banner */}
-            <div className="w-[45%] flex items-center justify-center p-4 bg-black/30">
+            {/* Left - Banner + Info */}
+            <div className="w-[45%] flex flex-col items-center justify-center p-4 bg-black/30">
               <img
                 src={bannerImage}
                 alt="LowLife Banner"
-                className="w-full h-auto rounded-lg"
+                className="w-full h-auto rounded-lg mb-3"
               />
+              <p className="text-center text-xs text-zinc-400 leading-relaxed px-2">
+                BLE Buddy is the gameplay companion for the{' '}
+                <a
+                  href="https://www.lowlifesofgranboard.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-purple-400 hover:text-purple-300"
+                >
+                  LLOGB
+                </a>{' '}
+                app. Use your same login credentials.
+              </p>
+              <p className="text-center text-xs pt-2 text-gray-500">
+                Not a LowLife yet?{' '}
+                <a
+                  href="https://www.lowlifesofgranboard.com/register"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-purple-400 underline hover:text-purple-300"
+                >
+                  Sign up on LLOGB!
+                </a>
+              </p>
             </div>
 
             {/* Right - Form */}
@@ -472,17 +495,6 @@ export function Login({ onLoginSuccess }: LoginProps) {
                   </button>
                 </div>
               </form>
-              <p className="text-center text-xs pt-2 text-gray-400">
-                Not a LowLife yet?{' '}
-                <a
-                  href="https://www.lowlifesofgranboard.com/register"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-purple-400 underline"
-                >
-                  Sign up!
-                </a>
-              </p>
             </div>
           </div>
         </div>
