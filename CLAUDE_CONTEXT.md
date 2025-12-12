@@ -1,6 +1,6 @@
 # BLE Buddy - Claude Context
 
-**Last Updated**: December 11, 2025 (Leave/disconnect handling, rejoin prompt added)
+**Last Updated**: December 11, 2025 (Fixed 400 errors with DELETE, lobby no longer auto-polls)
 
 ---
 
@@ -263,6 +263,8 @@ const { localStream, remoteStream, connectionState, initialize, disconnect } = u
 - **Network disconnect detection** with 60-second countdown before auto-kick
 - **Rejoin prompt** on app load for active games (rejoin or abandon)
 - **useGameStatus hook** for presence tracking and game status communication
+- **Lobby manual refresh only** - no auto-polling, refreshes on page navigation or refresh button
+- **Game cleanup uses DELETE** - avoids RLS/column issues with UPDATE
 - Build passing
 
 ### ⏳ In Progress / TODO
@@ -315,6 +317,7 @@ VITE_SUPABASE_ANON_KEY=sb_publishable_YR80q8me3afbdERJ6w7rFg_Uajm8Jj1
 3. **BLE warmup**: 2-second warmup period after connection (ignores initial events)
 4. **iOS**: Safari does NOT support Web Bluetooth - use Bluefy browser
 5. **Supabase client**: Use `createClient()` from `utils/supabase/client.ts`
+6. **Game cleanup**: Use DELETE not UPDATE on `active_games` - UPDATE causes 400 errors
 
 ---
 
