@@ -6,6 +6,7 @@ import { OnlineLobby } from './pages/OnlineLobby';
 import { LocalDubsSetup } from './pages/LocalDubsSetup';
 import { RemoteDubsSetup } from './pages/RemoteDubsSetup';
 import { CorkScreen } from './components/CorkScreen';
+import { GameScreen } from './pages/GameScreen';
 import { createClient } from './utils/supabase/client';
 import { useBLE } from './contexts/BLEContext';
 import { useGame, type GameData } from './contexts/GameContext';
@@ -498,6 +499,12 @@ export default function App() {
           onCorkComplete={handleCorkComplete}
           onCancel={handleCorkCancel}
         />
+      } />
+
+      {/* Preview for post-cork match HUD */}
+      <Route path="/game-preview" element={
+        !isAuthenticated ? <Navigate to={`/login${queryString}`} /> :
+        <GameScreen />
       } />
 
       <Route path="/" element={<Navigate to={isAuthenticated ? `/dashboard${queryString}` : `/login${queryString}`} />} />
