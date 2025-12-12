@@ -347,11 +347,9 @@ export default function App() {
     navigate('/cork');
   };
 
-  const handleCorkComplete = async (firstPlayerId: string) => {
-    alert(`${firstPlayerId === userId ? 'You throw' : 'Opponent throws'} first! Game screen coming soon...`);
-    await removeActiveGame(activeGame?.gameId);
-    setActiveGame(null);
-    navigate('/dashboard');
+  const handleCorkComplete = (firstPlayerId: string) => {
+    // For now, jump to the HUD preview after cork
+    navigate('/game-preview');
   };
 
   const handleCorkCancel = async () => {
