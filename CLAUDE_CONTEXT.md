@@ -1,6 +1,6 @@
 # BLE Buddy - Claude Context
 
-**Last Updated**: December 12, 2025 (Login page redesign, footer social icons, color palette)
+**Last Updated**: December 12, 2025 (Cork screen throw sync, permission prompts, WebRTC retry logic)
 
 ---
 
@@ -122,41 +122,41 @@ BLEBUDDY/
 ├── src/
 │   ├── App.tsx                    # Main app component
 │   ├── main.tsx                   # Entry point with providers
-│   ├── components/
-│   │   ├── AppHeader.tsx          # Shared header component (BLE status, notifications, user menu)
+│   ├── pages/                     # Page-level components
 │   │   ├── Dashboard.tsx          # Dashboard page with card carousel
-│   │   ├── CorkScreen.tsx         # "Who throws first" screen with video
 │   │   ├── OnlineLobby.tsx        # Online player lobby
-│   │   ├── Login.tsx              # Auth screen
-│   │   ├── LobbyCard.tsx          # Game mode selection cards
+│   │   ├── Login.tsx              # Auth screen with permission prompts
 │   │   ├── LocalDubsSetup.tsx     # Local doubles setup
-│   │   ├── RemoteDubsSetup.tsx    # Remote doubles setup
+│   │   └── RemoteDubsSetup.tsx    # Remote doubles setup
+│   ├── components/
+│   │   ├── AppHeader.tsx          # Shared header (BLE status, notifications, user menu)
+│   │   ├── CorkScreen.tsx         # "Who throws first" with video + throw sync
+│   │   ├── LobbyCard.tsx          # Game mode selection cards
+│   │   ├── PlayerGameSetup.tsx    # Game setup modal
 │   │   ├── BLEStatus.tsx          # BLE connection status
 │   │   ├── UserMenu.tsx           # User dropdown menu
 │   │   ├── Footer.tsx             # Social links footer (10 icons)
 │   │   └── ui/                    # shadcn/ui components
 │   ├── contexts/
 │   │   ├── BLEContext.tsx         # App-wide BLE state
-│   │   └── WebRTCContext.tsx      # (deprecated - empty)
+│   │   └── GameContext.tsx        # Game state (mode, partner, activeGame)
 │   ├── hooks/
 │   │   ├── useBLEThrows.ts        # Throw tracking to Supabase
-│   │   └── useWebRTC.ts           # WebRTC video connection hook
+│   │   ├── useWebRTC.ts           # WebRTC video connection hook
+│   │   └── useGameStatus.ts       # Presence tracking and game status
 │   ├── utils/
 │   │   ├── supabase/
 │   │   │   ├── client.ts          # Supabase client
 │   │   │   └── info.tsx           # Supabase config
-│   │   └── webrtc/
-│   │       └── peerConnection.ts  # WebRTC peer connection manager
-│   ├── pages/                     # (ready for page components)
+│   │   ├── webrtc/
+│   │   │   └── peerConnection.ts  # WebRTC peer connection (STUN only)
+│   │   └── devMode.ts             # Dev mode detection
 │   ├── styles/
 │   │   └── globals.css            # Global styles
 │   └── ble/                       # BLE module
 ├── public/
 │   ├── assets/                    # Images (png, jpg)
 │   └── icons/                     # SVG icons with 3D inner shadow effect
-│       ├── closebutton.svg        # Custom close button
-│       ├── loginbutton.svg        # 3D login button
-│       └── (social icons)         # twitch, facebook, messenger, etc.
 ├── index.html                     # Entry HTML
 ├── vite.config.ts                 # Vite configuration
 └── *.md                           # Documentation files
@@ -289,6 +289,12 @@ const { localStream, remoteStream, connectionState, initialize, disconnect } = u
 - **Login page redesign** - landscape layout, 55/45 banner/form split, unified purple palette
 - **Color palette** - #5b21b6 (button/border/links), #a855f7 (glow/hover), see DESIGN_NOTES.md
 - **Footer social icons** - 10 external SVGs with 3D inner shadow effect, see `/public/icons/`
+- **Cork throw sync** - Supabase realtime channel `cork:{gameId}` syncs throws between players
+- **Turn enforcement** - Each player can only throw once per round, prevents simultaneous throws
+- **Permission prompts** - Login requests notification and camera permissions after successful auth
+- **WebRTC retry logic** - Offer retries up to 5 times if no answer received
+- **GameContext** - App-wide game state management (mode, partner, activeGame, pendingRejoin)
+- **Pages refactor** - Page components moved to `src/pages/`, components stay in `src/components/`
 - Build passing
 
 ### ⏳ In Progress / TODO
