@@ -1,6 +1,6 @@
 # BLE Buddy - Claude Context
 
-**Last Updated**: December 11, 2025 (Idle detection, notification bell in lobby)
+**Last Updated**: December 12, 2025 (Glassmorphic UI, card scaling, custom toggle/close icons)
 
 ---
 
@@ -145,8 +145,11 @@ BLEBUDDY/
 │   │   └── info.tsx           # Supabase config
 │   └── webrtc/
 │       └── peerConnection.ts  # WebRTC peer connection manager
-└── styles/
-    └── globals.css            # Global styles
+├── styles/
+│   └── globals.css            # Global styles
+└── public/
+    ├── assets/                # Custom SVG toggle icons
+    └── icons/closebutton.svg  # Custom close button
 ```
 
 ---
@@ -269,6 +272,10 @@ const { localStream, remoteStream, connectionState, initialize, disconnect } = u
 - **BLE disconnect handling in game** - blocking overlay with reconnect button, pauses game for that player only
 - **Idle detection in lobby** - 15min inactivity triggers warning, 5min countdown to respond or auto-remove
 - **Notification bell** - bottom right of lobby, shows missed game requests with clear all option
+- **Glassmorphic UI** - backdrop-blur with transparent backgrounds on modals/dropdowns
+- **Card scaling** - lobby cards and game setup modal scale proportionally with viewport
+- **Custom SVG toggle** - handicap toggle with hue rotation to match player accent color
+- **Custom close button** - replaced X icons with `/icons/closebutton.svg`
 - Build passing
 
 ### ⏳ In Progress / TODO
