@@ -51,6 +51,40 @@ export default function App() {
   const supabase = createClient();
   const locationRef = useRef(location.pathname);
 
+  const removeActiveGame = useCallback(async (gameId?: string, playerIdOverride?: string) => {
+    if (!gameId && !playerIdOverride && !userId) return;
+
+    const playerId = playerIdOverride || userId;
+
+    try {
+      // Mark the game (or any game for this user) as abandoned so rejoin queries ignore it
+      await (supabase as any)
+        .schema('companion')
+        .from('active_games')
+        .update({ status: 'abandoned' })
+        .or(`id.eq.${gameId || 'none'},player1_id.eq.${playerId},player2_id.eq.${playerId}`)
+        .in('status', ['pending', 'accepted', 'playing']);
+
+      // Then remove the record(s) entirely
+      await (supabase as any)
+        .schema('companion')
+        .from('active_games')
+        .delete()
+        .or(`id.eq.${gameId || 'none'},player1_id.eq.${playerId},player2_id.eq.${playerId}`);
+
+      await (supabase as any)
+        .schema('companion')
+        .from('online_lobby')
+        .update({ status: 'waiting', last_seen: new Date().toISOString() })
+        .eq('player_id', playerId);
+
+      // Clear any abandoned flag in localStorage for this game
+      if (gameId) localStorage.removeItem('bb-abandoned-game');
+    } catch (err) {
+      console.error('Error removing active game:', err);
+    }
+  }, [supabase, userId]);
+
   // Lock screen orientation to landscape when possible
   useEffect(() => {
     const lockOrientation = async () => {
@@ -155,7 +189,7 @@ export default function App() {
           }
         }
 
-        // Check for active games to rejoin
+        // Check for active games to rejoin (or auto-clean if user abandoned)
         try {
           const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
           const { data: activeGames } = await (supabase as any)
@@ -168,13 +202,20 @@ export default function App() {
 
           if (activeGames && activeGames.length > 0) {
             const game = activeGames[0];
-            const isPlayer1 = game.player1_id === session.user.id;
-            setPendingRejoinGame({
-              gameId: game.id,
-              opponentId: isPlayer1 ? game.player2_id : game.player1_id,
-              opponentName: (isPlayer1 ? game.player2_granboard_name : game.player1_granboard_name) || 'Opponent',
-              isInitiator: isPlayer1,
-            });
+            const abandonedId = localStorage.getItem('bb-abandoned-game');
+
+            // If user previously clicked abandon, auto-clean the record and skip prompt
+            if (abandonedId && abandonedId === game.id) {
+              await removeActiveGame(game.id, session.user.id);
+            } else {
+              const isPlayer1 = game.player1_id === session.user.id;
+              setPendingRejoinGame({
+                gameId: game.id,
+                opponentId: isPlayer1 ? game.player2_id : game.player1_id,
+                opponentName: (isPlayer1 ? game.player2_granboard_name : game.player1_granboard_name) || 'Opponent',
+                isInitiator: isPlayer1,
+              });
+            }
           }
         } catch (err) {}
       } catch (error) {
@@ -277,12 +318,20 @@ export default function App() {
     if (!gameId) return;
 
     try {
+      // Mark the game (or any game for this user) as abandoned so rejoin queries ignore it
+      await (supabase as any)
+        .schema('companion')
+        .from('active_games')
+        .update({ status: 'abandoned' })
+        .or(`id.eq.${gameId},player1_id.eq.${userId},player2_id.eq.${userId}`)
+        .in('status', ['pending', 'accepted', 'playing']);
+
+      // Then remove the record(s) entirely
       await (supabase as any)
         .schema('companion')
         .from('active_games')
         .delete()
-        .eq('id', gameId)
-        .or(`player1_id.eq.${userId},player2_id.eq.${userId}`);
+        .or(`id.eq.${gameId},player1_id.eq.${userId},player2_id.eq.${userId}`);
 
       await (supabase as any)
         .schema('companion')
@@ -315,6 +364,7 @@ export default function App() {
 
   const handleAbandonGame = async () => {
     if (!pendingRejoinGame) return;
+    localStorage.setItem('bb-abandoned-game', pendingRejoinGame.gameId);
     await removeActiveGame(pendingRejoinGame.gameId);
     setPendingRejoinGame(null);
     navigate('/dashboard');

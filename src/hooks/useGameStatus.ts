@@ -79,13 +79,26 @@ export function useGameStatus(options: UseGameStatusOptions): UseGameStatusRetur
       });
     }
 
-    // Delete game from database (simpler than update, avoids RLS issues)
+    // Mark game abandoned (so rejoin queries ignore it) then delete
+    try {
+      const { error: abandonError } = await (supabase as any)
+        .schema('companion')
+        .from('active_games')
+        .update({ status: 'abandoned' })
+        .eq('id', options.gameId)
+        .or(`player1_id.eq.${options.localPlayerId},player2_id.eq.${options.localPlayerId}`);
+      if (abandonError) console.error('[GameStatus] Error marking game abandoned:', abandonError);
+    } catch (err) {
+      console.error('[GameStatus] Error marking game abandoned:', err);
+    }
+
     try {
       const { error } = await (supabase as any)
         .schema('companion')
         .from('active_games')
         .delete()
-        .eq('id', options.gameId);
+        .eq('id', options.gameId)
+        .or(`player1_id.eq.${options.localPlayerId},player2_id.eq.${options.localPlayerId}`);
 
       if (error) console.error('[GameStatus] Error deleting game:', error);
       else console.log('[GameStatus] Game deleted successfully');
