@@ -160,6 +160,33 @@ export function Login({ onLoginSuccess }: LoginProps) {
     }
   };
 
+  // Calculate scale for landscape layout
+  const [loginScale, setLoginScale] = useState(1);
+
+  useEffect(() => {
+    const calculateScale = () => {
+      // Check if we're in portrait mode (CSS rotates to landscape)
+      const isPortrait = window.matchMedia('(orientation: portrait)').matches;
+
+      // When in portrait, CSS rotates content so swap width/height for calculations
+      const viewWidth = isPortrait ? window.innerHeight : window.innerWidth;
+      const viewHeight = isPortrait ? window.innerWidth : window.innerHeight;
+
+      // Base card is 800px wide x 400px tall for landscape layout
+      const widthScale = (viewWidth - 48) / 800;
+      const heightScale = (viewHeight - 100) / 420; // account for footer
+      setLoginScale(Math.min(widthScale, heightScale, 1.3)); // Cap at 1.3x
+    };
+    calculateScale();
+    window.addEventListener('resize', calculateScale);
+    const orientationQuery = window.matchMedia('(orientation: portrait)');
+    orientationQuery.addEventListener('change', calculateScale);
+    return () => {
+      window.removeEventListener('resize', calculateScale);
+      orientationQuery.removeEventListener('change', calculateScale);
+    };
+  }, []);
+
   return (
     <>
       <style>{`
@@ -184,7 +211,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
       `}</style>
 
       <div
-        className="min-h-screen flex flex-col items-center justify-center bg-black text-white px-6 overflow-hidden"
+        className="min-h-screen flex flex-col items-center justify-center bg-black text-white overflow-hidden"
         style={{
           backgroundImage: `url(${backgroundImage})`,
           backgroundSize: 'cover',
@@ -192,34 +219,35 @@ export function Login({ onLoginSuccess }: LoginProps) {
           backgroundRepeat: 'no-repeat',
         }}
       >
-        <div className="w-full max-w-md mx-auto px-4">
+        <div className="flex-1 flex items-center justify-center w-full">
           <div
-            className="rounded-xl shadow-2xl border-[4px] bg-black/95 backdrop-blur-lg mb-4 overflow-hidden"
+            className="rounded-xl shadow-2xl border-[3px] backdrop-blur-xl bg-zinc-900/40 overflow-hidden flex origin-center"
             style={{
               borderColor: '#a855f7',
               boxShadow: `
-                0 0 24px 4px rgba(168,85,247,0.5),
-                0 0 48px 12px rgba(168,85,247,0.25),
-                0 8px 32px 0 rgba(0,0,0,0.37)
+                0 0 24px 4px rgba(168,85,247,0.4),
+                0 0 48px 12px rgba(168,85,247,0.2),
+                0 8px 32px 0 rgba(0,0,0,0.5),
+                inset 0 1px 0 rgba(255,255,255,0.1)
               `,
-              borderRadius: '0.75rem',
-              marginTop: '2rem',
-              marginBottom: '2rem',
+              width: '800px',
+              height: '400px',
+              transform: `scale(${loginScale})`,
             }}
           >
-            {/* Banner */}
-            <div className="w-full p-4">
+            {/* Left - Banner */}
+            <div className="w-[45%] flex items-center justify-center p-4 bg-black/30">
               <img
                 src={bannerImage}
                 alt="LowLife Banner"
-                className="w-full h-auto rounded-t-2xl"
+                className="w-full h-auto rounded-lg"
               />
             </div>
 
-            {/* Form */}
-            <div className="p-6 w-full">
-              <h2 className="text-xl font-semibold text-center mb-6">LowLife Login</h2>
-              <form action="#" onSubmit={handleLogin} className="space-y-6" autoComplete="on">
+            {/* Right - Form */}
+            <div className="w-[55%] p-4 flex flex-col justify-center overflow-y-auto">
+              <h2 className="text-lg font-semibold text-center mb-4">LowLife Login</h2>
+              <form action="#" onSubmit={handleLogin} className="space-y-4" autoComplete="on">
                 {/* --- Animated Email Input --- */}
                 <div className="relative w-full max-w-full">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none z-20">
@@ -303,7 +331,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
                     autoComplete="email"
                     required
                     placeholder=" "
-                    className={`peer block w-full h-12 px-3 pl-10 bg-transparent rounded-2xl appearance-none focus:outline-none text-white border-none ${shakeTrigger ? 'shake' : ''}`}
+                    className={`peer block w-full h-10 px-3 pl-10 bg-transparent rounded-2xl appearance-none focus:outline-none text-white border-none text-sm ${shakeTrigger ? 'shake' : ''}`}
                     style={{
                       backgroundColor: 'transparent',
                       color: '#fff',
@@ -390,7 +418,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
                     autoComplete="current-password"
                     required
                     placeholder=" "
-                    className="peer block w-full h-12 px-3 pl-10 bg-transparent rounded-2xl appearance-none focus:outline-none text-white border-none"
+                    className="peer block w-full h-10 px-3 pl-10 bg-transparent rounded-2xl appearance-none focus:outline-none text-white border-none text-sm"
                     style={{
                       backgroundColor: 'transparent',
                       color: '#fff',
@@ -411,7 +439,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
                   </button>
                 </div>
 
-                <div className="flex justify-between items-center mt-2 px-2">
+                <div className="flex justify-between items-center mt-1 px-1">
                   <AnimatedCheckbox
                     checked={rememberMe}
                     onChange={setRememberMe}
@@ -427,16 +455,16 @@ export function Login({ onLoginSuccess }: LoginProps) {
                 </div>
 
                 {errorMsg && (
-                  <div className="bg-red-900/50 border border-red-500 rounded-lg p-3 text-center mx-2">
-                    <p className="text-red-200 text-sm">{errorMsg}</p>
+                  <div className="bg-red-900/50 border border-red-500 rounded-lg p-2 text-center">
+                    <p className="text-red-200 text-xs">{errorMsg}</p>
                   </div>
                 )}
 
-                <div className="px-2 pt-2">
+                <div className="pt-1">
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className={`w-full bg-purple-800 hover:bg-purple-900 p-4 rounded-xl font-medium transition-all duration-300 transform hover:scale-[1.02] ${
+                    className={`w-full bg-purple-800 hover:bg-purple-900 p-3 rounded-lg font-medium transition-all duration-300 transform hover:scale-[1.02] text-sm ${
                       isLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
                     }`}
                   >
@@ -444,7 +472,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
                   </button>
                 </div>
               </form>
-              <p className="text-center text-sm pt-4 text-gray-400">
+              <p className="text-center text-xs pt-2 text-gray-400">
                 Not a LowLife yet?{' '}
                 <a
                   href="https://www.lowlifesofgranboard.com/register"
