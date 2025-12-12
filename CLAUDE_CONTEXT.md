@@ -1,6 +1,6 @@
 # BLE Buddy - Claude Context
 
-**Last Updated**: December 11, 2025 (Fixed 400 errors with DELETE, lobby no longer auto-polls)
+**Last Updated**: December 11, 2025 (BLE gate for online lobby, disconnect handling during game)
 
 ---
 
@@ -265,6 +265,8 @@ const { localStream, remoteStream, connectionState, initialize, disconnect } = u
 - **useGameStatus hook** for presence tracking and game status communication
 - **Lobby manual refresh only** - no auto-polling, refreshes on page navigation or refresh button
 - **Game cleanup uses DELETE** - avoids RLS/column issues with UPDATE
+- **BLE required for online lobby** - must connect board before entering, prompt shown if not connected
+- **BLE disconnect handling in game** - blocking overlay with reconnect button, pauses game for that player only
 - Build passing
 
 ### ⏳ In Progress / TODO
