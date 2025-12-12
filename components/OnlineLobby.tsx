@@ -135,10 +135,16 @@ export function OnlineLobby({
   // Calculate card scale based on viewport
   useEffect(() => {
     const calculateScale = () => {
+      // Check if we're in portrait mode (CSS rotates to landscape)
+      const isPortrait = window.matchMedia('(orientation: portrait)').matches;
+
+      // When in portrait, CSS rotates content so swap width/height for calculations
+      const viewWidth = isPortrait ? window.innerHeight : window.innerWidth;
+      const viewHeight = isPortrait ? window.innerWidth : window.innerHeight;
+
       // Base card is 120x160px, target 5 columns with gaps
-      // Scale based on available width for cards
-      const availableWidth = window.innerWidth - 64; // px-8 = 32px each side
-      const availableHeight = window.innerHeight - 120; // header + py-4 padding
+      const availableWidth = viewWidth - 64; // px-8 = 32px each side
+      const availableHeight = viewHeight - 120; // header + py-4 padding
       const cardBaseWidth = 120;
       const cardBaseHeight = 160;
       const columns = 5;
@@ -153,7 +159,13 @@ export function OnlineLobby({
 
     calculateScale();
     window.addEventListener('resize', calculateScale);
-    return () => window.removeEventListener('resize', calculateScale);
+    // Also listen for orientation changes
+    const orientationQuery = window.matchMedia('(orientation: portrait)');
+    orientationQuery.addEventListener('change', calculateScale);
+    return () => {
+      window.removeEventListener('resize', calculateScale);
+      orientationQuery.removeEventListener('change', calculateScale);
+    };
   }, []);
 
   // Reset activity timestamp on any user interaction

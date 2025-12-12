@@ -132,13 +132,25 @@ export function PlayerGameSetup({
   // Calculate modal scale based on viewport
   useEffect(() => {
     const calculateScale = () => {
-      const widthScale = (window.innerWidth - 48) / 700; // base modal width ~700px
-      const heightScale = (window.innerHeight - 48) / 550; // base modal height ~550px
+      // Check if we're in portrait mode (CSS rotates to landscape)
+      const isPortrait = window.matchMedia('(orientation: portrait)').matches;
+
+      // When in portrait, CSS rotates content so swap width/height for calculations
+      const viewWidth = isPortrait ? window.innerHeight : window.innerWidth;
+      const viewHeight = isPortrait ? window.innerWidth : window.innerHeight;
+
+      const widthScale = (viewWidth - 48) / 700; // base modal width ~700px
+      const heightScale = (viewHeight - 48) / 550; // base modal height ~550px
       setModalScale(Math.min(widthScale, heightScale, 1.2)); // Cap at 1.2x
     };
     calculateScale();
     window.addEventListener('resize', calculateScale);
-    return () => window.removeEventListener('resize', calculateScale);
+    const orientationQuery = window.matchMedia('(orientation: portrait)');
+    orientationQuery.addEventListener('change', calculateScale);
+    return () => {
+      window.removeEventListener('resize', calculateScale);
+      orientationQuery.removeEventListener('change', calculateScale);
+    };
   }, []);
 
   // Update games array when legs change
