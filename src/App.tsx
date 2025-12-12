@@ -57,33 +57,28 @@ export default function App() {
       const playerId = playerIdOverride || userId;
       if (!playerId && !gameId) return;
 
+      const orFilter = gameId
+        ? `id.eq.${gameId},player1_id.eq.${playerId},player2_id.eq.${playerId}`
+        : `player1_id.eq.${playerId},player2_id.eq.${playerId}`;
+
       try {
         // Mark as abandoned so rejoin queries ignore it, even if delete fails
-        const updateFilter = gameId
-          ? { filter: `.or(id.eq.${gameId},player1_id.eq.${playerId},player2_id.eq.${playerId})` }
-          : { filter: `.or(player1_id.eq.${playerId},player2_id.eq.${playerId})` };
-
         await (supabase as any)
           .schema('companion')
           .from('active_games')
           .update({ status: 'abandoned' })
-          .filter('id', 'neq', '0') // no-op to allow chaining
-          .or(updateFilter.filter)
+          .or(orFilter)
           .in('status', ['pending', 'accepted', 'playing']);
       } catch (err) {
         console.error('Error marking game abandoned:', err);
       }
 
       try {
-        const deleteFilter = gameId
-          ? `.or(id.eq.${gameId},player1_id.eq.${playerId},player2_id.eq.${playerId})`
-          : `.or(player1_id.eq.${playerId},player2_id.eq.${playerId})`;
-
         await (supabase as any)
           .schema('companion')
           .from('active_games')
           .delete()
-          .or(deleteFilter);
+          .or(orFilter);
       } catch (err) {
         console.error('Error deleting active game:', err);
       }
