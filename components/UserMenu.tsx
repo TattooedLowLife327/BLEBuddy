@@ -10,6 +10,7 @@ interface UserMenuProps {
   userName?: string | null;
   onLogout: () => void | Promise<void>;
   className?: string;
+  size?: 'sm' | 'md' | 'lg';
 }
 
 export function UserMenu({
@@ -18,7 +19,13 @@ export function UserMenu({
   userName,
   onLogout,
   className,
+  size = 'lg',
 }: UserMenuProps) {
+  const sizeClasses = {
+    sm: 'w-8 h-8',
+    md: 'w-10 h-10',
+    lg: 'w-14 h-14',
+  };
   const initials = useMemo(() => {
     if (!userName) return 'U';
     const trimmed = userName.trim();
@@ -37,7 +44,7 @@ export function UserMenu({
           className={`flex items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded-full transition-transform hover:scale-[1.03] ${className ?? ''}`}
           aria-label="Open user menu"
         >
-          <Avatar className="w-14 h-14 border-2" style={{ borderColor: accentColor }}>
+          <Avatar className={`${sizeClasses[size]} border-2`} style={{ borderColor: accentColor }}>
             <AvatarImage src={profilePic || undefined} alt={userName ?? 'Profile picture'} />
             <AvatarFallback className="bg-white/10 text-white text-base font-semibold">
               {initials}
@@ -47,7 +54,10 @@ export function UserMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="min-w-[220px] bg-zinc-900/95 text-white border border-zinc-700 backdrop-blur-md"
+        className="min-w-[220px] backdrop-blur-xl bg-zinc-900/40 text-white border border-zinc-600/50"
+        style={{
+          boxShadow: '0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1)',
+        }}
       >
         <DropdownMenuLabel className="flex items-center gap-3">
           <Avatar className="w-10 h-10 border border-zinc-700">

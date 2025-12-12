@@ -1,11 +1,28 @@
-import { useState, useEffect, useRef } from 'react';
-import { X } from 'lucide-react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
-import { Switch } from './ui/switch';
 import { Label } from './ui/label';
 import { Separator } from './ui/separator';
 import { createClient } from '../utils/supabase/client';
+
+// Convert hex color to hue value (0-360)
+function hexToHue(hex: string): number {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  let h = 0;
+  if (max !== min) {
+    const d = max - min;
+    switch (max) {
+      case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+      case g: h = ((b - r) / d + 2) / 6; break;
+      case b: h = ((r - g) / d + 4) / 6; break;
+    }
+  }
+  return Math.round(h * 360);
+}
 
 interface PlayerGameSetupProps {
   player: {
@@ -91,6 +108,7 @@ export function PlayerGameSetup({
   const [doublesStats, setDoublesStats] = useState<DoublesStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [flight, setFlight] = useState<FlightAnimation | null>(null);
+  const [modalScale, setModalScale] = useState(1);
 
   const supabase = createClient();
   
@@ -107,6 +125,21 @@ export function PlayerGameSetup({
     const b = parseInt(hex.slice(5, 7), 16);
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   };
+
+  // Calculate hue for toggle filter (base SVG is purple ~270 hue)
+  const profileHue = useMemo(() => hexToHue(player.accentColor), [player.accentColor]);
+
+  // Calculate modal scale based on viewport
+  useEffect(() => {
+    const calculateScale = () => {
+      const widthScale = (window.innerWidth - 48) / 700; // base modal width ~700px
+      const heightScale = (window.innerHeight - 48) / 550; // base modal height ~550px
+      setModalScale(Math.min(widthScale, heightScale, 1.2)); // Cap at 1.2x
+    };
+    calculateScale();
+    window.addEventListener('resize', calculateScale);
+    return () => window.removeEventListener('resize', calculateScale);
+  }, []);
 
   // Update games array when legs change
   useEffect(() => {
@@ -281,6 +314,7 @@ export function PlayerGameSetup({
   const allFilled = nextIndex === -1;
   const lastIndex = legs - 1;
   const isPickingLast = nextIndex === lastIndex;
+  const has01Game = games.some(g => g === '501'); // Format options only for 01 games
 
   return (
     <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in duration-300">
@@ -302,57 +336,109 @@ export function PlayerGameSetup({
         )}
       </AnimatePresence>
 
-      <div 
-        className="w-full h-full max-w-7xl rounded-2xl border backdrop-blur-sm bg-black/80 overflow-hidden flex flex-col"
+      <div
+        className="rounded-2xl border backdrop-blur-xl bg-zinc-900/25 overflow-hidden flex flex-col origin-center"
         style={{
-          borderColor: player.accentColor,
-          boxShadow: `0 0 40px ${hexToRgba(player.accentColor, 0.6)}, 0 0 80px ${hexToRgba(player.accentColor, 0.3)}`,
+          width: '700px',
+          maxHeight: '550px',
+          borderColor: hexToRgba(player.accentColor, 0.4),
+          boxShadow: `0 0 40px ${hexToRgba(player.accentColor, 0.3)}, 0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1)`,
+          transform: `scale(${modalScale})`,
         }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b" style={{ borderColor: player.accentColor + '40' }}>
-          <div className="flex items-center gap-4">
-            <Avatar 
-              className="w-16 h-16 border-4" 
-              style={{ 
+        <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: player.accentColor + '40' }}>
+          <div className="flex items-center gap-3">
+            <Avatar
+              className="w-12 h-12 border-2"
+              style={{
                 borderColor: player.accentColor,
-                boxShadow: `0 0 30px ${hexToRgba(player.accentColor, 0.8)}`,
+                boxShadow: `0 0 15px ${hexToRgba(player.accentColor, 0.6)}`,
               }}
             >
               <AvatarImage src={player.profilePic} />
-              <AvatarFallback className="bg-white/10 text-white text-xl">
+              <AvatarFallback className="bg-white/10 text-white text-lg">
                 {player.granboardName.charAt(0)}
               </AvatarFallback>
             </Avatar>
             <div>
-              <h2 
-                className="text-3xl text-white"
+              <h2
+                className="text-xl text-white"
                 style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold', color: player.accentColor }}
               >
                 {player.granboardName}
               </h2>
               {player.isDoublesTeam && player.partnerName && (
-                <p className="text-gray-400 text-sm" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                <p className="text-gray-400 text-xs" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
                   + {player.partnerName}
                 </p>
               )}
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-white hover:opacity-80 transition-opacity"
-            aria-label="Close"
-          >
-            <X className="w-8 h-8" />
-          </button>
+          <div className="flex items-center gap-4">
+            {/* Handicap Toggle */}
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-zinc-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                Handicap
+              </span>
+              <button
+                type="button"
+                onClick={() => setHandicap(!handicap)}
+                className="relative inline-flex items-center justify-center transition-all"
+                style={{
+                  width: '56px',
+                  height: '27px',
+                }}
+              >
+                {/* Base SVG */}
+                <img
+                  src={handicap ? '/assets/ontogglebase.svg' : '/assets/offtogglebase.svg'}
+                  alt={handicap ? 'On' : 'Off'}
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 transition-opacity"
+                  style={
+                    handicap
+                      ? {
+                          filter: `hue-rotate(${profileHue - 270}deg) saturate(1.2) brightness(1.1)`,
+                          width: '47px',
+                          height: '17px',
+                        }
+                      : {
+                          width: '56px',
+                          height: '17px',
+                        }
+                  }
+                />
+                {/* Knob SVG */}
+                <img
+                  src={handicap ? '/assets/ontoggleknob.svg' : '/assets/offtoggleknob.svg'}
+                  alt="Toggle knob"
+                  className="absolute transition-all duration-200"
+                  style={{
+                    left: handicap ? '15px' : '-7px',
+                    top: '55%',
+                    transform: 'translateY(-50%)',
+                    width: '26px',
+                    height: '27px',
+                  }}
+                />
+              </button>
+            </div>
+            <button
+              onClick={onClose}
+              className="hover:opacity-80 transition-opacity"
+              aria-label="Close"
+            >
+              <img src="/icons/closebutton.svg" alt="Close" className="w-7 h-7" />
+            </button>
+          </div>
         </div>
 
         {/* Content */}
         <div className="flex-1 flex overflow-hidden">
           {/* Left Side - Stats */}
-          <div className="w-1/3 p-6 border-r overflow-y-auto" style={{ borderColor: player.accentColor + '40' }}>
-            <h3 
-              className="text-xl mb-4 text-white"
+          <div className="w-1/3 p-4 border-r overflow-y-auto" style={{ borderColor: player.accentColor + '40' }}>
+            <h3
+              className="text-sm mb-3 text-white"
               style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
             >
               {player.isDoublesTeam ? 'Team Stats' : 'Player Stats'}
@@ -365,20 +451,20 @@ export function PlayerGameSetup({
             ) : displayStats ? (
               <div>
                 {/* Averages Section */}
-                <div className="space-y-2 mb-4">
-                  <div className="flex justify-between text-sm">
+                <div className="space-y-1.5 mb-3">
+                  <div className="flex justify-between text-xs">
                     <span className="text-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Overall Average</span>
                     <span className="text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}>
                       {displayStats.overallNumeric.toFixed(1)}
                     </span>
                   </div>
-                  <div className="flex justify-between text-sm">
+                  <div className="flex justify-between text-xs">
                     <span className="text-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>01 Average</span>
                     <span className="text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}>
                       {displayStats.mprNumeric.toFixed(1)}
                     </span>
                   </div>
-                  <div className="flex justify-between text-sm">
+                  <div className="flex justify-between text-xs">
                     <span className="text-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Cricket Average</span>
                     <span className="text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}>
                       {displayStats.pprNumeric.toFixed(2)}
@@ -387,29 +473,29 @@ export function PlayerGameSetup({
                 </div>
 
                 {/* Divider */}
-                <Separator className="my-4" style={{ backgroundColor: player.accentColor + '40' }} />
+                <Separator className="my-3" style={{ backgroundColor: player.accentColor + '40' }} />
 
                 {/* Other Stats Section */}
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-xs">
                     <span className="text-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Games Played</span>
                     <span className="text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}>
                       {'gamesPlayed' in displayStats ? displayStats.gamesPlayed : displayStats.soloGamesPlayed}
                     </span>
                   </div>
-                  <div className="flex justify-between text-sm">
+                  <div className="flex justify-between text-xs">
                     <span className="text-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Wins</span>
                     <span className="text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}>
                       {'wins' in displayStats ? displayStats.wins : displayStats.soloWins}
                     </span>
                   </div>
-                  <div className="flex justify-between text-sm">
+                  <div className="flex justify-between text-xs">
                     <span className="text-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Win Rate</span>
                     <span className="text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}>
                       {'winRate' in displayStats ? displayStats.winRate.toFixed(1) : displayStats.soloWinRate.toFixed(1)}%
                     </span>
                   </div>
-                  <div className="flex justify-between text-sm">
+                  <div className="flex justify-between text-xs">
                     <span className="text-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Highest Checkout</span>
                     <span className="text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}>
                       {'highestCheckout' in displayStats ? displayStats.highestCheckout : displayStats.soloHighestCheckout}
@@ -425,52 +511,39 @@ export function PlayerGameSetup({
           </div>
 
           {/* Right Side - Game Setup */}
-          <div className="flex-1 p-6 overflow-y-auto">
-            <h3 
-              className="text-xl mb-6 text-white"
-              style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
-            >
-              Game Setup
-            </h3>
-
-            {/* Legs Selection */}
-            <div className="mb-6">
-              <Label className="text-white mb-3 block" style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}>
-                Number of Legs
-              </Label>
-              <div className="flex gap-3">
-                {[1, 3, 5].map((num) => (
+          <div className="flex-1 p-4 overflow-y-auto">
+            {/* Legs Selection - only 3 or 5 legs, 1 leg is default (no selection) */}
+            <div className="mb-4">
+              <div className="flex gap-2 justify-center">
+                {[3, 5].map((num) => (
                   <button
                     key={num}
-                    onClick={() => setLegs(num)}
-                    className="flex-1 py-3 px-4 rounded-lg border transition-all"
+                    onClick={() => setLegs(legs === num ? 1 : num)}
+                    className="py-2 px-4 rounded-lg border transition-all text-sm"
                     style={{
                       borderColor: legs === num ? player.accentColor : '#444',
                       backgroundColor: legs === num ? hexToRgba(player.accentColor, 0.2) : 'transparent',
                       color: legs === num ? player.accentColor : '#fff',
                       fontFamily: 'Helvetica, Arial, sans-serif',
                       fontWeight: 'bold',
-                      boxShadow: legs === num ? `0 0 20px ${hexToRgba(player.accentColor, 0.4)}` : 'none',
+                      boxShadow: legs === num ? `0 0 15px ${hexToRgba(player.accentColor, 0.4)}` : 'none',
                     }}
                   >
-                    {num} {num === 1 ? 'Leg' : 'Legs'}
+                    {num} Legs
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Game Slots */}
-            <div className="space-y-3 mb-6">
-              <label className="block text-sm text-center text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}>
-                Games
-              </label>
-              
-              {/* Game slot boxes */}
-              <div className="flex items-center justify-center gap-2 max-w-[360px] mx-auto">
+            {/* Game Slots - only show boxes when 3 or 5 legs selected */}
+            <div className="space-y-2 mb-4">
+              {/* Game slot boxes - only for multi-leg */}
+              {legs > 1 && (
+              <div className="flex items-center justify-center gap-2 max-w-[300px] mx-auto">
                 {Array.from({ length: legs }).map((_, idx) => (
                   <motion.div
                     key={idx}
-                    className={`flex-1 h-12 rounded-lg border text-center flex items-center justify-center select-none ${
+                    className={`flex-1 h-10 rounded-lg border text-center flex items-center justify-center select-none ${
                       games[idx]
                         ? 'cursor-pointer'
                         : 'opacity-80'
@@ -525,6 +598,7 @@ export function PlayerGameSetup({
                   </motion.div>
                 ))}
               </div>
+              )}
 
               {/* Game picker buttons */}
               <div className="flex items-center justify-center gap-3">
@@ -586,7 +660,7 @@ export function PlayerGameSetup({
                   type="button"
                   ref={btnCHRef}
                   onClick={() => {
-                    if (!isPickingLast || allFilled) return;
+                    if (legs <= 1 || !isPickingLast || allFilled) return;
                     const i = games.findIndex(x => !x);
                     const src = btnCHRef.current;
                     const dst = slotRefs.current[i];
@@ -599,11 +673,11 @@ export function PlayerGameSetup({
                     }
                     addGame('CH');
                   }}
-                  disabled={!isPickingLast || allFilled}
-                  title={!isPickingLast ? 'Choice unlocks for the last leg' : ''}
+                  disabled={legs <= 1 || !isPickingLast || allFilled}
+                  title={legs <= 1 ? 'Choice only available for 3 or 5 leg matches' : !isPickingLast ? 'Choice unlocks for the last leg' : ''}
                   className={`rounded-lg px-4 py-2 border transition-colors ${
-                    !isPickingLast || allFilled
-                      ? 'border-white/15 bg-zinc-900/40 text-zinc-500 opacity-60 cursor-not-allowed'
+                    legs <= 1 || !isPickingLast || allFilled
+                      ? 'border-white/15 bg-zinc-900/40 text-zinc-500 opacity-40 cursor-not-allowed'
                       : 'border-white/15 bg-zinc-900/40 hover:border-primary/60 hover:bg-primary/10 text-white'
                   }`}
                   style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
@@ -613,180 +687,116 @@ export function PlayerGameSetup({
               </div>
             </div>
 
-            {/* Format chips: Do Mo MiMo DiDo | Full Split */}
-            <div className="mb-6">
-              <div className="text-sm text-zinc-400 mb-2 text-center" style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}>
-                Format
-              </div>
-              <div className="flex items-center justify-center gap-2 overflow-x-auto py-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDo_(prev => {
-                      const next = !prev;
-                      if (next) {
-                        setMo(false);
-                        setMimo(false);
-                        setDido(false);
-                      }
-                      return next;
-                    });
-                  }}
-                  className={`rounded-lg px-4 py-2 text-sm border transition-colors`}
-                  style={{
-                    borderColor: do_ ? `${player.accentColor}99` : 'rgba(255,255,255,0.1)',
-                    backgroundColor: do_ ? hexToRgba(player.accentColor, 0.1) : 'rgba(24,24,27,0.6)',
-                    color: do_ ? 'white' : 'rgb(212,212,216)',
-                    fontFamily: 'Helvetica, Arial, sans-serif',
-                    fontWeight: 'bold',
-                  }}
+            {/* Format chips: Do Mo MiMo DiDo | Full Split - slides in when 01 game selected */}
+            <AnimatePresence>
+              {has01Game && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2, ease: 'easeOut' }}
+                  className="overflow-hidden mb-4"
                 >
-                  Do
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMo(prev => {
-                      const next = !prev;
-                      if (next) {
-                        setDo_(false);
-                        setMimo(false);
-                        setDido(false);
-                      }
-                      return next;
-                    });
-                  }}
-                  className={`rounded-lg px-4 py-2 text-sm border transition-colors`}
-                  style={{
-                    borderColor: mo ? `${player.accentColor}99` : 'rgba(255,255,255,0.1)',
-                    backgroundColor: mo ? hexToRgba(player.accentColor, 0.1) : 'rgba(24,24,27,0.6)',
-                    color: mo ? 'white' : 'rgb(212,212,216)',
-                    fontFamily: 'Helvetica, Arial, sans-serif',
-                    fontWeight: 'bold',
-                  }}
-                >
-                  Mo
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMimo(prev => {
-                      const next = !prev;
-                      if (next) {
-                        setDo_(false);
-                        setMo(false);
-                        setDido(false);
-                      }
-                      return next;
-                    });
-                  }}
-                  className={`rounded-lg px-4 py-2 text-sm border transition-colors`}
-                  style={{
-                    borderColor: mimo ? `${player.accentColor}99` : 'rgba(255,255,255,0.1)',
-                    backgroundColor: mimo ? hexToRgba(player.accentColor, 0.1) : 'rgba(24,24,27,0.6)',
-                    color: mimo ? 'white' : 'rgb(212,212,216)',
-                    fontFamily: 'Helvetica, Arial, sans-serif',
-                    fontWeight: 'bold',
-                  }}
-                >
-                  MiMo
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDido(prev => {
-                      const next = !prev;
-                      if (next) {
-                        setMo(false);
-                        setMimo(false);
-                        setDo_(false);
-                      }
-                      return next;
-                    });
-                  }}
-                  className={`rounded-lg px-4 py-2 text-sm border transition-colors`}
-                  style={{
-                    borderColor: dido ? `${player.accentColor}99` : 'rgba(255,255,255,0.1)',
-                    backgroundColor: dido ? hexToRgba(player.accentColor, 0.1) : 'rgba(24,24,27,0.6)',
-                    color: dido ? 'white' : 'rgb(212,212,216)',
-                    fontFamily: 'Helvetica, Arial, sans-serif',
-                    fontWeight: 'bold',
-                  }}
-                >
-                  DiDo
-                </button>
-                <div className="w-2" />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFull(prev => {
-                      const next = !prev;
-                      if (next) setSplit(false);
-                      return next;
-                    });
-                  }}
-                  className={`rounded-lg px-4 py-2 text-sm border transition-colors`}
-                  style={{
-                    borderColor: full ? `${player.accentColor}99` : 'rgba(255,255,255,0.1)',
-                    backgroundColor: full ? hexToRgba(player.accentColor, 0.1) : 'rgba(24,24,27,0.6)',
-                    color: full ? 'white' : 'rgb(212,212,216)',
-                    fontFamily: 'Helvetica, Arial, sans-serif',
-                    fontWeight: 'bold',
-                  }}
-                >
-                  Full
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSplit(prev => {
-                      const next = !prev;
-                      if (next) setFull(false);
-                      return next;
-                    });
-                  }}
-                  className={`rounded-lg px-4 py-2 text-sm border transition-colors`}
-                  style={{
-                    borderColor: split ? `${player.accentColor}99` : 'rgba(255,255,255,0.1)',
-                    backgroundColor: split ? hexToRgba(player.accentColor, 0.1) : 'rgba(24,24,27,0.6)',
-                    color: split ? 'white' : 'rgb(212,212,216)',
-                    fontFamily: 'Helvetica, Arial, sans-serif',
-                    fontWeight: 'bold',
-                  }}
-                >
-                  Split
-                </button>
-              </div>
-            </div>
-
-            {/* Handicap */}
-            <div className="mb-6">
-              <div className="flex items-center justify-center gap-3">
-                <Label className="text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}>
-                  Handicap
-                </Label>
-                <Switch
-                  checked={handicap}
-                  onCheckedChange={setHandicap}
-                  style={{
-                    backgroundColor: handicap ? player.accentColor : undefined,
-                  }}
-                />
-                <Label className="text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                  {handicap ? 'Enabled' : 'Disabled'}
-                </Label>
-              </div>
-            </div>
+                  <div className="flex items-center justify-center gap-1.5 overflow-x-auto py-1">
+                    <button
+                      type="button"
+                      onClick={() => setDo_(prev => { const next = !prev; if (next) { setMo(false); setMimo(false); setDido(false); } return next; })}
+                      className="rounded-lg px-3 py-1.5 text-xs border transition-colors"
+                      style={{
+                        borderColor: do_ ? `${player.accentColor}99` : 'rgba(255,255,255,0.1)',
+                        backgroundColor: do_ ? hexToRgba(player.accentColor, 0.1) : 'rgba(24,24,27,0.6)',
+                        color: do_ ? 'white' : 'rgb(212,212,216)',
+                        fontFamily: 'Helvetica, Arial, sans-serif',
+                        fontWeight: 'bold',
+                      }}
+                    >
+                      Do
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMo(prev => { const next = !prev; if (next) { setDo_(false); setMimo(false); setDido(false); } return next; })}
+                      className="rounded-lg px-3 py-1.5 text-xs border transition-colors"
+                      style={{
+                        borderColor: mo ? `${player.accentColor}99` : 'rgba(255,255,255,0.1)',
+                        backgroundColor: mo ? hexToRgba(player.accentColor, 0.1) : 'rgba(24,24,27,0.6)',
+                        color: mo ? 'white' : 'rgb(212,212,216)',
+                        fontFamily: 'Helvetica, Arial, sans-serif',
+                        fontWeight: 'bold',
+                      }}
+                    >
+                      Mo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMimo(prev => { const next = !prev; if (next) { setDo_(false); setMo(false); setDido(false); } return next; })}
+                      className="rounded-lg px-3 py-1.5 text-xs border transition-colors"
+                      style={{
+                        borderColor: mimo ? `${player.accentColor}99` : 'rgba(255,255,255,0.1)',
+                        backgroundColor: mimo ? hexToRgba(player.accentColor, 0.1) : 'rgba(24,24,27,0.6)',
+                        color: mimo ? 'white' : 'rgb(212,212,216)',
+                        fontFamily: 'Helvetica, Arial, sans-serif',
+                        fontWeight: 'bold',
+                      }}
+                    >
+                      MiMo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDido(prev => { const next = !prev; if (next) { setMo(false); setMimo(false); setDo_(false); } return next; })}
+                      className="rounded-lg px-3 py-1.5 text-xs border transition-colors"
+                      style={{
+                        borderColor: dido ? `${player.accentColor}99` : 'rgba(255,255,255,0.1)',
+                        backgroundColor: dido ? hexToRgba(player.accentColor, 0.1) : 'rgba(24,24,27,0.6)',
+                        color: dido ? 'white' : 'rgb(212,212,216)',
+                        fontFamily: 'Helvetica, Arial, sans-serif',
+                        fontWeight: 'bold',
+                      }}
+                    >
+                      DiDo
+                    </button>
+                    <div className="w-2" />
+                    <button
+                      type="button"
+                      onClick={() => setFull(prev => { const next = !prev; if (next) setSplit(false); return next; })}
+                      className="rounded-lg px-3 py-1.5 text-xs border transition-colors"
+                      style={{
+                        borderColor: full ? `${player.accentColor}99` : 'rgba(255,255,255,0.1)',
+                        backgroundColor: full ? hexToRgba(player.accentColor, 0.1) : 'rgba(24,24,27,0.6)',
+                        color: full ? 'white' : 'rgb(212,212,216)',
+                        fontFamily: 'Helvetica, Arial, sans-serif',
+                        fontWeight: 'bold',
+                      }}
+                    >
+                      Full
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSplit(prev => { const next = !prev; if (next) setFull(false); return next; })}
+                      className="rounded-lg px-3 py-1.5 text-xs border transition-colors"
+                      style={{
+                        borderColor: split ? `${player.accentColor}99` : 'rgba(255,255,255,0.1)',
+                        backgroundColor: split ? hexToRgba(player.accentColor, 0.1) : 'rgba(24,24,27,0.6)',
+                        color: split ? 'white' : 'rgb(212,212,216)',
+                        fontFamily: 'Helvetica, Arial, sans-serif',
+                        fontWeight: 'bold',
+                      }}
+                    >
+                      Split
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Start Game Button */}
             <button
               onClick={handleStartGame}
-              className="w-full py-4 rounded-lg text-white transition-all hover:scale-105 mt-4"
+              className="w-full py-3 rounded-lg text-white text-sm transition-all hover:scale-[1.02]"
               style={{
                 backgroundColor: player.accentColor,
                 fontFamily: 'Helvetica, Arial, sans-serif',
                 fontWeight: 'bold',
-                boxShadow: `0 0 30px ${hexToRgba(player.accentColor, 0.6)}`,
+                boxShadow: `0 0 20px ${hexToRgba(player.accentColor, 0.5)}`,
               }}
             >
               Start Game

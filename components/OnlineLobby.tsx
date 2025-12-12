@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ArrowLeft, ChevronLeft, ChevronRight, RefreshCw, Bell, Clock } from 'lucide-react';
+import { ChevronLeft, RefreshCw, Bell, Clock } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { createClient } from '../utils/supabase/client';
 import { PlayerGameSetup } from './PlayerGameSetup';
@@ -85,6 +85,11 @@ const MOCK_PLAYERS: AvailablePlayer[] = [
   { id: 'mock-8', player_id: 'mock-8', granboardName: 'T20Hunter', profilePic: undefined, mprNumeric: 3.0, pprNumeric: 50.5, overallNumeric: 80, accentColor: '#84cc16', isDoublesTeam: false, status: 'in_match' },
   { id: 'mock-9', player_id: 'mock-9', granboardName: 'DoubleTrouble', profilePic: undefined, mprNumeric: 2.4, pprNumeric: 40.2, overallNumeric: 66, accentColor: '#f97316', isDoublesTeam: false, status: 'waiting' },
   { id: 'mock-10', player_id: 'mock-10', granboardName: 'LegFinisher', profilePic: undefined, mprNumeric: 2.6, pprNumeric: 42.8, overallNumeric: 70, accentColor: '#14b8a6', isDoublesTeam: false, status: 'in_match' },
+  { id: 'mock-11', player_id: 'mock-11', granboardName: 'ArrowAce', profilePic: undefined, mprNumeric: 2.9, pprNumeric: 47.5, overallNumeric: 76, accentColor: '#a855f7', isDoublesTeam: false, status: 'waiting' },
+  { id: 'mock-12', player_id: 'mock-12', granboardName: 'ShanghaiSam', profilePic: undefined, mprNumeric: 2.3, pprNumeric: 36.8, overallNumeric: 64, accentColor: '#eab308', isDoublesTeam: false, status: 'waiting' },
+  { id: 'mock-13', player_id: 'mock-13', granboardName: 'TonMachine', profilePic: undefined, mprNumeric: 3.2, pprNumeric: 55.0, overallNumeric: 85, accentColor: '#10b981', isDoublesTeam: false, status: 'waiting' },
+  { id: 'mock-14', player_id: 'mock-14', granboardName: 'FinishFirst', profilePic: undefined, mprNumeric: 2.7, pprNumeric: 43.5, overallNumeric: 72, accentColor: '#f43f5e', isDoublesTeam: false, status: 'waiting' },
+  { id: 'mock-15', player_id: 'mock-15', granboardName: 'BoardBoss', profilePic: undefined, mprNumeric: 3.0, pprNumeric: 51.2, overallNumeric: 81, accentColor: '#0ea5e9', isDoublesTeam: false, status: 'waiting' },
 ];
 
 export function OnlineLobby({
@@ -105,7 +110,6 @@ export function OnlineLobby({
 }: OnlineLobbyProps) {
   const [availablePlayers, setAvailablePlayers] = useState<AvailablePlayer[]>([]);
   const [loading, setLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState(0);
   const [selectedPlayer, setSelectedPlayer] = useState<AvailablePlayer | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [incomingRequest, setIncomingRequest] = useState<any | null>(null);
@@ -113,19 +117,44 @@ export function OnlineLobby({
   const [showIdleWarning, setShowIdleWarning] = useState(false);
   const [idleCountdown, setIdleCountdown] = useState(300); // 5 minutes in seconds
   const [showNotifications, setShowNotifications] = useState(false);
+  const [cardScale, setCardScale] = useState(1);
   const supabase = createClient();
 
   const lastActivityRef = useRef<number>(Date.now());
   const idleCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const idleCountdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const CARDS_PER_PAGE = 10; // 2 rows x 5 columns
   const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
   const IDLE_WARNING_DURATION_S = 300; // 5 minutes in seconds
   const USE_MOCK_DATA = true; // Toggle for development UI
+  const INCLUDE_REAL_PLAYERS = true; // Show real DB players alongside mock data
 
   // Check if youth player can access
   const canAccess = !isYouthPlayer || hasParentPaired;
+
+  // Calculate card scale based on viewport
+  useEffect(() => {
+    const calculateScale = () => {
+      // Base card is 120x160px, target 5 columns with gaps
+      // Scale based on available width for cards
+      const availableWidth = window.innerWidth - 64; // px-8 = 32px each side
+      const availableHeight = window.innerHeight - 120; // header + py-4 padding
+      const cardBaseWidth = 120;
+      const cardBaseHeight = 160;
+      const columns = 5;
+      const rows = 2;
+      const gap = 12;
+
+      const maxWidthScale = (availableWidth - (gap * (columns - 1))) / (cardBaseWidth * columns);
+      const maxHeightScale = (availableHeight - gap) / (cardBaseHeight * rows);
+
+      setCardScale(Math.min(maxWidthScale, maxHeightScale, 2)); // Cap at 2x
+    };
+
+    calculateScale();
+    window.addEventListener('resize', calculateScale);
+    return () => window.removeEventListener('resize', calculateScale);
+  }, []);
 
   // Reset activity timestamp on any user interaction
   const resetActivity = useCallback(() => {
@@ -290,139 +319,145 @@ export function OnlineLobby({
       setLoading(true);
       console.log('Fetching available players...');
 
-      // Use mock data for development UI
+      let allPlayers: AvailablePlayer[] = [];
+
+      // Add mock players if enabled
       if (USE_MOCK_DATA) {
-        const sorted = sortByStatus(MOCK_PLAYERS);
-        setAvailablePlayers(sorted);
-        setLoading(false);
-        setIsRefreshing(false);
-        return;
+        allPlayers = [...MOCK_PLAYERS];
       }
 
-      // Fetch all statuses (waiting, idle, in_match)
-      const { data: lobbyData, error: lobbyError } = await (supabase as any)
-        .schema('companion')
-        .from('online_lobby')
-        .select('*')
-        .in('status', ['waiting', 'idle', 'in_match'])
-        .neq('player_id', userId)
-        .order('last_seen', { ascending: false })
-        .order('created_at', { ascending: false });
+      // Fetch real players from database (either in addition to mock, or exclusively)
+      if (!USE_MOCK_DATA || INCLUDE_REAL_PLAYERS) {
+        // Small delay for visual feedback
+        await new Promise(resolve => setTimeout(resolve, 300));
 
-      if (lobbyError) {
-        console.error('Error fetching lobby data:', lobbyError);
-        setAvailablePlayers([]);
-        return;
+        // Fetch all statuses (waiting, idle, in_match) - filter out current user
+        const { data: lobbyData, error: lobbyError } = await (supabase as any)
+          .schema('companion')
+          .from('online_lobby')
+          .select('*')
+          .in('status', ['waiting', 'idle', 'in_match'])
+          .neq('player_id', userId)
+          .order('last_seen', { ascending: false })
+          .order('created_at', { ascending: false });
+
+        if (lobbyError) {
+          console.error('Error fetching lobby data:', lobbyError);
+        } else if (lobbyData && lobbyData.length > 0) {
+          const playersWithData = await Promise.all(
+            lobbyData.map(async lobbyEntry => {
+              const playerId = lobbyEntry.player_id;
+              const isYouth = lobbyEntry.is_youth;
+              const playerStatus = (lobbyEntry.status as PlayerStatus) || 'waiting';
+
+              // Calculate idle time remaining for idle players
+              let idleTimeRemaining: number | undefined;
+              if (playerStatus === 'idle' && lobbyEntry.idle_started_at) {
+                const idleStarted = new Date(lobbyEntry.idle_started_at).getTime();
+                const now = Date.now();
+                const elapsedSeconds = Math.floor((now - idleStarted) / 1000);
+                idleTimeRemaining = Math.max(0, IDLE_WARNING_DURATION_S - elapsedSeconds);
+              }
+
+              const profileQuery = isYouth
+                ? (supabase as any).schema('youth').from('youth_profiles')
+                : supabase.from('player_profiles');
+
+              const { data: rawProfileData, error: profileError } = await profileQuery
+                .select('granboard_name, profilepic, profilecolor')
+                .eq('id', playerId)
+                .single();
+
+              if (profileError) {
+                console.error(`Error fetching profile for ${playerId}:`, profileError);
+                return null;
+              }
+
+              const profileData = (rawProfileData as {
+                granboard_name: string | null;
+                profilepic: string | null;
+                profilecolor: string | null;
+              }) || null;
+
+              const statsQuery = isYouth
+                ? (supabase as any).schema('youth').from('youth_stats')
+                : supabase.from('player_stats');
+
+              const { data: rawStatsData, error: statsError } = await statsQuery
+                .select('mpr_numeric, ppr_numeric, overall_numeric, solo_games_played, solo_wins, solo_win_rate, solo_highest_checkout')
+                .eq('id', playerId)
+                .single();
+
+              if (statsError) {
+                console.error(`Error fetching stats for ${playerId}:`, statsError);
+                return null;
+              }
+
+              const statsData = (rawStatsData as {
+                mpr_numeric: number | null;
+                ppr_numeric: number | null;
+                overall_numeric: number | null;
+                solo_games_played: number | null;
+                solo_wins: number | null;
+                solo_win_rate: number | null;
+                solo_highest_checkout: number | null;
+              }) || null;
+
+              let partnerDisplayName: string | undefined;
+              if (lobbyEntry.partner_id) {
+                const partnerQuery = isYouth
+                  ? (supabase as any).schema('youth').from('youth_profiles')
+                  : supabase.from('player_profiles');
+
+                const { data: rawPartnerData } = await partnerQuery
+                  .select('granboard_name')
+                  .eq('id', lobbyEntry.partner_id)
+                  .single();
+
+                const partnerData = rawPartnerData as { granboard_name: string | null } | null;
+
+                if (partnerData?.granboard_name) {
+                  partnerDisplayName = partnerData.granboard_name;
+                }
+              }
+
+              return {
+                id: lobbyEntry.id,
+                player_id: playerId,
+                granboardName: profileData?.granboard_name || 'Unknown',
+                profilePic: profileData?.profilepic || undefined,
+                mprNumeric: statsData?.mpr_numeric ?? 0,
+                pprNumeric: statsData?.ppr_numeric ?? 0,
+                overallNumeric: statsData?.overall_numeric ?? 0,
+                accentColor: profileData?.profilecolor || '#a855f7',
+                isDoublesTeam: !!lobbyEntry.partner_id,
+                partnerId: lobbyEntry.partner_id || undefined,
+                partnerName: partnerDisplayName,
+                status: playerStatus,
+                idleTimeRemaining,
+              } as AvailablePlayer;
+            })
+          );
+
+          const validPlayers = playersWithData.filter((p): p is AvailablePlayer => p !== null);
+          // Add real players to the combined list
+          allPlayers = [...allPlayers, ...validPlayers];
+        } else {
+          console.log('No real players in lobby');
+        }
       }
 
-      if (!lobbyData || lobbyData.length === 0) {
-        console.log('No players in lobby');
-        setAvailablePlayers([]);
-        return;
-      }
-
-      const playersWithData = await Promise.all(
-        lobbyData.map(async lobbyEntry => {
-          const playerId = lobbyEntry.player_id;
-          const isYouth = lobbyEntry.is_youth;
-          const playerStatus = (lobbyEntry.status as PlayerStatus) || 'waiting';
-
-          // Calculate idle time remaining for idle players
-          let idleTimeRemaining: number | undefined;
-          if (playerStatus === 'idle' && lobbyEntry.idle_started_at) {
-            const idleStarted = new Date(lobbyEntry.idle_started_at).getTime();
-            const now = Date.now();
-            const elapsedSeconds = Math.floor((now - idleStarted) / 1000);
-            idleTimeRemaining = Math.max(0, IDLE_WARNING_DURATION_S - elapsedSeconds);
-          }
-
-          const profileQuery = isYouth
-            ? (supabase as any).schema('youth').from('youth_profiles')
-            : supabase.from('player_profiles');
-
-          const { data: rawProfileData, error: profileError } = await profileQuery
-            .select('granboard_name, profilepic, profilecolor')
-            .eq('id', playerId)
-            .single();
-
-          if (profileError) {
-            console.error(`Error fetching profile for ${playerId}:`, profileError);
-            return null;
-          }
-
-          const profileData = (rawProfileData as {
-            granboard_name: string | null;
-            profilepic: string | null;
-            profilecolor: string | null;
-          }) || null;
-
-          const statsQuery = isYouth
-            ? (supabase as any).schema('youth').from('youth_stats')
-            : supabase.from('player_stats');
-
-          const { data: rawStatsData, error: statsError } = await statsQuery
-            .select('mpr_numeric, ppr_numeric, overall_numeric, solo_games_played, solo_wins, solo_win_rate, solo_highest_checkout')
-            .eq('id', playerId)
-            .single();
-
-          if (statsError) {
-            console.error(`Error fetching stats for ${playerId}:`, statsError);
-            return null;
-          }
-
-          const statsData = (rawStatsData as {
-            mpr_numeric: number | null;
-            ppr_numeric: number | null;
-            overall_numeric: number | null;
-            solo_games_played: number | null;
-            solo_wins: number | null;
-            solo_win_rate: number | null;
-            solo_highest_checkout: number | null;
-          }) || null;
-
-          let partnerDisplayName: string | undefined;
-          if (lobbyEntry.partner_id) {
-            const partnerQuery = isYouth
-              ? (supabase as any).schema('youth').from('youth_profiles')
-              : supabase.from('player_profiles');
-
-            const { data: rawPartnerData } = await partnerQuery
-              .select('granboard_name')
-              .eq('id', lobbyEntry.partner_id)
-              .single();
-
-            const partnerData = rawPartnerData as { granboard_name: string | null } | null;
-
-            if (partnerData?.granboard_name) {
-              partnerDisplayName = partnerData.granboard_name;
-            }
-          }
-
-          return {
-            id: lobbyEntry.id,
-            player_id: playerId,
-            granboardName: profileData?.granboard_name || 'Unknown',
-            profilePic: profileData?.profilepic || undefined,
-            mprNumeric: statsData?.mpr_numeric ?? 0,
-            pprNumeric: statsData?.ppr_numeric ?? 0,
-            overallNumeric: statsData?.overall_numeric ?? 0,
-            accentColor: profileData?.profilecolor || '#a855f7',
-            isDoublesTeam: !!lobbyEntry.partner_id,
-            partnerId: lobbyEntry.partner_id || undefined,
-            partnerName: partnerDisplayName,
-            status: playerStatus,
-            idleTimeRemaining,
-          } as AvailablePlayer;
-        })
-      );
-
-      const validPlayers = playersWithData.filter((p): p is AvailablePlayer => p !== null);
-      const sorted = sortByStatus(validPlayers);
-
+      // Sort all players (mock + real combined) by status
+      const sorted = sortByStatus(allPlayers);
       setAvailablePlayers(sorted);
     } catch (err) {
       console.error('Error in fetchAvailablePlayers:', err);
-      setAvailablePlayers([]);
+      // If error, at least show mock players if enabled
+      if (USE_MOCK_DATA) {
+        setAvailablePlayers(sortByStatus(MOCK_PLAYERS));
+      } else {
+        setAvailablePlayers([]);
+      }
     } finally {
       setLoading(false);
       setIsRefreshing(false);
@@ -431,7 +466,6 @@ export function OnlineLobby({
 
   const handleManualRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    setCurrentPage(0);
     await fetchAvailablePlayers();
   }, [fetchAvailablePlayers]);
 
@@ -513,21 +547,6 @@ export function OnlineLobby({
     };
   }, [supabase, pendingOutgoingRequest]);
 
-  // Calculate pagination
-  const totalPages = Math.ceil(availablePlayers.length / CARDS_PER_PAGE);
-  const startIndex = currentPage * CARDS_PER_PAGE;
-  const endIndex = startIndex + CARDS_PER_PAGE;
-  const currentPlayers = availablePlayers.slice(startIndex, endIndex);
-
-  const handlePrevPage = async () => {
-    setCurrentPage((prev) => Math.max(0, prev - 1));
-    await fetchAvailablePlayers();
-  };
-
-  const handleNextPage = async () => {
-    setCurrentPage((prev) => Math.min(totalPages - 1, prev + 1));
-    await fetchAvailablePlayers();
-  };
 
   const handlePlayerClick = (player: AvailablePlayer) => {
     setSelectedPlayer(player);
@@ -781,53 +800,47 @@ export function OnlineLobby({
       )}
 
       <div className="h-screen w-full overflow-hidden bg-black">
-        <div className="h-full flex flex-col p-3 max-w-[1400px] mx-auto">
-        {/* Header - compact */}
-        <div className="flex items-center justify-between mb-2">
+        <div className="h-full flex flex-col px-8 py-4 max-w-[1400px] mx-auto">
+        {/* Header - thin */}
+        <div className="relative flex items-center justify-center h-10 shrink-0">
+          {/* Left - back button */}
           <button
             onClick={onBack}
-            className="p-1 text-white hover:opacity-80 transition-opacity"
+            className="absolute left-0 p-1 text-white hover:opacity-80 transition-opacity z-20"
             aria-label="Back"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ChevronLeft className="w-5 h-5" />
           </button>
 
+          {/* Center - title (truly centered) */}
           <h1
-            className="text-xl text-white uppercase tracking-wider"
-            style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
+            className="text-base text-white uppercase tracking-wider font-bold"
+            style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}
           >
             Online Lobby
           </h1>
 
-          <div className="flex items-center gap-2">
-            {isDoublesTeam && partnerName && (
-              <div className="text-right">
-                <p className="text-xs text-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                  Team with
-                </p>
-                <p className="text-white text-sm" style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}>
-                  {partnerName}
-                </p>
-              </div>
-            )}
+          {/* Right - refresh + user menu */}
+          <div className="absolute right-0 flex items-center gap-3 z-20">
             <button
               onClick={handleManualRefresh}
-              className="p-1.5 text-white hover:opacity-80 transition-opacity rounded-full border border-white/10"
+              className="p-2 text-white hover:bg-white/10 rounded-full transition-colors"
               aria-label="Refresh lobby"
             >
-              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
             </button>
             <UserMenu
               profilePic={profilePic}
               accentColor={accentColor}
               userName={userName}
               onLogout={onLogout}
+              size="sm"
             />
           </div>
         </div>
 
-        {/* Players Grid with Pagination */}
-        <div className="flex-1 flex items-center px-10 relative">
+        {/* Players Grid - Vertical Scrolling */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 scrollbar-hidden">
           {loading ? (
             <div className="text-center text-gray-400 py-12 w-full">
               Loading available players...
@@ -839,172 +852,154 @@ export function OnlineLobby({
               </p>
             </div>
           ) : (
-            <>
-              {/* Left Chevron */}
-              {currentPage > 0 && (
-                <button
-                  onClick={handlePrevPage}
-                  className="absolute left-0 top-1/2 transform -translate-y-1/2 z-10 p-2 text-white/70 hover:text-white transition-colors"
-                  aria-label="Previous page"
-                >
-                  <ChevronLeft className="w-10 h-10" />
-                </button>
-              )}
+            <div
+              className={`grid grid-cols-5 transition-opacity duration-200 ${isRefreshing ? 'opacity-50' : 'opacity-100'}`}
+              style={{
+                columnGap: `${12 * cardScale}px`,
+                rowGap: `${24 * cardScale}px`,
+                justifyContent: 'center',
+              }}
+            >
+              {availablePlayers.map((player) => {
+                const playerAccentColor = player.accentColor;
+                const isIdle = player.status === 'idle';
+                const isInMatch = player.status === 'in_match';
+                const isWaiting = player.status === 'waiting';
 
-              {/* Players Grid - 2 rows x 5 columns */}
-              <div className="grid grid-cols-5 grid-rows-2 gap-2 w-full h-full max-h-[calc(100vh-120px)]">
-                {currentPlayers.map((player) => {
-                  const playerAccentColor = player.accentColor;
-                  const isIdle = player.status === 'idle';
-                  const isInMatch = player.status === 'in_match';
-                  const isWaiting = player.status === 'waiting';
+                // Calculate idle progress (0-1, where 1 = full time remaining)
+                const idleProgress = isIdle && player.idleTimeRemaining !== undefined
+                  ? player.idleTimeRemaining / IDLE_WARNING_DURATION_S
+                  : 0;
 
-                  // Calculate idle progress (0-1, where 1 = full time remaining)
-                  const idleProgress = isIdle && player.idleTimeRemaining !== undefined
-                    ? player.idleTimeRemaining / IDLE_WARNING_DURATION_S
-                    : 0;
+                // SVG circle properties for countdown border
+                const strokeDasharray = 400;
+                const strokeDashoffset = strokeDasharray * (1 - idleProgress);
 
-                  // SVG circle properties for countdown border
-                  const strokeDasharray = 400; // circumference approx
-                  const strokeDashoffset = strokeDasharray * (1 - idleProgress);
+                const hexToRgbaPlayer = (hex: string, alpha: number) => {
+                  const r = parseInt(hex.slice(1, 3), 16);
+                  const g = parseInt(hex.slice(3, 5), 16);
+                  const b = parseInt(hex.slice(5, 7), 16);
+                  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+                };
 
-                  const hexToRgbaPlayer = (hex: string, alpha: number) => {
-                    const r = parseInt(hex.slice(1, 3), 16);
-                    const g = parseInt(hex.slice(3, 5), 16);
-                    const b = parseInt(hex.slice(5, 7), 16);
-                    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-                  };
-
-                  return (
+                return (
+                  <div
+                    key={player.id}
+                    className="flex items-center justify-center"
+                    style={{
+                      width: `${120 * cardScale}px`,
+                      height: `${160 * cardScale}px`,
+                    }}
+                  >
                     <div
-                      key={player.id}
                       onClick={() => !isInMatch && handlePlayerClick(player)}
-                      className={`relative rounded-lg overflow-hidden ${isInMatch ? 'cursor-not-allowed' : 'cursor-pointer hover:scale-[1.02]'} transition-transform`}
+                      className={`relative rounded-lg overflow-hidden ${isInMatch ? 'cursor-not-allowed' : 'cursor-pointer hover:scale-[1.05]'} transition-transform origin-center`}
                       style={{
                         filter: isIdle || isInMatch ? 'grayscale(0.7) brightness(0.6)' : 'none',
+                        width: '120px',
+                        height: '160px',
+                        transform: `scale(${cardScale})`,
                       }}
                     >
-                      {/* SVG Countdown Border for Idle Players */}
-                      {isIdle && (
-                        <svg
-                          className="absolute inset-0 w-full h-full pointer-events-none z-10"
-                          viewBox="0 0 100 100"
-                          preserveAspectRatio="none"
-                        >
-                          <rect
-                            x="2"
-                            y="2"
-                            width="96"
-                            height="96"
-                            rx="8"
-                            ry="8"
-                            fill="none"
-                            stroke={playerAccentColor}
-                            strokeWidth="3"
-                            strokeDasharray={strokeDasharray}
-                            strokeDashoffset={strokeDashoffset}
+                    {/* SVG Countdown Border for Idle Players */}
+                    {isIdle && (
+                      <svg
+                        className="absolute inset-0 w-full h-full pointer-events-none z-10"
+                        viewBox="0 0 100 100"
+                        preserveAspectRatio="none"
+                      >
+                        <rect
+                          x="2"
+                          y="2"
+                          width="96"
+                          height="96"
+                          rx="8"
+                          ry="8"
+                          fill="none"
+                          stroke={playerAccentColor}
+                          strokeWidth="3"
+                          strokeDasharray={strokeDasharray}
+                          strokeDashoffset={strokeDashoffset}
+                          style={{
+                            transition: 'stroke-dashoffset 1s linear',
+                          }}
+                        />
+                      </svg>
+                    )}
+
+                    {/* Card Background with border */}
+                    <div
+                      className={`absolute inset-0 rounded-lg border bg-zinc-900/90 ${isIdle ? 'border-zinc-600' : ''}`}
+                      style={{
+                        borderColor: isIdle ? '#52525b' : playerAccentColor,
+                        boxShadow: isWaiting
+                          ? `0 0 12px ${hexToRgbaPlayer(playerAccentColor, 0.4)}`
+                          : 'none',
+                      }}
+                    />
+
+                    {/* Card Content - Vertical layout */}
+                    <div className="relative z-[5] flex flex-col items-center p-3">
+                      {/* Profile Picture */}
+                      <div className="relative mb-2">
+                        {isWaiting && (
+                          <div
+                            className="absolute inset-0 rounded-full blur-md"
                             style={{
-                              transition: 'stroke-dashoffset 1s linear',
+                              backgroundColor: playerAccentColor,
+                              opacity: 0.5,
+                              transform: 'scale(1.2)',
                             }}
                           />
-                        </svg>
+                        )}
+                        <Avatar
+                          className="relative w-12 h-12 border-2"
+                          style={{
+                            borderColor: isIdle ? '#52525b' : playerAccentColor,
+                          }}
+                        >
+                          <AvatarImage src={resolveProfilePicUrl(player.profilePic)} />
+                          <AvatarFallback className="bg-zinc-800 text-white text-sm">
+                            {player.granboardName.charAt(0)}
+                          </AvatarFallback>
+                        </Avatar>
+                      </div>
+
+                      {/* Granboard Name */}
+                      <h3
+                        className="text-white text-xs font-bold truncate max-w-full text-center"
+                        style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}
+                      >
+                        {player.granboardName}
+                      </h3>
+
+                      {/* Team indicator */}
+                      {player.isDoublesTeam && player.partnerName && (
+                        <p className="text-[10px] text-gray-400 truncate max-w-full text-center" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                          + {player.partnerName}
+                        </p>
                       )}
 
-                      {/* Card Background with border */}
-                      <div
-                        className={`absolute inset-0 rounded-lg border-2 bg-zinc-900/90 ${isIdle ? 'border-zinc-600' : ''}`}
-                        style={{
-                          borderColor: isIdle ? '#52525b' : playerAccentColor,
-                          boxShadow: isWaiting
-                            ? `0 0 15px ${hexToRgbaPlayer(playerAccentColor, 0.5)}, 0 0 30px ${hexToRgbaPlayer(playerAccentColor, 0.3)}`
-                            : 'none',
-                        }}
-                      />
+                      {/* Status indicator for idle/in_match */}
+                      {isIdle && (
+                        <p className="text-yellow-500 text-[10px] font-semibold">IDLE</p>
+                      )}
+                      {isInMatch && (
+                        <p className="text-red-400 text-[10px] font-semibold">IN MATCH</p>
+                      )}
 
-                      {/* Card Content */}
-                      <div className="relative z-[5] h-full flex flex-col items-center justify-center p-1">
-                        {/* Profile Picture with glow for waiting players */}
-                        <div className="relative mb-1">
-                          {isWaiting && (
-                            <div
-                              className="absolute inset-0 rounded-full blur-md"
-                              style={{
-                                backgroundColor: playerAccentColor,
-                                opacity: 0.5,
-                                transform: 'scale(1.2)',
-                              }}
-                            />
-                          )}
-                          <Avatar
-                            className="relative w-10 h-10 border-2"
-                            style={{
-                              borderColor: isIdle ? '#52525b' : playerAccentColor,
-                            }}
-                          >
-                            <AvatarImage src={resolveProfilePicUrl(player.profilePic)} />
-                            <AvatarFallback className="bg-zinc-800 text-white text-sm">
-                              {player.granboardName.charAt(0)}
-                            </AvatarFallback>
-                          </Avatar>
-                        </div>
-
-                        {/* Granboard Name */}
-                        <h3
-                          className="text-white text-xs font-bold truncate max-w-full px-1"
-                          style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}
-                        >
-                          {player.granboardName}
-                        </h3>
-
-                        {/* Team indicator */}
-                        {player.isDoublesTeam && player.partnerName && (
-                          <p className="text-[10px] text-gray-400 truncate max-w-full" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                            + {player.partnerName}
-                          </p>
-                        )}
-
-                        {/* Status indicator for idle/in_match */}
-                        {isIdle && (
-                          <p className="text-yellow-500 text-[10px] font-semibold">IDLE</p>
-                        )}
-                        {isInMatch && (
-                          <p className="text-red-400 text-[10px] font-semibold">IN MATCH</p>
-                        )}
-
-                        {/* Stats bar at bottom - like Granboard */}
-                        {isWaiting && (
-                          <div className="absolute bottom-0 left-0 right-0 flex text-[10px] bg-teal-600/80 rounded-b-lg">
-                            <div className="flex-1 text-center py-0.5 text-white font-bold border-r border-teal-700">
-                              01
-                            </div>
-                            <div className="flex-1 text-center py-0.5 text-white font-bold border-r border-teal-700">
-                              {player.mprNumeric.toFixed(1)}
-                            </div>
-                            <div className="flex-1 text-center py-0.5 text-white font-bold border-r border-teal-700">
-                              CR
-                            </div>
-                            <div className="flex-1 text-center py-0.5 text-white font-bold">
-                              {player.pprNumeric.toFixed(1)}
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                      {/* Stats - no background, just text */}
+                      {isWaiting && (
+                        <p className="text-[10px] text-gray-500 mt-1" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                          {player.mprNumeric.toFixed(1)} / {player.pprNumeric.toFixed(1)}
+                        </p>
+                      )}
                     </div>
-                  );
-                })}
-              </div>
-
-              {/* Right Chevron */}
-              {currentPage < totalPages - 1 && (
-                <button
-                  onClick={handleNextPage}
-                  className="absolute right-0 top-1/2 transform -translate-y-1/2 z-10 p-2 text-white/70 hover:text-white transition-colors"
-                  aria-label="Next page"
-                >
-                  <ChevronRight className="w-10 h-10" />
-                </button>
-              )}
-            </>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       </div>
@@ -1026,8 +1021,13 @@ export function OnlineLobby({
 
         {/* Notification Dropdown */}
         {showNotifications && (
-          <div className="absolute bottom-16 right-0 w-72 bg-zinc-900 border border-zinc-700 rounded-xl shadow-xl overflow-hidden">
-            <div className="p-3 border-b border-zinc-700 flex items-center justify-between">
+          <div
+            className="absolute bottom-16 right-0 w-72 backdrop-blur-xl bg-zinc-900/40 border border-zinc-600/50 rounded-xl overflow-hidden"
+            style={{
+              boxShadow: '0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1)',
+            }}
+          >
+            <div className="p-3 border-b border-zinc-700/50 flex items-center justify-between">
               <h3 className="text-white font-semibold text-sm">Missed Requests</h3>
               {missedRequests.length > 0 && onClearMissedRequests && (
                 <button
