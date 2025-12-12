@@ -459,17 +459,21 @@ export default function App() {
   const handleAbandonGame = async () => {
     if (!pendingRejoinGame) return;
 
-    console.log('Abandoning game:', pendingRejoinGame.gameId);
+    console.log('Abandoning game:', pendingRejoinGame.gameId, 'userId:', userId);
     try {
-      // Delete the game instead of updating (simpler, avoids RLS issues)
-      const { error } = await (supabase as any)
+      // Delete the game - filter by id AND user being a participant (helps with RLS)
+      const { error, count } = await (supabase as any)
         .schema('companion')
         .from('active_games')
-        .delete()
-        .eq('id', pendingRejoinGame.gameId);
+        .delete({ count: 'exact' })
+        .eq('id', pendingRejoinGame.gameId)
+        .or(`player1_id.eq.${userId},player2_id.eq.${userId}`);
 
-      if (error) console.error('Error abandoning game:', error);
-      else console.log('Game abandoned successfully');
+      if (error) {
+        console.error('Error abandoning game:', error);
+      } else {
+        console.log('Game abandoned successfully, rows deleted:', count);
+      }
     } catch (err) {
       console.error('Error abandoning game:', err);
     }
