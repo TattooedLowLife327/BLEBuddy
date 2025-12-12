@@ -92,6 +92,7 @@ export default function App() {
   const supabase = createClient();
   const scrollContainerRef = useState<HTMLDivElement | null>(null)[0];
   const currentViewRef = useRef(currentView);
+  const [dashboardScale, setDashboardScale] = useState(1);
 
   // Lock screen orientation to landscape when possible
   useEffect(() => {
@@ -108,6 +109,36 @@ export default function App() {
       }
     };
     lockOrientation();
+  }, []);
+
+  // Calculate dashboard scale based on viewport
+  useEffect(() => {
+    const calculateScale = () => {
+      // Check if we're in portrait mode (CSS rotates to landscape)
+      const isPortrait = window.matchMedia('(orientation: portrait)').matches;
+
+      // When in portrait, CSS rotates content so swap width/height for calculations
+      const viewWidth = isPortrait ? window.innerHeight : window.innerWidth;
+      const viewHeight = isPortrait ? window.innerWidth : window.innerHeight;
+
+      // Dashboard base dimensions (designed for ~1280x720)
+      const baseWidth = 1280;
+      const baseHeight = 720;
+
+      const scaleX = viewWidth / baseWidth;
+      const scaleY = viewHeight / baseHeight;
+
+      setDashboardScale(Math.min(scaleX, scaleY, 1.5)); // Cap at 1.5x
+    };
+
+    calculateScale();
+    window.addEventListener('resize', calculateScale);
+    const orientationQuery = window.matchMedia('(orientation: portrait)');
+    orientationQuery.addEventListener('change', calculateScale);
+    return () => {
+      window.removeEventListener('resize', calculateScale);
+      orientationQuery.removeEventListener('change', calculateScale);
+    };
   }, []);
 
   // Check authentication and fetch user's profile data from Supabase
@@ -865,8 +896,17 @@ export default function App() {
         </div>
       )}
 
-      {/* Main Content */}
-      <div className="relative z-10 h-screen flex flex-col overflow-hidden">
+      {/* Main Content - Scaled */}
+      <div className="relative z-10 h-screen w-screen flex items-center justify-center overflow-hidden">
+        <div
+          className="flex flex-col"
+          style={{
+            transform: `scale(${dashboardScale})`,
+            transformOrigin: 'center center',
+            width: '1280px',
+            height: '720px',
+          }}
+        >
         {/* Header */}
         <header className="p-6 pb-4">
           <div className="flex items-center justify-between max-w-[1400px] mx-auto">
@@ -1085,6 +1125,7 @@ export default function App() {
             ))}
           </div>
         </main>
+        </div>
       </div>
     </div>
   );

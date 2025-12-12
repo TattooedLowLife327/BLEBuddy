@@ -50,6 +50,9 @@ All elements use `rounded-lg` (8px) for visual consistency:
   - Order: Twitch, Facebook, Messenger, Spotify, TikTok, Snapchat, Discord, Instagram, YouTube, Twitter
 - **Links**: `text-sm` size (Terms, Privacy, Contact)
 - **TODO (LLOGB)**: Add Twitter, Instagram, Messenger icons to main app footer + update order
+- **TODO (LLOGB)**: Fix pinpad numbers
+- **TODO (LLOGB)**: Make sidebar profile pic always open dropdown menu on all pages
+- **TODO (LLOGB)**: Add "last seen" for each admin in Owner Tools (admin dashboard)
 
 ---
 
