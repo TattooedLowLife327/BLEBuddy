@@ -77,8 +77,8 @@ export function LobbyCard({
     : 'none';
 
   const cardSize = {
-    width: 'clamp(260px, 70vw, 360px)',
-    height: 'clamp(230px, 58vw, 300px)',
+    width: 'clamp(240px, 65vw, 320px)',
+    height: 'clamp(200px, 52vw, 260px)',
   };
 
   return (
@@ -126,7 +126,7 @@ export function LobbyCard({
           <div className="flex items-center justify-center mb-0" style={{ marginTop: '-1rem' }}>
             {(id === 'local-play' || id === 'ladies-only') ? (
               // Special styling for local play, ladies - bigger, full width, sideways, no border/background
-              <div className="w-full flex items-center justify-center" style={{ height: 'clamp(140px, 40vw, 200px)' }}>
+              <div className="w-full flex items-center justify-center" style={{ height: 'clamp(120px, 34vw, 170px)' }}>
                 {customIcon && (
                   <img 
                     src={customIcon} 
@@ -148,7 +148,7 @@ export function LobbyCard({
               </div>
             ) : id === 'cash-sets' ? (
             // Cash sets - smaller and NOT sideways with padding for spacing
-            <div className="w-full flex items-center justify-center py-8" style={{ height: 'clamp(140px, 40vw, 200px)' }}>
+            <div className="w-full flex items-center justify-center py-8" style={{ height: 'clamp(120px, 34vw, 170px)' }}>
               {customIcon && (
                 <img 
                   src={customIcon} 
@@ -172,7 +172,7 @@ export function LobbyCard({
             </div>
           ) : id === 'online-play' ? (
             // Online play - larger icon with less padding
-            <div className="w-full flex items-center justify-center py-4" style={{ height: 'clamp(140px, 40vw, 200px)' }}>
+            <div className="w-full flex items-center justify-center py-4" style={{ height: 'clamp(120px, 34vw, 170px)' }}>
               {customIcon && (
                 <img 
                   src={customIcon} 
@@ -196,7 +196,7 @@ export function LobbyCard({
             </div>
           ) : (
             // All other cards - standard sizing with padding
-            <div className="w-full flex items-center justify-center py-8" style={{ height: 'clamp(140px, 40vw, 200px)' }}>
+            <div className="w-full flex items-center justify-center py-8" style={{ height: 'clamp(120px, 34vw, 170px)' }}>
               {customIcon && (
                 <img 
                   src={customIcon} 
