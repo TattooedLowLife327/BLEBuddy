@@ -77,7 +77,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
     };
   }, [supabase, onLoginSuccess]);
 
-  const radius = 16; // Border radius of the inputs
+  const radius = 8; // Border radius of the inputs (matches card)
 
   // Calculations for email border animation
   const { width: emailWidth, height: emailHeight } = emailRect;
@@ -175,7 +175,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
       // Base card is 800px wide x 400px tall for landscape layout
       const widthScale = (viewWidth - 48) / 800;
       const heightScale = (viewHeight - 100) / 420; // account for footer
-      setLoginScale(Math.min(widthScale, heightScale, 1.3)); // Cap at 1.3x
+      setLoginScale(Math.min(widthScale, heightScale, 1.6)); // Cap at 1.6x
     };
     calculateScale();
     window.addEventListener('resize', calculateScale);
@@ -211,7 +211,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
       `}</style>
 
       <div
-        className="h-screen flex flex-col items-center justify-center bg-black text-white overflow-hidden"
+        className="h-screen flex items-center justify-center bg-black text-white overflow-hidden"
         style={{
           backgroundImage: `url(${backgroundImage})`,
           backgroundSize: 'cover',
@@ -219,11 +219,14 @@ export function Login({ onLoginSuccess }: LoginProps) {
           backgroundRepeat: 'no-repeat',
         }}
       >
-        <div className="flex-1 flex items-center justify-center w-full">
+        <div
+          className="flex flex-col items-center origin-center"
+          style={{ transform: `scale(${loginScale})` }}
+        >
           <div
-            className="rounded-xl shadow-2xl border-[3px] backdrop-blur-xl bg-zinc-900/40 overflow-hidden flex origin-center"
+            className="rounded-lg shadow-2xl border-[3px] backdrop-blur-xl bg-zinc-900/40 overflow-hidden flex"
             style={{
-              borderColor: '#a855f7',
+              borderColor: '#5b21b6',
               boxShadow: `
                 0 0 24px 4px rgba(168,85,247,0.4),
                 0 0 48px 12px rgba(168,85,247,0.2),
@@ -232,7 +235,6 @@ export function Login({ onLoginSuccess }: LoginProps) {
               `,
               width: '800px',
               height: '400px',
-              transform: `scale(${loginScale})`,
             }}
           >
             {/* Left - Banner + Info */}
@@ -251,7 +253,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
                   href="https://www.lowlifesofgranboard.com/launch"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-purple-400 underline hover:text-purple-300"
+                  className="text-[#5b21b6] underline hover:text-[#a855f7]"
                 >
                   Join the waitlist
                 </a>{' '}
@@ -261,7 +263,19 @@ export function Login({ onLoginSuccess }: LoginProps) {
 
             {/* Right - Form */}
             <div className="w-[45%] p-4 flex flex-col justify-center overflow-y-auto bg-white/5">
-              <h2 className="text-3xl font-bold text-center mb-4">LOWLIFE LOGIN</h2>
+              <h2
+                className="text-3xl font-bold text-center mb-4"
+                style={{
+                  textShadow: `
+                    0 1px 0 #ccc,
+                    0 2px 0 #bbb,
+                    0 3px 0 #999,
+                    0 4px 0 #888,
+                    0 5px 4px rgba(0,0,0,0.4),
+                    0 8px 12px rgba(0,0,0,0.3)
+                  `,
+                }}
+              >LOWLIFE LOGIN</h2>
               <form action="#" onSubmit={handleLogin} className="space-y-4 px-4" autoComplete="on">
                 {/* --- Animated Email Input --- */}
                 <div className="relative w-full max-w-full">
@@ -306,7 +320,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
                           rx={radius}
                           fill="none"
                           className={emailError ? 'red-glow' : ''}
-                          stroke="#a259f7"
+                          stroke="#7c3aed"
                           strokeWidth="2"
                           strokeDasharray={emailBorderLength}
                           strokeDashoffset={emailDashOffset}
@@ -320,7 +334,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
                   )}
                   <label
                     htmlFor="login-email"
-                    className={`absolute px-1 bg-black z-30 transition-all duration-200 pointer-events-none ${emailError ? 'red-label' : ''}`}
+                    className={`absolute px-1 z-30 transition-all duration-200 pointer-events-none ${emailError ? 'red-label' : ''}`}
                     style={{
                       left: email ? '.6rem' : '2.2rem',
                       top: email ? '-0.4rem' : '50%',
@@ -346,7 +360,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
                     autoComplete="email"
                     required
                     placeholder=" "
-                    className={`peer block w-full h-10 px-3 pl-10 bg-transparent rounded-2xl appearance-none focus:outline-none text-white border-none text-sm ${shakeTrigger ? 'shake' : ''}`}
+                    className={`peer block w-full h-12 px-3 pl-10 bg-transparent rounded-lg appearance-none focus:outline-none text-white border-none ${shakeTrigger ? 'shake' : ''}`}
                     style={{
                       backgroundColor: 'transparent',
                       color: '#fff',
@@ -400,7 +414,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
                           height={passHeight - 2}
                           rx={radius}
                           fill="none"
-                          stroke="#a259f7"
+                          stroke="#7c3aed"
                           strokeWidth="2"
                           strokeDasharray={passBorderLength}
                           strokeDashoffset={passwordDashOffset}
@@ -411,7 +425,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
                   )}
                   <label
                     htmlFor="login-password"
-                    className="absolute px-1 bg-black z-30 transition-all duration-200 pointer-events-none"
+                    className="absolute px-1 z-30 transition-all duration-200 pointer-events-none"
                     style={{
                       left: password ? '.6rem' : '2.2rem',
                       top: password ? '-0.4rem' : '50%',
@@ -433,7 +447,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
                     autoComplete="current-password"
                     required
                     placeholder=" "
-                    className="peer block w-full h-10 px-3 pl-10 bg-transparent rounded-2xl appearance-none focus:outline-none text-white border-none text-sm"
+                    className="peer block w-full h-12 px-3 pl-10 bg-transparent rounded-lg appearance-none focus:outline-none text-white border-none"
                     style={{
                       backgroundColor: 'transparent',
                       color: '#fff',
@@ -463,7 +477,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
                   />
                   <a
                     href="https://www.lowlifesofgranboard.com/forgot-password"
-                    className="text-purple-400 hover:text-purple-300 underline text-sm"
+                    className="text-[#5b21b6] hover:text-[#a855f7] underline text-sm"
                   >
                     Forgot Password?
                   </a>
@@ -479,18 +493,30 @@ export function Login({ onLoginSuccess }: LoginProps) {
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className={`w-full bg-purple-800 hover:bg-purple-900 p-3 rounded-lg font-medium transition-all duration-300 transform hover:scale-[1.02] text-sm ${
+                    className={`relative w-full transition-all duration-300 transform hover:scale-[1.02] ${
                       isLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
                     }`}
                   >
-                    {isLoading ? 'Loading...' : 'Login'}
+                    <img
+                      src="/icons/loginbutton.svg"
+                      alt=""
+                      className="w-full h-auto"
+                      draggable={false}
+                    />
+                    {isLoading && (
+                      <span className="absolute inset-0 flex items-center justify-center text-white font-semibold text-sm">
+                        Loading...
+                      </span>
+                    )}
                   </button>
                 </div>
               </form>
             </div>
           </div>
+          <div className="mt-6 relative z-20">
+            <Footer />
+          </div>
         </div>
-        <Footer />
       </div>
     </>
   );

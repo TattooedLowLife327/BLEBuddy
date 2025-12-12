@@ -1,6 +1,6 @@
 # BLE Buddy - Claude Context
 
-**Last Updated**: December 12, 2025 (Glassmorphic UI, card scaling, custom toggle/close icons)
+**Last Updated**: December 12, 2025 (Login page redesign, footer social icons, color palette)
 
 ---
 
@@ -130,6 +130,7 @@ BLEBUDDY/
 │   ├── RemoteDubsSetup.tsx    # Remote doubles setup
 │   ├── BLEStatus.tsx          # BLE connection status
 │   ├── UserMenu.tsx           # User dropdown menu
+│   ├── Footer.tsx             # Social links footer (10 icons)
 │   └── ui/                    # shadcn/ui components
 ├── contexts/
 │   ├── BLEContext.tsx         # App-wide BLE state
@@ -149,7 +150,10 @@ BLEBUDDY/
 │   └── globals.css            # Global styles
 └── public/
     ├── assets/                # Custom SVG toggle icons
-    └── icons/closebutton.svg  # Custom close button
+    └── icons/                 # SVG icons with 3D inner shadow effect
+        ├── closebutton.svg    # Custom close button
+        ├── loginbutton.svg    # 3D login button
+        └── (social icons)     # twitch, facebook, messenger, spotify, tiktok, snapchat, discord, instagram, youtube, twitter
 ```
 
 ---
@@ -276,6 +280,9 @@ const { localStream, remoteStream, connectionState, initialize, disconnect } = u
 - **Card scaling** - lobby cards and game setup modal scale proportionally with viewport
 - **Custom SVG toggle** - handicap toggle with hue rotation to match player accent color
 - **Custom close button** - replaced X icons with `/icons/closebutton.svg`
+- **Login page redesign** - landscape layout, 55/45 banner/form split, unified purple palette
+- **Color palette** - #5b21b6 (button/border/links), #a855f7 (glow/hover), see DESIGN_NOTES.md
+- **Footer social icons** - 10 external SVGs with 3D inner shadow effect, see `/public/icons/`
 - Build passing
 
 ### ⏳ In Progress / TODO
