@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { ArrowLeft, Search, RefreshCw } from 'lucide-react';
-import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '../components/ui/avatar';
 import { createClient } from '../utils/supabase/client';
-import { UserMenu } from './UserMenu';
+import { UserMenu } from '../components/UserMenu';
 
 interface LocalDubsSetupProps {
   onBack: () => void;

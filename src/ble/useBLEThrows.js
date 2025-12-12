@@ -1,9 +1,12 @@
+/* eslint-env browser */
 // hooks/useBLEThrows.js
 // Hook to sync BLE throws with Supabase database
 
 import { useState, useEffect, useCallback } from 'react';
-import bleConnection from '../utils/bleConnection';
-import { supabase } from '../lib/supabaseClient';
+import bleConnection from './bleConnection';
+import { createClient } from '../utils/supabase/client';
+
+const supabase = createClient();
 
 export function useBLEThrows(matchId, playerId) {
   const [throws, setThrows] = useState([]);

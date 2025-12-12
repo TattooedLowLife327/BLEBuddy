@@ -119,41 +119,47 @@ These must be resolved to full URLs using the main app domain:
 
 ```
 BLEBUDDY/
-├── App.tsx                    # Main app component
-├── main.tsx                   # Entry point with providers
-├── components/
-│   ├── CorkScreen.tsx         # "Who throws first" screen with video
-│   ├── OnlineLobby.tsx        # Online player lobby
-│   ├── Login.tsx              # Auth screen
-│   ├── LobbyCard.tsx          # Game mode selection cards
-│   ├── LocalDubsSetup.tsx     # Local doubles setup
-│   ├── RemoteDubsSetup.tsx    # Remote doubles setup
-│   ├── BLEStatus.tsx          # BLE connection status
-│   ├── UserMenu.tsx           # User dropdown menu
-│   ├── Footer.tsx             # Social links footer (10 icons)
-│   └── ui/                    # shadcn/ui components
-├── contexts/
-│   ├── BLEContext.tsx         # App-wide BLE state
-│   └── WebRTCContext.tsx      # (deprecated - empty)
-├── hooks/
-│   ├── useBLEThrows.ts        # Throw tracking to Supabase
-│   └── useWebRTC.ts           # WebRTC video connection hook
-├── utils/
-│   ├── ble/
-│   │   └── bleConnection.ts   # BLE manager with Granboard mapping
-│   ├── supabase/
-│   │   ├── client.ts          # Supabase client
-│   │   └── info.tsx           # Supabase config
-│   └── webrtc/
-│       └── peerConnection.ts  # WebRTC peer connection manager
-├── styles/
-│   └── globals.css            # Global styles
-└── public/
-    ├── assets/                # Custom SVG toggle icons
-    └── icons/                 # SVG icons with 3D inner shadow effect
-        ├── closebutton.svg    # Custom close button
-        ├── loginbutton.svg    # 3D login button
-        └── (social icons)     # twitch, facebook, messenger, spotify, tiktok, snapchat, discord, instagram, youtube, twitter
+├── src/
+│   ├── App.tsx                    # Main app component
+│   ├── main.tsx                   # Entry point with providers
+│   ├── components/
+│   │   ├── AppHeader.tsx          # Shared header component (BLE status, notifications, user menu)
+│   │   ├── Dashboard.tsx          # Dashboard page with card carousel
+│   │   ├── CorkScreen.tsx         # "Who throws first" screen with video
+│   │   ├── OnlineLobby.tsx        # Online player lobby
+│   │   ├── Login.tsx              # Auth screen
+│   │   ├── LobbyCard.tsx          # Game mode selection cards
+│   │   ├── LocalDubsSetup.tsx     # Local doubles setup
+│   │   ├── RemoteDubsSetup.tsx    # Remote doubles setup
+│   │   ├── BLEStatus.tsx          # BLE connection status
+│   │   ├── UserMenu.tsx           # User dropdown menu
+│   │   ├── Footer.tsx             # Social links footer (10 icons)
+│   │   └── ui/                    # shadcn/ui components
+│   ├── contexts/
+│   │   ├── BLEContext.tsx         # App-wide BLE state
+│   │   └── WebRTCContext.tsx      # (deprecated - empty)
+│   ├── hooks/
+│   │   ├── useBLEThrows.ts        # Throw tracking to Supabase
+│   │   └── useWebRTC.ts           # WebRTC video connection hook
+│   ├── utils/
+│   │   ├── supabase/
+│   │   │   ├── client.ts          # Supabase client
+│   │   │   └── info.tsx           # Supabase config
+│   │   └── webrtc/
+│   │       └── peerConnection.ts  # WebRTC peer connection manager
+│   ├── pages/                     # (ready for page components)
+│   ├── styles/
+│   │   └── globals.css            # Global styles
+│   └── ble/                       # BLE module
+├── public/
+│   ├── assets/                    # Images (png, jpg)
+│   └── icons/                     # SVG icons with 3D inner shadow effect
+│       ├── closebutton.svg        # Custom close button
+│       ├── loginbutton.svg        # 3D login button
+│       └── (social icons)         # twitch, facebook, messenger, etc.
+├── index.html                     # Entry HTML
+├── vite.config.ts                 # Vite configuration
+└── *.md                           # Documentation files
 ```
 
 ---

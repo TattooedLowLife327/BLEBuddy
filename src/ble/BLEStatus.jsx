@@ -2,7 +2,7 @@
 // BLE Connection Status Component for LowLife BLE Buddy
 
 import React, { useState, useEffect } from 'react';
-import bleConnection from '../utils/bleConnection';
+import bleConnection from './bleConnection';
 
 export default function BLEStatus({ onThrowDetected }) {
   const [status, setStatus] = useState('disconnected');

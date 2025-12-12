@@ -1,10 +1,11 @@
 import React, { useState, useRef, useLayoutEffect, useEffect, useMemo } from 'react';
 import { createClient } from '../utils/supabase/client';
-import bannerImage from '../metatagbanner.png';
-import backgroundImage from '../background.png';
-import { Footer } from './Footer';
-import AnimatedCheckbox from './AnimatedCheckbox';
+import { Footer } from '../components/Footer';
+import AnimatedCheckbox from '../components/AnimatedCheckbox';
 import { AiOutlineEye, AiOutlineEyeInvisible } from 'react-icons/ai';
+
+const bannerImage = '/assets/metatagbanner.png';
+const backgroundImage = '/assets/background.png';
 
 // Helper function to calculate email input progress
 function getEmailProgress(email: string) {

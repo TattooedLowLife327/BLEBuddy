@@ -9,7 +9,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', '5darts.png'],
+      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'assets/5darts.png'],
       manifest: {
         name: 'BLE Buddy - LowLife Companion',
         short_name: 'BLE Buddy',
@@ -76,7 +76,7 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './'),
+      '@': path.resolve(__dirname, './src'),
     },
   },
   server: {

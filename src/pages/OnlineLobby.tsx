@@ -1,35 +1,27 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ChevronLeft, RefreshCw, Bell, Clock } from 'lucide-react';
-import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
+import { Clock } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from '../components/ui/avatar';
 import { createClient } from '../utils/supabase/client';
-import { PlayerGameSetup } from './PlayerGameSetup';
-import { UserMenu } from './UserMenu';
+import { PlayerGameSetup } from '../components/PlayerGameSetup';
+import { AppHeader } from '../components/AppHeader';
+import { type GameData } from '../contexts/GameContext';
 
 // Resolve profile pic URL from various formats
 const resolveProfilePicUrl = (profilepic: string | undefined): string | undefined => {
   if (!profilepic) return undefined;
-  
+
   // Already a full URL
   if (profilepic.startsWith('http')) return profilepic;
-  
+
   // Local asset path (store purchases or default)
   if (profilepic.startsWith('/assets') || profilepic.startsWith('assets') || profilepic === 'default-pfp.png') {
     return profilepic.startsWith('/') ? profilepic : `/${profilepic}`;
   }
-  
+
   // Storage path - construct Supabase public URL
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://sndsyxxcnuwjmjgikzgg.supabase.co';
   return `${supabaseUrl}/storage/v1/object/public/profilepic/${profilepic}`;
 };
-
-export interface GameData {
-  gameId: string;
-  opponentId: string;
-  opponentName: string;
-  opponentProfilePic?: string;
-  opponentAccentColor: string;
-  isInitiator: boolean;
-}
 
 interface MissedRequest {
   id: string;
@@ -116,7 +108,6 @@ export function OnlineLobby({
   const [pendingOutgoingRequest, setPendingOutgoingRequest] = useState<any | null>(null);
   const [showIdleWarning, setShowIdleWarning] = useState(false);
   const [idleCountdown, setIdleCountdown] = useState(300); // 5 minutes in seconds
-  const [showNotifications, setShowNotifications] = useState(false);
   const [cardScale, setCardScale] = useState(1);
   const supabase = createClient();
 
@@ -831,43 +822,25 @@ export function OnlineLobby({
 
       <div className="h-screen w-full overflow-hidden bg-black">
         <div className="h-full flex flex-col px-8 py-4 max-w-[1400px] mx-auto">
-        {/* Header - thin */}
-        <div className="relative flex items-center justify-center h-10 shrink-0">
-          {/* Left - back button */}
-          <button
-            onClick={onBack}
-            className="absolute left-0 p-1 text-white hover:opacity-80 transition-opacity z-20"
-            aria-label="Back"
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-
-          {/* Center - title (truly centered) */}
-          <h1
-            className="text-base text-white uppercase tracking-wider font-bold"
-            style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}
-          >
-            Online Lobby
-          </h1>
-
-          {/* Right - refresh + user menu */}
-          <div className="absolute right-0 flex items-center gap-3 z-20">
-            <button
-              onClick={handleManualRefresh}
-              className="p-2 text-white hover:bg-white/10 rounded-full transition-colors"
-              aria-label="Refresh lobby"
-            >
-              <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
-            </button>
-            <UserMenu
-              profilePic={profilePic}
-              accentColor={accentColor}
-              userName={userName}
-              onLogout={handleLogout}
-              size="sm"
-            />
-          </div>
-        </div>
+        {/* Header */}
+        <AppHeader
+          title="Online Lobby"
+          onBack={onBack}
+          showRefresh={true}
+          isRefreshing={isRefreshing}
+          onRefresh={handleManualRefresh}
+          missedRequests={missedRequests.map(r => ({
+            id: r.id,
+            fromPlayerId: r.challengerId,
+            fromPlayerName: r.challengerName,
+            createdAt: r.timestamp,
+          }))}
+          onClearMissedRequests={onClearMissedRequests}
+          profilePic={profilePic}
+          accentColor={accentColor}
+          userName={userName}
+          onLogout={handleLogout}
+        />
 
         {/* Players Grid - Vertical Scrolling */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 scrollbar-hidden">
@@ -1034,62 +1007,6 @@ export function OnlineLobby({
         </div>
       </div>
     </div>
-
-      {/* Notification Bell - Bottom Right */}
-      <div className="fixed bottom-6 right-6 z-40">
-        <button
-          onClick={() => setShowNotifications(!showNotifications)}
-          className="relative p-3 bg-zinc-800 hover:bg-zinc-700 rounded-full shadow-lg transition-colors"
-        >
-          <Bell className="w-6 h-6 text-white" />
-          {missedRequests.length > 0 && (
-            <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-xs text-white font-bold">
-              {missedRequests.length > 9 ? '9+' : missedRequests.length}
-            </span>
-          )}
-        </button>
-
-        {/* Notification Dropdown */}
-        {showNotifications && (
-          <div
-            className="absolute bottom-16 right-0 w-72 backdrop-blur-xl bg-zinc-900/40 border border-zinc-600/50 rounded-xl overflow-hidden"
-            style={{
-              boxShadow: '0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1)',
-            }}
-          >
-            <div className="p-3 border-b border-zinc-700/50 flex items-center justify-between">
-              <h3 className="text-white font-semibold text-sm">Missed Requests</h3>
-              {missedRequests.length > 0 && onClearMissedRequests && (
-                <button
-                  onClick={onClearMissedRequests}
-                  className="text-xs text-zinc-400 hover:text-white transition-colors"
-                >
-                  Clear All
-                </button>
-              )}
-            </div>
-            <div className="max-h-64 overflow-y-auto">
-              {missedRequests.length === 0 ? (
-                <div className="p-4 text-center text-zinc-500 text-sm">
-                  No missed requests
-                </div>
-              ) : (
-                missedRequests.map((request) => (
-                  <div
-                    key={request.id}
-                    className="p-3 border-b border-zinc-800 last:border-b-0 hover:bg-zinc-800/50"
-                  >
-                    <p className="text-white text-sm font-medium">{request.challengerName}</p>
-                    <p className="text-zinc-500 text-xs">
-                      {new Date(request.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
-      </div>
   </>
   );
 }

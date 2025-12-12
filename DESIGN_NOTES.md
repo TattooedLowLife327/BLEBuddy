@@ -53,6 +53,7 @@ All elements use `rounded-lg` (8px) for visual consistency:
 - **TODO (LLOGB)**: Fix pinpad numbers
 - **TODO (LLOGB)**: Make sidebar profile pic always open dropdown menu on all pages
 - **TODO (LLOGB)**: Add "last seen" for each admin in Owner Tools (admin dashboard)
+- **TODO (LLOGB)**: Fix read-only friends player card - weird black background behind card
 
 ---
 

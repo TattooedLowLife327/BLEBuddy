@@ -1,9 +1,11 @@
 // Example: How to use BLE in your lobby/match components
 
 import React, { useState, useEffect } from 'react';
-import BLEStatus from './components/BLEStatus';
-import { useBLEThrows } from './hooks/useBLEThrows';
-import { supabase } from './lib/supabaseClient';
+import BLEStatus from './BLEStatus';
+import { useBLEThrows } from './useBLEThrows';
+import { createClient } from '../utils/supabase/client';
+
+const supabase = createClient();
 
 // Example Match Component
 export function MatchScreen() {

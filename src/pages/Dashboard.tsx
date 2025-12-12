@@ -1,0 +1,371 @@
+import { useState, useEffect } from 'react';
+import { ChevronLeft, ChevronRight, Bluetooth } from 'lucide-react';
+import { LobbyCard } from '../components/LobbyCard';
+import { AppHeader } from '../components/AppHeader';
+import { isDevMode } from '../utils/devMode';
+
+// Images from public/assets/
+const dartsIcon = '/assets/5darts.png';
+const ladiesDartIcon = '/assets/ladiesdart.png';
+const youthDartIcon = '/assets/youthdart.png';
+const localPlayDartIcon = '/assets/playerdart.png';
+const cashSetsIcon = '/assets/cashseticon.png';
+const tournamentDartIcon = '/assets/elitedart.png';
+const leagueDartIcon = '/assets/ghostdart.png';
+const youthBackground = '/assets/background.png';
+
+type GameRequestNotification = {
+  id: string;
+  fromPlayerId: string;
+  fromPlayerName: string;
+  createdAt: string;
+};
+
+interface DashboardProps {
+  userId: string;
+  userName: string;
+  profilePic: string | null;
+  accentColor: string;
+  isYouthPlayer: boolean;
+  userRole: string | null;
+  userGender: string | null;
+  userAge: number | null;
+  hasActiveTournament: boolean;
+  hasActiveLeague: boolean;
+  bleConnected: boolean;
+  bleStatus: 'disconnected' | 'scanning' | 'connecting' | 'connected';
+  onBLEConnect: () => Promise<{ success: boolean; error?: string }>;
+  onBLEDisconnect: () => Promise<void>;
+  onNavigateToOnlineLobby: () => void;
+  onNavigateToLocalDubs: () => void;
+  onNavigateToRemoteDubs: () => void;
+  missedRequests: GameRequestNotification[];
+  onClearMissedRequests: () => void;
+  onLogout: () => void;
+}
+
+export function Dashboard({
+  userId,
+  userName,
+  profilePic,
+  accentColor,
+  isYouthPlayer,
+  userRole,
+  userGender,
+  userAge,
+  hasActiveTournament,
+  hasActiveLeague,
+  bleConnected,
+  bleStatus,
+  onBLEConnect,
+  onBLEDisconnect,
+  onNavigateToOnlineLobby,
+  onNavigateToLocalDubs,
+  onNavigateToRemoteDubs,
+  missedRequests,
+  onClearMissedRequests,
+  onLogout,
+}: DashboardProps) {
+  const [currentCardIndex, setCurrentCardIndex] = useState(0);
+  const [flippingCard, setFlippingCard] = useState<string | null>(null);
+  const [showBLEPrompt, setShowBLEPrompt] = useState(false);
+  const [scale, setScale] = useState(1);
+
+  useEffect(() => {
+    const calculateScale = () => {
+      const isPortrait = window.matchMedia('(orientation: portrait)').matches;
+      const viewWidth = isPortrait ? window.innerHeight : window.innerWidth;
+      const viewHeight = isPortrait ? window.innerWidth : window.innerHeight;
+      const baseWidth = 1280;
+      const baseHeight = 720;
+      const scaleX = viewWidth / baseWidth;
+      const scaleY = viewHeight / baseHeight;
+      setScale(Math.min(scaleX, scaleY, 1.5));
+    };
+
+    calculateScale();
+    window.addEventListener('resize', calculateScale);
+    const orientationQuery = window.matchMedia('(orientation: portrait)');
+    orientationQuery.addEventListener('change', calculateScale);
+    return () => {
+      window.removeEventListener('resize', calculateScale);
+      orientationQuery.removeEventListener('change', calculateScale);
+    };
+  }, []);
+
+  const isAdminTeam = userRole === 'owner' || userRole === 'the_man' || userRole === 'admin' || userRole === 'mod';
+
+  const lobbyCards = [
+    {
+      id: 'online-play',
+      title: 'Online',
+      description: 'Solo / Doubles / Remote Doubles',
+      customIcon: dartsIcon,
+      visible: isAdminTeam || !isYouthPlayer,
+      expandable: true,
+      accentColor: '#06B6D4',
+    },
+    {
+      id: 'local-play',
+      title: 'Local Play',
+      description: 'Find players near you',
+      customIcon: localPlayDartIcon,
+      visible: true,
+      accentColor: '#a855f7',
+    },
+    {
+      id: 'tournament',
+      title: "Tattoo's Lounge",
+      description: 'Join your active tournament',
+      customIcon: tournamentDartIcon,
+      visible: isAdminTeam || hasActiveTournament,
+      accentColor: '#F7931E',
+    },
+    {
+      id: 'league',
+      title: 'League Play',
+      description: 'Connect to league match',
+      customIcon: leagueDartIcon,
+      visible: isAdminTeam || hasActiveLeague,
+      accentColor: '#8B5CF6',
+    },
+    {
+      id: 'cash-sets',
+      title: 'Cash Sets',
+      description: '21+ age-gated matches',
+      customIcon: cashSetsIcon,
+      visible: isAdminTeam || (userAge !== null && userAge >= 21),
+      ageGated: true,
+      accentColor: '#3FA34D',
+    },
+    {
+      id: 'ladies-only',
+      title: 'Ladies Only',
+      description: 'Protected access',
+      customIcon: ladiesDartIcon,
+      visible: isAdminTeam || userGender === 'female',
+      protected: true,
+      accentColor: '#EC4899',
+    },
+    {
+      id: 'youth-lobby',
+      title: 'Youth Lobby',
+      description: 'Safe play environment',
+      customIcon: youthDartIcon,
+      visible: isAdminTeam || isYouthPlayer,
+      accentColor: '#84CC16',
+    },
+  ];
+
+  const visibleCards = lobbyCards.filter(card => card.visible);
+
+  const prevCard = () => {
+    if (flippingCard) {
+      setFlippingCard(null);
+      setTimeout(() => {
+        setCurrentCardIndex((prev) => (prev - 1 + visibleCards.length) % visibleCards.length);
+      }, 250);
+    } else {
+      setCurrentCardIndex((prev) => (prev - 1 + visibleCards.length) % visibleCards.length);
+    }
+  };
+
+  const nextCard = () => {
+    if (flippingCard) {
+      setFlippingCard(null);
+      setTimeout(() => {
+        setCurrentCardIndex((prev) => (prev + 1) % visibleCards.length);
+      }, 250);
+    } else {
+      setCurrentCardIndex((prev) => (prev + 1) % visibleCards.length);
+    }
+  };
+
+  const handleCardClick = (cardId: string) => {
+    if (flippingCard === cardId) {
+      setFlippingCard(null);
+    } else {
+      setFlippingCard(cardId);
+    }
+  };
+
+  const handleNavigateToOnlineLobby = () => {
+    if (!bleConnected && !isDevMode()) {
+      setShowBLEPrompt(true);
+      return;
+    }
+    onNavigateToOnlineLobby();
+  };
+
+  const handleBLEPromptConnect = async () => {
+    const result = await onBLEConnect();
+    if (result.success) {
+      setShowBLEPrompt(false);
+      onNavigateToOnlineLobby();
+    }
+  };
+
+  const handleBLEPromptCancel = () => {
+    setShowBLEPrompt(false);
+  };
+
+  return (
+    <div
+      className="h-screen w-full overflow-hidden"
+      style={{
+        background: isYouthPlayer
+          ? `url(${youthBackground}) center/cover no-repeat, black`
+          : 'black'
+      }}
+    >
+      {showBLEPrompt && (
+        <div className="fixed inset-0 z-[70] bg-black/80 flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-blue-600 rounded-xl p-6 max-w-sm w-full text-center">
+            <Bluetooth className="w-12 h-12 text-blue-500 mx-auto mb-3" />
+            <h2 className="text-white text-lg font-bold mb-2">Connect Your Board</h2>
+            <p className="text-zinc-400 text-sm mb-4">
+              You must connect to your Granboard before entering the online lobby.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={handleBLEPromptCancel}
+                className="flex-1 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg text-sm font-semibold transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBLEPromptConnect}
+                disabled={bleStatus === 'connecting' || bleStatus === 'scanning'}
+                className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white rounded-lg text-sm font-semibold transition-colors"
+              >
+                {bleStatus === 'connecting' || bleStatus === 'scanning' ? 'Connecting...' : 'Connect'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="relative z-10 h-full flex flex-col px-8 py-4 max-w-[1400px] mx-auto">
+        <AppHeader
+          title="Dashboard"
+          bleConnected={bleConnected}
+          bleStatus={bleStatus}
+          onBLEConnect={onBLEConnect}
+          onBLEDisconnect={onBLEDisconnect}
+          missedRequests={missedRequests}
+          onClearMissedRequests={onClearMissedRequests}
+          profilePic={profilePic}
+          accentColor={accentColor}
+          userName={userName}
+          onLogout={onLogout}
+        />
+
+        <main className="flex-1 flex flex-col justify-center items-center">
+          <div
+            className="relative"
+            style={{
+              transform: `scale(${scale})`,
+              transformOrigin: 'center center',
+            }}
+          >
+            <button
+              onClick={prevCard}
+              style={{
+                position: 'absolute',
+                left: 0,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                zIndex: 20
+              }}
+              className="p-3 text-white hover:text-purple-400 transition-colors"
+              aria-label="Previous"
+            >
+              <ChevronLeft className="w-8 h-8" strokeWidth={2} />
+            </button>
+
+            <div className="flex justify-center items-center space-x-4 overflow-visible">
+              {[-1, 0, 1].map(offset => {
+                const index = (currentCardIndex + offset + visibleCards.length) % visibleCards.length;
+                const card = visibleCards[index];
+                const isCenter = offset === 0;
+
+                return (
+                  <div
+                    key={`slot-${offset}`}
+                    onClick={() => isCenter && handleCardClick(card.id)}
+                    className={`transition-all duration-300 ${
+                      isCenter ? 'cursor-pointer z-10' : 'cursor-default z-0'
+                    }`}
+                    style={{
+                      transform: isCenter
+                        ? 'translateY(0) scale(1)'
+                        : 'translateY(6px) scale(0.88)',
+                      filter: isCenter ? 'none' : 'grayscale(0.6) brightness(0.85)',
+                      opacity: isCenter ? 1 : 0.8,
+                      perspective: '1000px',
+                      transition:
+                        'transform 250ms cubic-bezier(0.4, 0, 0.2, 1), filter 250ms ease, opacity 250ms ease',
+                      willChange: 'transform, filter, opacity',
+                    }}
+                  >
+                    <LobbyCard
+                      id={card.id}
+                      title={card.title}
+                      description={card.description}
+                      icon={'icon' in card ? card.icon : undefined}
+                      customIcon={'customIcon' in card ? card.customIcon : undefined}
+                      accentColor={card.accentColor || accentColor}
+                      ageGated={card.ageGated}
+                      protected={card.protected}
+                      expandable={card.expandable}
+                      isCenter={isCenter}
+                      isFlipped={isCenter && flippingCard === card.id}
+                      onNavigateToSolo={handleNavigateToOnlineLobby}
+                      onNavigateToLocalDubs={onNavigateToLocalDubs}
+                      onNavigateToRemoteDubs={onNavigateToRemoteDubs}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+
+            <button
+              onClick={nextCard}
+              style={{
+                position: 'absolute',
+                right: 0,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                zIndex: 20
+              }}
+              className="p-3 text-white hover:text-purple-400 transition-colors"
+              aria-label="Next"
+            >
+              <ChevronRight className="w-8 h-8" strokeWidth={2} />
+            </button>
+          </div>
+
+          <div className="flex gap-2 mt-6">
+            {visibleCards.map((card, index) => (
+              <button
+                key={card.id}
+                onClick={() => {
+                  setFlippingCard(null);
+                  setCurrentCardIndex(index);
+                }}
+                className={`w-2 h-2 rounded-full transition-all duration-200 ${
+                  index === currentCardIndex
+                    ? 'bg-purple-500 scale-125'
+                    : 'bg-zinc-600 hover:bg-zinc-500'
+                }`}
+                aria-label={`Go to card ${index + 1}`}
+              />
+            ))}
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+export default Dashboard;

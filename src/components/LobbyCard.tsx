@@ -1,7 +1,8 @@
 import { LucideIcon, Lock, ChevronLeft, ChevronDown } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { Badge } from './ui/badge';
-import nextUpLogo from '../NextUPicon.png';
+
+const nextUpLogo = '/assets/NextUPicon.png';
 
 interface LobbyCardProps {
   id: string;
