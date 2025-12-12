@@ -457,15 +457,13 @@ export default function App() {
 
     console.log('Abandoning game:', pendingRejoinGame.gameId);
     try {
-      await (supabase as any)
+      const { error } = await (supabase as any)
         .schema('companion')
         .from('active_games')
-        .update({
-          status: 'cancelled',
-          cancelled_at: new Date().toISOString(),
-          cancel_reason: 'player_abandoned',
-        })
+        .update({ status: 'cancelled' })
         .eq('id', pendingRejoinGame.gameId);
+
+      if (error) console.error('Error abandoning game:', error);
     } catch (err) {
       console.error('Error abandoning game:', err);
     }

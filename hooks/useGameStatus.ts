@@ -81,15 +81,13 @@ export function useGameStatus(options: UseGameStatusOptions): UseGameStatusRetur
 
     // Update game status in database
     try {
-      await (supabase as any)
+      const { error } = await (supabase as any)
         .schema('companion')
         .from('active_games')
-        .update({
-          status: 'cancelled',
-          cancelled_at: new Date().toISOString(),
-          cancel_reason: 'player_left',
-        })
+        .update({ status: 'cancelled' })
         .eq('id', options.gameId);
+
+      if (error) console.error('[GameStatus] Error updating game status:', error);
     } catch (err) {
       console.error('[GameStatus] Error updating game status:', err);
     }
