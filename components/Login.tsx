@@ -236,7 +236,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
             }}
           >
             {/* Left - Banner + Info */}
-            <div className="w-[45%] flex flex-col items-center justify-center p-4 bg-black/30">
+            <div className="w-[55%] flex flex-col items-center justify-center p-4 bg-black/30">
               <img
                 src={bannerImage}
                 alt="LowLife Banner"
@@ -262,13 +262,14 @@ export function Login({ onLoginSuccess }: LoginProps) {
                   rel="noopener noreferrer"
                   className="text-purple-400 underline hover:text-purple-300"
                 >
-                  Sign up on LLOGB!
-                </a>
+                  Join the waitlist
+                </a>{' '}
+                to be notified when beta testing has ended.
               </p>
             </div>
 
             {/* Right - Form */}
-            <div className="w-[55%] p-4 flex flex-col justify-center overflow-y-auto">
+            <div className="w-[45%] p-4 flex flex-col justify-center overflow-y-auto">
               <h2 className="text-lg font-semibold text-center mb-4">LowLife Login</h2>
               <form action="#" onSubmit={handleLogin} className="space-y-4" autoComplete="on">
                 {/* --- Animated Email Input --- */}
