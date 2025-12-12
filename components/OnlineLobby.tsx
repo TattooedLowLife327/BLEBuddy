@@ -129,6 +129,21 @@ export function OnlineLobby({
   const USE_MOCK_DATA = true; // Toggle for development UI
   const INCLUDE_REAL_PLAYERS = true; // Show real DB players alongside mock data
 
+  // Wrap logout to clean up lobby entry first
+  const handleLogout = useCallback(async () => {
+    try {
+      await (supabase as any)
+        .schema('companion')
+        .from('online_lobby')
+        .delete()
+        .eq('player_id', userId);
+      console.log('Cleaned up lobby entry on logout');
+    } catch (err) {
+      console.error('Error cleaning up lobby on logout:', err);
+    }
+    onLogout();
+  }, [supabase, userId, onLogout]);
+
   // Check if youth player can access
   const canAccess = !isYouthPlayer || hasParentPaired;
 
@@ -344,12 +359,15 @@ export function OnlineLobby({
         await new Promise(resolve => setTimeout(resolve, 300));
 
         // Fetch all statuses (waiting, idle, in_match) - filter out current user
+        // Also filter out stale entries (last_seen > 2 minutes ago)
+        const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
         const { data: lobbyData, error: lobbyError } = await (supabase as any)
           .schema('companion')
           .from('online_lobby')
           .select('*')
           .in('status', ['waiting', 'idle', 'in_match'])
           .neq('player_id', userId)
+          .gte('last_seen', twoMinutesAgo)
           .order('last_seen', { ascending: false })
           .order('created_at', { ascending: false });
 
@@ -845,7 +863,7 @@ export function OnlineLobby({
               profilePic={profilePic}
               accentColor={accentColor}
               userName={userName}
-              onLogout={onLogout}
+              onLogout={handleLogout}
               size="sm"
             />
           </div>
