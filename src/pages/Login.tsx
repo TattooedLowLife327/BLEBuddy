@@ -27,6 +27,32 @@ interface LoginProps {
   onLoginSuccess: () => void;
 }
 
+// Request notification and camera permissions
+async function requestAppPermissions() {
+  // Request notification permission
+  if ('Notification' in window && Notification.permission === 'default') {
+    try {
+      const result = await Notification.requestPermission();
+      console.log('Notification permission:', result);
+    } catch (err) {
+      console.error('Failed to request notification permission:', err);
+    }
+  }
+
+  // Request camera permission (will show prompt)
+  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      // Stop the stream immediately - we just wanted to trigger the permission prompt
+      stream.getTracks().forEach(track => track.stop());
+      console.log('Camera permission granted');
+    } catch (err: any) {
+      // User denied or error - that's fine, we'll prompt again when needed
+      console.log('Camera permission not granted:', err.name);
+    }
+  }
+}
+
 export function Login({ onLoginSuccess }: LoginProps) {
   const supabase = useMemo(() => createClient(), []);
   const [email, setEmail] = useState('');
@@ -152,6 +178,10 @@ export function Login({ onLoginSuccess }: LoginProps) {
       // Session and user are available
       const user = data.user;
       console.log('Login successful:', user);
+
+      // Request permissions after successful login
+      requestAppPermissions();
+
       onLoginSuccess();
     } catch (err: any) {
       setErrorMsg('Unable to connect to the server. Please try again.');

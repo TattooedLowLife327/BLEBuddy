@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useBLE } from '../contexts/BLEContext';
 import { useWebRTC } from '../hooks/useWebRTC';
 import { useGameStatus } from '../hooks/useGameStatus';
@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Bluetooth, X, WifiOff } from 'lucide-react';
 import type { DartThrowData } from '../utils/ble/bleConnection';
 import { isDevMode } from '../utils/devMode';
+import { createClient } from '../utils/supabase/client';
 
 interface CorkScreenProps {
   player1: { id: string; name: string; profilePic?: string; accentColor: string };
@@ -22,6 +23,15 @@ interface PlayerCorkState {
   score: number | null;
   wasValid: boolean;
   display: string;
+}
+
+interface CorkThrowMessage {
+  playerId: string;
+  score: number;
+  wasValid: boolean;
+  display: string;
+  timestamp: string;
+  round: number;
 }
 
 function getCorkScore(throwData: DartThrowData): { score: number; valid: boolean; display: string } {
@@ -50,6 +60,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
   const { lastThrow, isConnected, connect, status: bleStatus } = useBLE();
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const supabase = createClient();
 
   const remotePlayerId = visiblePlayerId === player1.id ? player2.id : player1.id;
   const remotePlayerName = visiblePlayerId === player1.id ? player2.name : player1.name;
@@ -73,13 +84,49 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
   const [tieAlert, setTieAlert] = useState(false);
   const [winner, setWinner] = useState<string | null>(null);
   const [revealed, setRevealed] = useState(false);
-  const [currentThrower, setCurrentThrower] = useState<1 | 2>(1);
   const [lastTs, setLastTs] = useState<string | null>(null);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [corkRound, setCorkRound] = useState(1);
+  const [myThrowSent, setMyThrowSent] = useState(false);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const devMode = isDevMode();
+
+  // Determine if local player is P1 or P2
+  const amP1 = visiblePlayerId === player1.id;
+
+  // Send cork throw to Supabase channel
+  const sendCorkThrow = useCallback(async (score: number, wasValid: boolean, display: string) => {
+    if (!channelRef.current || myThrowSent) return;
+
+    const message: CorkThrowMessage = {
+      playerId: visiblePlayerId,
+      score,
+      wasValid,
+      display,
+      timestamp: new Date().toISOString(),
+      round: corkRound,
+    };
+
+    console.log('[Cork] Sending throw:', message);
+    await channelRef.current.send({
+      type: 'broadcast',
+      event: 'cork_throw',
+      payload: message,
+    });
+    setMyThrowSent(true);
+
+    // Update local state for my throw
+    if (amP1) {
+      setP1State({ status: 'thrown', score, wasValid, display });
+    } else {
+      setP2State({ status: 'thrown', score, wasValid, display });
+    }
+  }, [channelRef, myThrowSent, visiblePlayerId, corkRound, amP1]);
 
   // Dev mode: simulate a throw
   const simulateThrow = (type: 'inner' | 'bull' | 'dblbull' | 'miss', value: number = 20) => {
+    if (myThrowSent) return; // Already threw this round
+
     const segmentTypes: Record<string, DartThrowData['segmentType']> = {
       inner: 'SINGLE_INNER',
       bull: 'BULL',
@@ -96,57 +143,98 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
       timestamp: new Date().toISOString(),
     };
     const { score, valid, display } = getCorkScore(fakeThrow);
-    if (currentThrower === 1 && p1State.status === 'waiting') {
-      setP1State({ status: 'thrown', score, wasValid: valid, display });
-      setCurrentThrower(2);
-    } else if (currentThrower === 2 && p2State.status === 'waiting') {
-      setP2State({ status: 'thrown', score, wasValid: valid, display });
-    }
+    sendCorkThrow(score, valid, display);
   };
 
+  // Subscribe to cork channel for throw sync
+  useEffect(() => {
+    const channelName = `cork:${gameId}`;
+    console.log(`[Cork] Subscribing to channel: ${channelName}`);
+
+    const channel = supabase.channel(channelName, { config: { broadcast: { self: false } } });
+    channelRef.current = channel;
+
+    channel
+      .on('broadcast', { event: 'cork_throw' }, ({ payload }) => {
+        const msg = payload as CorkThrowMessage;
+        console.log('[Cork] Received throw:', msg);
+
+        // Only process throws for current round
+        if (msg.round !== corkRound) {
+          console.log('[Cork] Ignoring throw from different round');
+          return;
+        }
+
+        // Update opponent's state
+        if (msg.playerId === player1.id) {
+          setP1State({ status: 'thrown', score: msg.score, wasValid: msg.wasValid, display: msg.display });
+        } else if (msg.playerId === player2.id) {
+          setP2State({ status: 'thrown', score: msg.score, wasValid: msg.wasValid, display: msg.display });
+        }
+      })
+      .subscribe((status) => {
+        console.log(`[Cork] Channel subscription status: ${status}`);
+      });
+
+    return () => {
+      channel.unsubscribe();
+      channelRef.current = null;
+    };
+  }, [gameId, corkRound, player1.id, player2.id]);
+
+  // Initialize WebRTC
   useEffect(() => { initialize(); return () => { disconnect(); }; }, []);
 
+  // Attach local video stream
   useEffect(() => {
     if (localVideoRef.current && localStream) localVideoRef.current.srcObject = localStream;
   }, [localStream]);
 
+  // Attach remote video stream
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) remoteVideoRef.current.srcObject = remoteStream;
   }, [remoteStream]);
 
+  // Handle BLE throws - send MY throws to the channel
   useEffect(() => {
-    if (!lastThrow || lastThrow.timestamp === lastTs || winner) return;
+    if (!lastThrow || lastThrow.timestamp === lastTs || winner || myThrowSent) return;
     setLastTs(lastThrow.timestamp);
-    const { score, valid, display } = getCorkScore(lastThrow);
-    if (currentThrower === 1 && p1State.status === 'waiting') {
-      setP1State({ status: 'thrown', score, wasValid: valid, display });
-      setCurrentThrower(2);
-    } else if (currentThrower === 2 && p2State.status === 'waiting') {
-      setP2State({ status: 'thrown', score, wasValid: valid, display });
-    }
-  }, [lastThrow]);
 
+    const { score, valid, display } = getCorkScore(lastThrow);
+    sendCorkThrow(score, valid, display);
+  }, [lastThrow, lastTs, winner, myThrowSent, sendCorkThrow]);
+
+  // Check for winner when both have thrown
   useEffect(() => {
     if (p1State.status !== 'thrown' || p2State.status !== 'thrown' || p1State.score === null || p2State.score === null || winner) return;
+
     setRevealed(true);
     setTimeout(() => {
-      if (p1State.score! > p2State.score!) { setWinner(player1.id); setTimeout(() => onCorkComplete(player1.id), 2000); }
-      else if (p2State.score! > p1State.score!) { setWinner(player2.id); setTimeout(() => onCorkComplete(player2.id), 2000); }
-      else {
+      if (p1State.score! > p2State.score!) {
+        setWinner(player1.id);
+        setTimeout(() => onCorkComplete(player1.id), 2000);
+      } else if (p2State.score! > p1State.score!) {
+        setWinner(player2.id);
+        setTimeout(() => onCorkComplete(player2.id), 2000);
+      } else {
+        // Tie - reset for another round
         setTieAlert(true);
         setTimeout(() => {
-          setTieAlert(false); setRevealed(false);
+          setTieAlert(false);
+          setRevealed(false);
           setP1State({ status: 'waiting', score: null, wasValid: false, display: '--' });
           setP2State({ status: 'waiting', score: null, wasValid: false, display: '--' });
-          setCurrentThrower(1);
+          setCorkRound(r => r + 1);
+          setMyThrowSent(false);
         }, 2500);
       }
     }, 1000);
-  }, [p1State, p2State]);
+  }, [p1State, p2State, winner, player1.id, player2.id, onCorkComplete]);
 
   const getDisplay = (state: PlayerCorkState, pid: string) => {
     if (state.status === 'waiting') return '--';
     if (revealed) return state.display;
+    // Show own score immediately, opponent shows "OK" until both thrown
     return pid === visiblePlayerId ? state.display : 'OK';
   };
 
@@ -159,9 +247,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
     }
   };
 
-  const handleLeaveClick = () => {
-    setShowLeaveConfirm(true);
-  };
+  const handleLeaveClick = () => setShowLeaveConfirm(true);
 
   const handleConfirmLeave = async () => {
     setShowLeaveConfirm(false);
@@ -169,9 +255,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
     onCancel();
   };
 
-  const handleCancelLeave = () => {
-    setShowLeaveConfirm(false);
-  };
+  const handleCancelLeave = () => setShowLeaveConfirm(false);
 
   const handleBLEReconnect = async () => {
     const result = await connect();
@@ -181,9 +265,9 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
   };
 
   const renderPlayer = (player: typeof player1, state: PlayerCorkState, pNum: 1 | 2, isLocal: boolean) => {
-    const isThrowing = currentThrower === pNum && state.status === 'waiting';
+    const isMyTurn = isLocal && !myThrowSent && state.status === 'waiting';
     const showResult = revealed || player.id === visiblePlayerId;
-    const borderColor = isThrowing ? 'border-yellow-400' : state.status === 'thrown' && showResult ? (state.wasValid ? 'border-green-500' : 'border-red-500') : 'border-zinc-700';
+    const borderColor = isMyTurn ? 'border-yellow-400' : state.status === 'thrown' && showResult ? (state.wasValid ? 'border-green-500' : 'border-red-500') : 'border-zinc-700';
 
     return (
       <div className={`flex-1 p-3 rounded-xl border-2 ${borderColor} transition-colors`} style={{ backgroundColor: 'rgba(39,39,42,0.6)' }}>
@@ -207,8 +291,8 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
           </div>
 
           {/* Status */}
-          <p className={`text-xs mb-1 ${isThrowing ? 'text-yellow-400 font-bold' : 'text-zinc-500'}`}>
-            {state.status === 'thrown' ? (revealed ? '' : 'Thrown!') : isThrowing ? 'THROW NOW' : 'Waiting...'}
+          <p className={`text-xs mb-1 ${isMyTurn ? 'text-yellow-400 font-bold' : 'text-zinc-500'}`}>
+            {state.status === 'thrown' ? (revealed ? '' : 'Thrown!') : isMyTurn ? 'YOUR TURN - THROW!' : 'Waiting...'}
           </p>
 
           {/* Score */}
@@ -231,16 +315,10 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
               Your opponent will be notified and the match will be cancelled.
             </p>
             <div className="flex gap-3">
-              <button
-                onClick={handleCancelLeave}
-                className="flex-1 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg text-sm font-semibold transition-colors"
-              >
+              <button onClick={handleCancelLeave} className="flex-1 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg text-sm font-semibold transition-colors">
                 Stay
               </button>
-              <button
-                onClick={handleConfirmLeave}
-                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold transition-colors"
-              >
+              <button onClick={handleConfirmLeave} className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold transition-colors">
                 Leave
               </button>
             </div>
@@ -254,15 +332,9 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
           <div className="bg-zinc-900 border border-yellow-600 rounded-xl p-6 max-w-sm w-full text-center">
             <WifiOff className="w-12 h-12 text-yellow-500 mx-auto mb-3" />
             <h2 className="text-white text-lg font-bold mb-2">Opponent Disconnected</h2>
-            <p className="text-zinc-400 text-sm mb-4">
-              Waiting for {remotePlayerName} to reconnect...
-            </p>
-            <div className="text-4xl font-bold text-yellow-500 mb-2">
-              {disconnectCountdown}s
-            </div>
-            <p className="text-zinc-500 text-xs">
-              Match will end if they don't return
-            </p>
+            <p className="text-zinc-400 text-sm mb-4">Waiting for {remotePlayerName} to reconnect...</p>
+            <div className="text-4xl font-bold text-yellow-500 mb-2">{disconnectCountdown}s</div>
+            <p className="text-zinc-500 text-xs">Match will end if they don't return</p>
           </div>
         </div>
       )}
@@ -273,12 +345,8 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
           <div className="bg-zinc-900 border border-red-600 rounded-xl p-6 max-w-sm w-full text-center">
             <X className="w-12 h-12 text-red-500 mx-auto mb-3" />
             <h2 className="text-white text-lg font-bold mb-2">Match Ended</h2>
-            <p className="text-zinc-400 text-sm">
-              {opponentLeftMessage}
-            </p>
-            <p className="text-zinc-500 text-xs mt-3">
-              Returning to lobby...
-            </p>
+            <p className="text-zinc-400 text-sm">{opponentLeftMessage}</p>
+            <p className="text-zinc-500 text-xs mt-3">Returning to lobby...</p>
           </div>
         </div>
       )}
@@ -289,9 +357,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
           <div className="bg-zinc-900 border border-blue-600 rounded-xl p-6 max-w-sm w-full text-center">
             <Bluetooth className="w-12 h-12 text-blue-500 mx-auto mb-3" />
             <h2 className="text-white text-lg font-bold mb-2">Board Disconnected</h2>
-            <p className="text-zinc-400 text-sm mb-4">
-              Your Granboard connection was lost. Reconnect to continue playing.
-            </p>
+            <p className="text-zinc-400 text-sm mb-4">Your Granboard connection was lost. Reconnect to continue playing.</p>
             <button
               onClick={handleBLEReconnect}
               disabled={bleStatus === 'connecting' || bleStatus === 'scanning'}
@@ -313,7 +379,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
           Leave Match
         </button>
 
-        <h1 className="text-lg font-bold text-white">CORK FOR FIRST</h1>
+        <h1 className="text-lg font-bold text-white">CORK FOR FIRST {corkRound > 1 ? `(Round ${corkRound})` : ''}</h1>
 
         {/* BLE Status/Connect */}
         {isConnected ? (
@@ -373,32 +439,36 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
         {/* Dev Mode Throw Simulator */}
         {devMode && (
           <div className="mt-4 p-3 bg-orange-900/30 border border-orange-600 rounded-lg">
-            <p className="text-orange-400 text-xs font-bold mb-2">DEV MODE - Throw Simulator</p>
+            <p className="text-orange-400 text-xs font-bold mb-2">DEV MODE - Throw Simulator {myThrowSent ? '(Already thrown)' : ''}</p>
             <div className="flex flex-wrap gap-2 justify-center">
               {[1, 5, 10, 15, 20].map(v => (
                 <button
                   key={v}
                   onClick={() => simulateThrow('inner', v)}
-                  className="px-3 py-1 bg-zinc-700 hover:bg-zinc-600 text-white text-xs rounded"
+                  disabled={myThrowSent}
+                  className="px-3 py-1 bg-zinc-700 hover:bg-zinc-600 disabled:bg-zinc-800 disabled:text-zinc-600 text-white text-xs rounded"
                 >
                   {v}
                 </button>
               ))}
               <button
                 onClick={() => simulateThrow('bull')}
-                className="px-3 py-1 bg-green-700 hover:bg-green-600 text-white text-xs rounded"
+                disabled={myThrowSent}
+                className="px-3 py-1 bg-green-700 hover:bg-green-600 disabled:bg-green-900 disabled:text-green-700 text-white text-xs rounded"
               >
                 BULL
               </button>
               <button
                 onClick={() => simulateThrow('dblbull')}
-                className="px-3 py-1 bg-red-700 hover:bg-red-600 text-white text-xs rounded"
+                disabled={myThrowSent}
+                className="px-3 py-1 bg-red-700 hover:bg-red-600 disabled:bg-red-900 disabled:text-red-700 text-white text-xs rounded"
               >
                 D-BULL
               </button>
               <button
                 onClick={() => simulateThrow('miss')}
-                className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 text-xs rounded"
+                disabled={myThrowSent}
+                className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-900 disabled:text-zinc-700 text-zinc-400 text-xs rounded"
               >
                 MISS
               </button>
