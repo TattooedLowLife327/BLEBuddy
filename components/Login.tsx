@@ -211,7 +211,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
       `}</style>
 
       <div
-        className="h-screen max-h-screen flex flex-col items-center justify-center bg-black text-white overflow-hidden"
+        className="h-screen max-h-screen flex items-center justify-center bg-black text-white overflow-hidden"
         style={{
           backgroundImage: `url(${backgroundImage})`,
           backgroundSize: 'cover',
@@ -220,7 +220,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
         }}
       >
         <div
-          className="flex flex-col items-center justify-center flex-1 min-h-0 origin-center"
+          className="flex flex-col items-center origin-center"
           style={{ transform: `scale(${loginScale})` }}
         >
           <div
@@ -513,7 +513,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
               </form>
             </div>
           </div>
-          <div className="mt-4 relative z-20">
+          <div className="mt-6 relative z-20">
             <Footer />
           </div>
         </div>

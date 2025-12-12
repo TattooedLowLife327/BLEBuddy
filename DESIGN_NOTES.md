@@ -40,7 +40,7 @@ All elements use `rounded-lg` (8px) for visual consistency:
 - **Layout**: 55% banner / 45% form split
 
 ### Footer
-- **Spacing**: `mt-4` above footer
+- **Spacing**: `mt-6` above footer
 - **Z-index**: `z-20` to render above card glow
 - **Social Icons**: External SVGs from `public/icons/` with 3D inner shadow effect baked in
   - Height: `22px` with auto width to preserve aspect ratio
