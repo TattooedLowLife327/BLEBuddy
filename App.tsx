@@ -17,7 +17,8 @@ import {
   Heart,
   Bell,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Bluetooth
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -80,6 +81,7 @@ export default function App() {
   const [doublesPartner, setDoublesPartner] = useState<{id: string; name: string} | null>(null);
   const [missedRequests, setMissedRequests] = useState<GameRequestNotification[]>([]);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [showBLEPrompt, setShowBLEPrompt] = useState(false);
   const [pendingRejoinGame, setPendingRejoinGame] = useState<{
     gameId: string;
     opponentId: string;
@@ -619,7 +621,23 @@ export default function App() {
   };
 
   const handleNavigateToOnlineLobby = () => {
+    if (!bleConnected) {
+      setShowBLEPrompt(true);
+      return;
+    }
     setCurrentView('online-lobby');
+  };
+
+  const handleBLEPromptConnect = async () => {
+    const result = await bleConnect();
+    if (result.success) {
+      setShowBLEPrompt(false);
+      setCurrentView('online-lobby');
+    }
+  };
+
+  const handleBLEPromptCancel = () => {
+    setShowBLEPrompt(false);
   };
 
   const handleNavigateToLocalDubs = () => {
@@ -781,14 +799,41 @@ export default function App() {
   const notificationCount = missedRequests.length;
 
   return (
-    <div 
+    <div
       className="h-screen w-full overflow-hidden"
       style={{
-        background: isYouthPlayer 
+        background: isYouthPlayer
           ? `url(${youthBackground}) center/cover no-repeat, black`
           : 'black'
       }}
     >
+      {/* BLE Connection Required Prompt */}
+      {showBLEPrompt && (
+        <div className="fixed inset-0 z-[70] bg-black/80 flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-blue-600 rounded-xl p-6 max-w-sm w-full text-center">
+            <Bluetooth className="w-12 h-12 text-blue-500 mx-auto mb-3" />
+            <h2 className="text-white text-lg font-bold mb-2">Connect Your Board</h2>
+            <p className="text-zinc-400 text-sm mb-4">
+              You must connect to your Granboard before entering the online lobby.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={handleBLEPromptCancel}
+                className="flex-1 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg text-sm font-semibold transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBLEPromptConnect}
+                disabled={bleStatus === 'connecting' || bleStatus === 'scanning'}
+                className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white rounded-lg text-sm font-semibold transition-colors"
+              >
+                {bleStatus === 'connecting' || bleStatus === 'scanning' ? 'Connecting...' : 'Connect'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Content */}
       <div className="relative z-10 h-screen flex flex-col overflow-hidden">

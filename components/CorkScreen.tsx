@@ -145,6 +145,13 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
     setShowLeaveConfirm(false);
   };
 
+  const handleBLEReconnect = async () => {
+    const result = await connect();
+    if (!result.success && result.error) {
+      alert(`Reconnection failed: ${result.error}`);
+    }
+  };
+
   const renderPlayer = (player: typeof player1, state: PlayerCorkState, pNum: 1 | 2, isLocal: boolean) => {
     const isThrowing = currentThrower === pNum && state.status === 'waiting';
     const showResult = revealed || player.id === visiblePlayerId;
@@ -242,6 +249,26 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
             <p className="text-zinc-500 text-xs mt-3">
               Returning to lobby...
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* BLE Disconnected Overlay - blocks gameplay until reconnected */}
+      {!isConnected && (
+        <div className="absolute inset-0 z-[60] bg-black/80 flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-blue-600 rounded-xl p-6 max-w-sm w-full text-center">
+            <Bluetooth className="w-12 h-12 text-blue-500 mx-auto mb-3" />
+            <h2 className="text-white text-lg font-bold mb-2">Board Disconnected</h2>
+            <p className="text-zinc-400 text-sm mb-4">
+              Your Granboard connection was lost. Reconnect to continue playing.
+            </p>
+            <button
+              onClick={handleBLEReconnect}
+              disabled={bleStatus === 'connecting' || bleStatus === 'scanning'}
+              className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white rounded-lg text-sm font-semibold transition-colors"
+            >
+              {bleStatus === 'connecting' || bleStatus === 'scanning' ? 'Connecting...' : 'Reconnect Board'}
+            </button>
           </div>
         </div>
       )}
