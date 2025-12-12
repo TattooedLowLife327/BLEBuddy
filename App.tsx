@@ -260,14 +260,16 @@ export default function App() {
               console.error('Error fetching profile data:', profileError);
             }
 
-            // Check for active games to rejoin
+            // Check for active games to rejoin (only recent ones - ignore stale games older than 2 hours)
             try {
+              const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
               const { data: activeGames } = await (supabase as any)
                 .schema('companion')
                 .from('active_games')
-                .select('id, player1_id, player2_id, player1_granboard_name, player2_granboard_name, status')
+                .select('id, player1_id, player2_id, player1_granboard_name, player2_granboard_name, status, created_at')
                 .or(`player1_id.eq.${session.user.id},player2_id.eq.${session.user.id}`)
-                .in('status', ['accepted', 'playing']);
+                .in('status', ['accepted', 'playing'])
+                .gte('created_at', twoHoursAgo);
 
               if (activeGames && activeGames.length > 0) {
                 const game = activeGames[0];
