@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
@@ -273,6 +273,27 @@ export default function App() {
     return () => { channels.forEach(c => supabase.removeChannel(c)); };
   }, [isAuthenticated, userId, supabase]);
 
+  const removeActiveGame = useCallback(async (gameId?: string) => {
+    if (!gameId) return;
+
+    try {
+      await (supabase as any)
+        .schema('companion')
+        .from('active_games')
+        .delete()
+        .eq('id', gameId)
+        .or(`player1_id.eq.${userId},player2_id.eq.${userId}`);
+
+      await (supabase as any)
+        .schema('companion')
+        .from('online_lobby')
+        .update({ status: 'waiting', last_seen: new Date().toISOString() })
+        .eq('player_id', userId);
+    } catch (err) {
+      console.error('Error removing active game:', err);
+    }
+  }, [supabase, userId]);
+
   const handleLoginSuccess = () => {
     setIsAuthenticated(true);
     window.location.reload();
@@ -294,14 +315,7 @@ export default function App() {
 
   const handleAbandonGame = async () => {
     if (!pendingRejoinGame) return;
-    try {
-      await (supabase as any)
-        .schema('companion')
-        .from('active_games')
-        .delete()
-        .eq('id', pendingRejoinGame.gameId)
-        .or(`player1_id.eq.${userId},player2_id.eq.${userId}`);
-    } catch (err) {}
+    await removeActiveGame(pendingRejoinGame.gameId);
     setPendingRejoinGame(null);
     navigate('/dashboard');
   };
@@ -311,14 +325,17 @@ export default function App() {
     navigate('/cork');
   };
 
-  const handleCorkComplete = (firstPlayerId: string) => {
+  const handleCorkComplete = async (firstPlayerId: string) => {
     alert(`${firstPlayerId === userId ? 'You throw' : 'Opponent throws'} first! Game screen coming soon...`);
+    await removeActiveGame(activeGame?.gameId);
     setActiveGame(null);
     navigate('/dashboard');
   };
 
-  const handleCorkCancel = () => {
+  const handleCorkCancel = async () => {
+    await removeActiveGame(activeGame?.gameId);
     setActiveGame(null);
+    setPendingRejoinGame(null);
     navigate('/online-lobby');
   };
 

@@ -92,6 +92,19 @@ export function useGameStatus(options: UseGameStatusOptions): UseGameStatusRetur
     } catch (err) {
       console.error('[GameStatus] Error deleting game:', err);
     }
+
+    // Reset lobby status so the player appears available again
+    try {
+      const { error: lobbyError } = await (supabase as any)
+        .schema('companion')
+        .from('online_lobby')
+        .update({ status: 'waiting', last_seen: new Date().toISOString() })
+        .eq('player_id', options.localPlayerId);
+
+      if (lobbyError) console.error('[GameStatus] Error updating lobby status:', lobbyError);
+    } catch (err) {
+      console.error('[GameStatus] Error updating lobby status:', err);
+    }
   }, [options.gameId, options.localPlayerId]);
 
   // Setup presence and status channels
