@@ -314,35 +314,6 @@ export default function App() {
     return () => { channels.forEach(c => supabase.removeChannel(c)); };
   }, [isAuthenticated, userId, supabase]);
 
-  const removeActiveGame = useCallback(async (gameId?: string) => {
-    if (!gameId) return;
-
-    try {
-      // Mark the game (or any game for this user) as abandoned so rejoin queries ignore it
-      await (supabase as any)
-        .schema('companion')
-        .from('active_games')
-        .update({ status: 'abandoned' })
-        .or(`id.eq.${gameId},player1_id.eq.${userId},player2_id.eq.${userId}`)
-        .in('status', ['pending', 'accepted', 'playing']);
-
-      // Then remove the record(s) entirely
-      await (supabase as any)
-        .schema('companion')
-        .from('active_games')
-        .delete()
-        .or(`id.eq.${gameId},player1_id.eq.${userId},player2_id.eq.${userId}`);
-
-      await (supabase as any)
-        .schema('companion')
-        .from('online_lobby')
-        .update({ status: 'waiting', last_seen: new Date().toISOString() })
-        .eq('player_id', userId);
-    } catch (err) {
-      console.error('Error removing active game:', err);
-    }
-  }, [supabase, userId]);
-
   const handleLoginSuccess = () => {
     setIsAuthenticated(true);
     window.location.reload();
