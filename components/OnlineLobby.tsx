@@ -298,33 +298,11 @@ export function OnlineLobby({
     await fetchAvailablePlayers();
   }, [fetchAvailablePlayers]);
 
+  // Initial fetch only - no auto-polling
   useEffect(() => {
-    if (!canAccess) {
-      return;
-    }
-
+    if (!canAccess) return;
     fetchAvailablePlayers();
-
-    const supabaseAny = supabase as any;
-    const channel = supabaseAny
-      .channel('online-lobby-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'companion',
-          table: 'online_lobby',
-        },
-        () => {
-          fetchAvailablePlayers();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabaseAny.removeChannel(channel);
-    };
-  }, [canAccess, supabase, fetchAvailablePlayers]);
+  }, [canAccess]);
 
   // Listen for incoming game requests
   useEffect(() => {
@@ -404,12 +382,14 @@ export function OnlineLobby({
   const endIndex = startIndex + CARDS_PER_PAGE;
   const currentPlayers = availablePlayers.slice(startIndex, endIndex);
 
-  const handlePrevPage = () => {
+  const handlePrevPage = async () => {
     setCurrentPage((prev) => Math.max(0, prev - 1));
+    await fetchAvailablePlayers();
   };
 
-  const handleNextPage = () => {
+  const handleNextPage = async () => {
     setCurrentPage((prev) => Math.min(totalPages - 1, prev + 1));
+    await fetchAvailablePlayers();
   };
 
   const handlePlayerClick = (player: AvailablePlayer) => {
