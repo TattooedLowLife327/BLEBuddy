@@ -26,13 +26,14 @@ interface UseGameStatusReturn {
 const DISCONNECT_TIMEOUT_SECONDS = 60;
 
 export function useGameStatus(options: UseGameStatusOptions): UseGameStatusReturn {
-  const [isOpponentOnline, setIsOpponentOnline] = useState(true);
+  const [isOpponentOnline, setIsOpponentOnline] = useState(false); // Start false until we actually see them
   const [disconnectCountdown, setDisconnectCountdown] = useState<number | null>(null);
   const [opponentLeftMessage, setOpponentLeftMessage] = useState<string | null>(null);
 
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const presenceChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const statusChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const hasSeenOpponentRef = useRef(false); // Track if we've ever seen opponent online
 
   // Clear countdown timer
   const clearCountdown = useCallback(() => {
@@ -111,25 +112,35 @@ export function useGameStatus(options: UseGameStatusOptions): UseGameStatusRetur
         const opponentOnline = onlinePlayerIds.includes(options.remotePlayerId);
 
         console.log(`[GameStatus] Presence sync - online players:`, onlinePlayerIds);
-        console.log(`[GameStatus] Opponent online: ${opponentOnline}`);
+        console.log(`[GameStatus] Opponent online: ${opponentOnline}, hasSeenOpponent: ${hasSeenOpponentRef.current}`);
 
-        if (opponentOnline && !isOpponentOnline) {
-          // Opponent reconnected
-          console.log('[GameStatus] Opponent reconnected!');
-          clearCountdown();
-          setIsOpponentOnline(true);
-          options.onOpponentReconnected?.();
-        } else if (!opponentOnline && isOpponentOnline) {
-          // Opponent disconnected - might be network issue
-          console.log('[GameStatus] Opponent disconnected - starting countdown');
+        if (opponentOnline) {
+          // Opponent is online - mark as seen and clear any countdown
+          if (!hasSeenOpponentRef.current) {
+            console.log('[GameStatus] First time seeing opponent online');
+            hasSeenOpponentRef.current = true;
+          }
+          if (!isOpponentOnline) {
+            console.log('[GameStatus] Opponent came online/reconnected');
+            clearCountdown();
+            setIsOpponentOnline(true);
+            options.onOpponentReconnected?.();
+          }
+        } else if (!opponentOnline && hasSeenOpponentRef.current && isOpponentOnline) {
+          // Opponent went offline AFTER we previously saw them - start countdown
+          console.log('[GameStatus] Opponent disconnected after being online - starting countdown');
           setIsOpponentOnline(false);
           options.onOpponentDisconnected?.();
           startCountdown();
+        } else if (!opponentOnline && !hasSeenOpponentRef.current) {
+          // Opponent not online but we haven't seen them yet - just waiting
+          console.log('[GameStatus] Waiting for opponent to join...');
         }
       })
       .on('presence', { event: 'join' }, ({ key }) => {
         console.log(`[GameStatus] Player joined: ${key}`);
         if (key === options.remotePlayerId) {
+          hasSeenOpponentRef.current = true;
           clearCountdown();
           setIsOpponentOnline(true);
           options.onOpponentReconnected?.();
