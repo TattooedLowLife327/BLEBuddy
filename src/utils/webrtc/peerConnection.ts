@@ -28,6 +28,24 @@ class WebRTCManager {
   private readonly ICE_SERVERS: RTCIceServer[] = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    // Free TURN servers from Open Relay Project
+    {
+      urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
   ];
 
   onRemoteStream(callback: (stream: MediaStream) => void): void {
@@ -201,6 +219,7 @@ class WebRTCManager {
       await this.sendSignal({ type: 'answer', payload: answer, from: this.localPlayerId, to: this.remotePlayerId, gameId: this.gameId });
     } else if (message.type === 'answer') {
       console.log('[WebRTC] Setting remote description from answer...');
+      this.clearOfferRetry(); // Got answer, stop retrying
       await this.peerConnection.setRemoteDescription(new RTCSessionDescription(message.payload as RTCSessionDescriptionInit));
       console.log('[WebRTC] Remote description set from answer');
     } else if (message.type === 'ice-candidate') {
@@ -213,23 +232,57 @@ class WebRTCManager {
     }
   }
 
+  private offerRetryCount = 0;
+  private maxOfferRetries = 5;
+  private offerRetryTimeout: NodeJS.Timeout | null = null;
+
   async startCall(): Promise<void> {
     if (!this.peerConnection) {
       console.error('[WebRTC] Cannot start call - no peer connection');
       return;
     }
-    console.log('[WebRTC] Starting call - creating offer...');
+
+    this.offerRetryCount = 0;
+    await this.sendOffer();
+  }
+
+  private async sendOffer(): Promise<void> {
+    if (!this.peerConnection) return;
+
+    this.offerRetryCount++;
+    console.log(`[WebRTC] Sending offer (attempt ${this.offerRetryCount}/${this.maxOfferRetries})...`);
+
     const offer = await this.peerConnection.createOffer();
     await this.peerConnection.setLocalDescription(offer);
-    console.log('[WebRTC] Offer created, sending...');
     await this.sendSignal({ type: 'offer', payload: offer, from: this.localPlayerId, to: this.remotePlayerId, gameId: this.gameId });
     console.log('[WebRTC] Offer sent, waiting for answer...');
+
+    // Set up retry if no connection established
+    if (this.offerRetryCount < this.maxOfferRetries) {
+      this.offerRetryTimeout = setTimeout(() => {
+        if (this.peerConnection?.connectionState !== 'connected' &&
+            this.peerConnection?.connectionState !== 'connecting' &&
+            this.peerConnection?.iceConnectionState !== 'connected' &&
+            this.peerConnection?.iceConnectionState !== 'checking') {
+          console.log('[WebRTC] No response, retrying offer...');
+          this.sendOffer();
+        }
+      }, 3000);
+    }
+  }
+
+  private clearOfferRetry(): void {
+    if (this.offerRetryTimeout) {
+      clearTimeout(this.offerRetryTimeout);
+      this.offerRetryTimeout = null;
+    }
   }
 
   getLocalMediaStream(): MediaStream | null { return this.localStream; }
   getRemoteMediaStream(): MediaStream | null { return this.remoteStream; }
 
   async disconnect(): Promise<void> {
+    this.clearOfferRetry();
     if (this.localStream) { this.localStream.getTracks().forEach(track => track.stop()); this.localStream = null; }
     if (this.peerConnection) { this.peerConnection.close(); this.peerConnection = null; }
     if (this.signalChannel) { await this.signalChannel.unsubscribe(); this.signalChannel = null; }
