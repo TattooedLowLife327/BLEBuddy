@@ -257,7 +257,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
               <p className="text-center text-xs pt-2 text-gray-500">
                 Not a LowLife yet?{' '}
                 <a
-                  href="https://www.lowlifesofgranboard.com/register"
+                  href="https://www.lowlifesofgranboard.com/launch"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-purple-400 underline hover:text-purple-300"
