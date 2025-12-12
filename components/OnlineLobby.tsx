@@ -781,41 +781,41 @@ export function OnlineLobby({
       )}
 
       <div className="h-screen w-full overflow-hidden bg-black">
-        <div className="h-full flex flex-col p-6 max-w-[1400px] mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="h-full flex flex-col p-3 max-w-[1400px] mx-auto">
+        {/* Header - compact */}
+        <div className="flex items-center justify-between mb-2">
           <button
             onClick={onBack}
-            className="p-2 text-white hover:opacity-80 transition-opacity"
+            className="p-1 text-white hover:opacity-80 transition-opacity"
             aria-label="Back"
           >
-            <ArrowLeft className="w-6 h-6" />
+            <ArrowLeft className="w-5 h-5" />
           </button>
 
           <h1
-            className="text-3xl text-white"
-            style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold', color: accentColor }}
+            className="text-xl text-white uppercase tracking-wider"
+            style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
           >
             Online Lobby
           </h1>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
             {isDoublesTeam && partnerName && (
               <div className="text-right">
-                <p className="text-sm text-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                <p className="text-xs text-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
                   Team with
                 </p>
-                <p className="text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}>
+                <p className="text-white text-sm" style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}>
                   {partnerName}
                 </p>
               </div>
             )}
             <button
               onClick={handleManualRefresh}
-              className="p-2 text-white hover:opacity-80 transition-opacity rounded-full border border-white/10"
+              className="p-1.5 text-white hover:opacity-80 transition-opacity rounded-full border border-white/10"
               aria-label="Refresh lobby"
             >
-              <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
             </button>
             <UserMenu
               profilePic={profilePic}
@@ -827,13 +827,13 @@ export function OnlineLobby({
         </div>
 
         {/* Players Grid with Pagination */}
-        <div className="flex-1 flex flex-col justify-center px-2 relative">
+        <div className="flex-1 flex items-center px-10 relative">
           {loading ? (
-            <div className="text-center text-gray-400 py-12">
+            <div className="text-center text-gray-400 py-12 w-full">
               Loading available players...
             </div>
           ) : availablePlayers.length === 0 ? (
-            <div className="text-center text-gray-400 py-12">
+            <div className="text-center text-gray-400 py-12 w-full">
               <p style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
                 No players available. Waiting for opponents...
               </p>
@@ -844,16 +844,15 @@ export function OnlineLobby({
               {currentPage > 0 && (
                 <button
                   onClick={handlePrevPage}
-                  className="absolute left-0 top-1/2 transform -translate-y-1/2 z-10 p-3 text-white hover:opacity-80 transition-opacity"
+                  className="absolute left-0 top-1/2 transform -translate-y-1/2 z-10 p-2 text-white/70 hover:text-white transition-colors"
                   aria-label="Previous page"
-                  style={{ marginLeft: '-20px' }}
                 >
-                  <ChevronLeft className="w-8 h-8" />
+                  <ChevronLeft className="w-10 h-10" />
                 </button>
               )}
 
               {/* Players Grid - 2 rows x 5 columns */}
-              <div className="grid grid-cols-5 gap-3">
+              <div className="grid grid-cols-5 grid-rows-2 gap-2 w-full h-full max-h-[calc(100vh-120px)]">
                 {currentPlayers.map((player) => {
                   const playerAccentColor = player.accentColor;
                   const isIdle = player.status === 'idle';
@@ -880,7 +879,7 @@ export function OnlineLobby({
                     <div
                       key={player.id}
                       onClick={() => !isInMatch && handlePlayerClick(player)}
-                      className={`relative aspect-square rounded-lg overflow-hidden ${isInMatch ? 'cursor-not-allowed' : 'cursor-pointer hover:scale-105'} transition-transform`}
+                      className={`relative rounded-lg overflow-hidden ${isInMatch ? 'cursor-not-allowed' : 'cursor-pointer hover:scale-[1.02]'} transition-transform`}
                       style={{
                         filter: isIdle || isInMatch ? 'grayscale(0.7) brightness(0.6)' : 'none',
                       }}
@@ -923,27 +922,27 @@ export function OnlineLobby({
                       />
 
                       {/* Card Content */}
-                      <div className="relative z-[5] h-full flex flex-col items-center justify-center p-2">
+                      <div className="relative z-[5] h-full flex flex-col items-center justify-center p-1">
                         {/* Profile Picture with glow for waiting players */}
-                        <div className="relative mb-2">
+                        <div className="relative mb-1">
                           {isWaiting && (
                             <div
-                              className="absolute inset-0 rounded-full blur-lg"
+                              className="absolute inset-0 rounded-full blur-md"
                               style={{
                                 backgroundColor: playerAccentColor,
-                                opacity: 0.6,
-                                transform: 'scale(1.3)',
+                                opacity: 0.5,
+                                transform: 'scale(1.2)',
                               }}
                             />
                           )}
                           <Avatar
-                            className="relative w-14 h-14 border-2"
+                            className="relative w-10 h-10 border-2"
                             style={{
                               borderColor: isIdle ? '#52525b' : playerAccentColor,
                             }}
                           >
                             <AvatarImage src={resolveProfilePicUrl(player.profilePic)} />
-                            <AvatarFallback className="bg-zinc-800 text-white text-lg">
+                            <AvatarFallback className="bg-zinc-800 text-white text-sm">
                               {player.granboardName.charAt(0)}
                             </AvatarFallback>
                           </Avatar>
@@ -951,7 +950,7 @@ export function OnlineLobby({
 
                         {/* Granboard Name */}
                         <h3
-                          className="text-white text-sm font-bold truncate max-w-full px-1"
+                          className="text-white text-xs font-bold truncate max-w-full px-1"
                           style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}
                         >
                           {player.granboardName}
@@ -959,33 +958,33 @@ export function OnlineLobby({
 
                         {/* Team indicator */}
                         {player.isDoublesTeam && player.partnerName && (
-                          <p className="text-xs text-gray-400 truncate max-w-full" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                          <p className="text-[10px] text-gray-400 truncate max-w-full" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
                             + {player.partnerName}
                           </p>
                         )}
 
                         {/* Status indicator for idle/in_match */}
                         {isIdle && (
-                          <p className="text-yellow-500 text-xs mt-1 font-semibold">IDLE</p>
+                          <p className="text-yellow-500 text-[10px] font-semibold">IDLE</p>
                         )}
                         {isInMatch && (
-                          <p className="text-red-400 text-xs mt-1 font-semibold">IN MATCH</p>
+                          <p className="text-red-400 text-[10px] font-semibold">IN MATCH</p>
                         )}
 
-                        {/* Stats - only show for waiting players */}
+                        {/* Stats bar at bottom - like Granboard */}
                         {isWaiting && (
-                          <div className="flex gap-3 mt-1 text-xs">
-                            <div className="text-center">
-                              <p className="text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>01</p>
-                              <p className="text-white font-bold" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                                {player.mprNumeric.toFixed(1)}
-                              </p>
+                          <div className="absolute bottom-0 left-0 right-0 flex text-[10px] bg-teal-600/80 rounded-b-lg">
+                            <div className="flex-1 text-center py-0.5 text-white font-bold border-r border-teal-700">
+                              01
                             </div>
-                            <div className="text-center">
-                              <p className="text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>CR</p>
-                              <p className="text-white font-bold" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                                {player.pprNumeric.toFixed(2)}
-                              </p>
+                            <div className="flex-1 text-center py-0.5 text-white font-bold border-r border-teal-700">
+                              {player.mprNumeric.toFixed(1)}
+                            </div>
+                            <div className="flex-1 text-center py-0.5 text-white font-bold border-r border-teal-700">
+                              CR
+                            </div>
+                            <div className="flex-1 text-center py-0.5 text-white font-bold">
+                              {player.pprNumeric.toFixed(1)}
                             </div>
                           </div>
                         )}
@@ -999,19 +998,11 @@ export function OnlineLobby({
               {currentPage < totalPages - 1 && (
                 <button
                   onClick={handleNextPage}
-                  className="absolute right-0 top-1/2 transform -translate-y-1/2 z-10 p-3 text-white hover:opacity-80 transition-opacity"
+                  className="absolute right-0 top-1/2 transform -translate-y-1/2 z-10 p-2 text-white/70 hover:text-white transition-colors"
                   aria-label="Next page"
-                  style={{ marginRight: '-20px' }}
                 >
-                  <ChevronRight className="w-8 h-8" />
+                  <ChevronRight className="w-10 h-10" />
                 </button>
-              )}
-
-              {/* Page Indicator */}
-              {totalPages > 1 && (
-                <div className="text-center mt-4 text-gray-400 text-sm" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                  Page {currentPage + 1} of {totalPages}
-                </div>
               )}
             </>
           )}
