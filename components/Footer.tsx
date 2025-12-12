@@ -71,7 +71,7 @@ export function Footer({ onLockClick }: { onLockClick?: () => void }) {
     <footer className="w-full mt-auto pb-2">
       <div className="mx-auto">
         {/* Social Icons */}
-        <div className="flex items-center justify-center gap-3 mb-2">
+        <div className="flex items-center justify-center gap-4 mb-2">
           {socialLinks.map(social => (
             <a
               key={social.name}
@@ -84,14 +84,14 @@ export function Footer({ onLockClick }: { onLockClick?: () => void }) {
               <img
                 src={social.icon}
                 alt={social.label}
-                className="h-[18px] w-auto"
+                className="h-[22px] w-auto"
               />
             </a>
           ))}
         </div>
 
         {/* Links with dividers */}
-        <div className="flex items-center justify-center gap-3 text-xs mb-2">
+        <div className="flex items-center justify-center gap-3 text-sm mb-2">
           <a
             href="https://www.lowlifesofgranboard.com/terms"
             target="_blank"

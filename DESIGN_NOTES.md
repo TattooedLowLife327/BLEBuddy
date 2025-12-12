@@ -40,13 +40,15 @@ All elements use `rounded-lg` (8px) for visual consistency:
 - **Layout**: 55% banner / 45% form split
 
 ### Footer
-- **Spacing**: `mt-6` above footer
+- **Spacing**: `mt-4` above footer
 - **Z-index**: `z-20` to render above card glow
 - **Social Icons**: External SVGs from `public/icons/` with 3D inner shadow effect baked in
-  - Height: `18px` with auto width to preserve aspect ratio
+  - Height: `22px` with auto width to preserve aspect ratio
+  - Gap: `gap-4` between icons
   - Hover: `scale-110` transform
   - Icons have white fill with inner shadow filter for 3D appearance
   - Order: Twitch, Facebook, Messenger, Spotify, TikTok, Snapchat, Discord, Instagram, YouTube, Twitter
+- **Links**: `text-sm` size (Terms, Privacy, Contact)
 - **TODO (LLOGB)**: Add Twitter, Instagram, Messenger icons to main app footer + update order
 
 ---
@@ -76,6 +78,34 @@ All elements use `rounded-lg` (8px) for visual consistency:
 | Dropdowns | `rounded-lg` (8px) |
 
 *Note: Login page uses consistent 8px radius across all elements for visual harmony.*
+
+---
+
+## Beta vs Production
+
+### During Beta
+- [ ] Beta banner/badge visible in UI
+- [ ] Debug logging enabled
+- [ ] Test accounts allowed
+- [ ] Waitlist link active on login page
+- [ ] Error details shown to users (for bug reports)
+- [ ] "No board" demo mode enabled (bypass BLE requirement)
+
+### After Beta (Production)
+- [ ] Remove beta banner/badge
+- [ ] Disable verbose logging
+- [ ] Remove test account access
+- [ ] Replace waitlist link with signup/direct access
+- [ ] Hide error details (show friendly messages only)
+- [ ] Enable analytics/telemetry
+- [ ] Update app store descriptions
+
+### Files to Update
+| File | Beta | Production |
+|------|------|------------|
+| `Login.tsx` | Waitlist link | Direct signup |
+| `App.tsx` | Beta badge | Remove |
+| `utils/` | Debug logs | Production logs |
 
 ---
 
