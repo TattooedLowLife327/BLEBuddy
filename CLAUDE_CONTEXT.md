@@ -1,6 +1,6 @@
 # BLE Buddy - Claude Context
 
-**Last Updated**: December 11, 2025 (BLE gate for online lobby, disconnect handling during game)
+**Last Updated**: December 11, 2025 (Idle detection, notification bell in lobby)
 
 ---
 
@@ -267,6 +267,8 @@ const { localStream, remoteStream, connectionState, initialize, disconnect } = u
 - **Game cleanup uses DELETE** - avoids RLS/column issues with UPDATE
 - **BLE required for online lobby** - must connect board before entering, prompt shown if not connected
 - **BLE disconnect handling in game** - blocking overlay with reconnect button, pauses game for that player only
+- **Idle detection in lobby** - 15min inactivity triggers warning, 5min countdown to respond or auto-remove
+- **Notification bell** - bottom right of lobby, shows missed game requests with clear all option
 - Build passing
 
 ### ⏳ In Progress / TODO
