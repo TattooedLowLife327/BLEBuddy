@@ -60,6 +60,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
   const { lastThrow, isConnected, connect, status: bleStatus } = useBLE();
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const mountTimeRef = useRef<number>(Date.now());
   const supabase = createClient();
 
   const remotePlayerId = visiblePlayerId === player1.id ? player2.id : player1.id;
@@ -197,7 +198,13 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
 
   // Handle BLE throws - send MY throws to the channel
   useEffect(() => {
-    if (!lastThrow || lastThrow.timestamp === lastTs || winner || myThrowSent) return;
+    if (!lastThrow || winner || myThrowSent) return;
+
+    // Ignore stale throws from before this component mounted (prevents phantom auto-throws)
+    const throwTime = new Date(lastThrow.timestamp).getTime();
+    if (throwTime <= mountTimeRef.current) return;
+
+    if (lastThrow.timestamp === lastTs) return;
     setLastTs(lastThrow.timestamp);
 
     const { score, valid, display } = getCorkScore(lastThrow);
