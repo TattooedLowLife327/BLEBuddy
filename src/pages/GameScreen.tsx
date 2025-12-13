@@ -1007,10 +1007,10 @@ export function GameScreen({ onLeaveMatch }: GameScreenProps) {
         </div>
       )}
 
-      {/* Center score - shifts away from active player's larger camera */}
+      {/* Center score */}
       <div style={{
         position: 'absolute',
-        left: introComplete ? (p1Active ? '55%' : '45%') : '50%',
+        left: '50%',
         top: '40%',
         transform: 'translate(-50%, -50%)',
         fontFamily: FONT_SCORE,
@@ -1020,7 +1020,6 @@ export function GameScreen({ onLeaveMatch }: GameScreenProps) {
         color: '#FFFFFF',
         textShadow: '-6px 6px 9.7px rgba(0, 0, 0, 0.78)',
         zIndex: 10,
-        transition: 'left 0.3s ease-out',
       }}>
         {currentThrower === 'p1' ? p1Score : p2Score}
       </div>
