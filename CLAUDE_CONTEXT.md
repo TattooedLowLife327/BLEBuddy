@@ -1,6 +1,6 @@
 # BLE Buddy - Claude Context
 
-**Last Updated**: December 12, 2025 (AppHeader self-contained, Dashboard prop cleanup, mock player removal WIP)
+**Last Updated**: December 13, 2025 (80% stat tracking for 01 games, medley match flow, Choice game)
 
 ---
 
@@ -298,6 +298,13 @@ const { localStream, remoteStream, connectionState, initialize, disconnect } = u
 - **AppHeader self-contained** - Fetches its own profilepic, profilecolor, granboard_name from database (no more prop drilling)
 - **Dashboard prop cleanup** - Removed unused userName, profilePic, accentColor props from Dashboard interface and App.tsx
 - **UserMenu prop fix** - Changed profilePic to profilepic (lowercase) to match database column name
+- **Medley match flow** - Cork for first game, loser throws first in middle games, cork for tiebreaker
+- **Choice (CH) game** - Cork winner picks "Throw First" OR "Pick Game" for choice games
+- **80% stat tracking (01 games)** - PPR = (startScore - currentScore) / dartsThrown * 3
+  - Threshold: 301 = remaining <=50, 501 = remaining <=100
+  - First player to hit 80% freezes BOTH players' PPR stats at end of round
+  - Game continues normally after freeze
+  - PPR displays above player bars with "80%" indicator when frozen
 
 ### ⏳ In Progress / TODO
 1. **OnlineLobby mock player removal** - MOCK_PLAYERS array and USE_MOCK_DATA constants removed, but there's a syntax error in the file that needs fixing (try/catch structure issue around line 306)

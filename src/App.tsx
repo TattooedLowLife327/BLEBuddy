@@ -547,11 +547,14 @@ export default function App() {
         />
       } />
 
-      {/* Preview for post-cork match HUD */}
+      {/* Game screen (requires auth) */}
       <Route path="/game-preview" element={
         !isAuthenticated ? <Navigate to={`/login${queryString}`} /> :
         <GameScreen onLeaveMatch={handleLeaveMatch} />
       } />
+
+      {/* UI Preview - no auth for testing */}
+      <Route path="/ui-preview" element={<GameScreen />} />
 
       <Route path="/" element={<Navigate to={isAuthenticated ? `/dashboard${queryString}` : `/login${queryString}`} />} />
       <Route path="*" element={<Navigate to={isAuthenticated ? `/dashboard${queryString}` : `/login${queryString}`} />} />

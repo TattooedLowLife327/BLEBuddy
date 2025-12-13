@@ -38,3 +38,6 @@ Thumbs.db
 
 #Ignore insiders AI rules
 .github\instructions\codacy.instructions.md
+
+# Figma frame references (design only)
+public/figmaframereferences/
