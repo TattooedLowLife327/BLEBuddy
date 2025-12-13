@@ -45,6 +45,7 @@ interface OnlineLobbyProps {
   onGameAccepted?: (gameData: GameData) => void;
   missedRequests?: MissedRequest[];
   onClearMissedRequests?: () => void;
+  onOpenSettings?: () => void;
 }
 
 type PlayerStatus = 'waiting' | 'idle' | 'in_match';
@@ -57,6 +58,9 @@ interface AvailablePlayer {
   mprNumeric: number;
   pprNumeric: number;
   overallNumeric: number;
+  mprLetter?: string;
+  pprLetter?: string;
+  overallLetter?: string;
   accentColor: string;
   isDoublesTeam: boolean;
   partnerId?: string;
@@ -64,25 +68,6 @@ interface AvailablePlayer {
   status: PlayerStatus;
   idleTimeRemaining?: number; // seconds remaining in idle countdown (0-300)
 }
-
-// Mock players for development UI
-const MOCK_PLAYERS: AvailablePlayer[] = [
-  { id: 'mock-1', player_id: 'mock-1', granboardName: 'DartMaster99', profilePic: undefined, mprNumeric: 2.8, pprNumeric: 45.2, overallNumeric: 75, accentColor: '#ef4444', isDoublesTeam: false, status: 'waiting' },
-  { id: 'mock-2', player_id: 'mock-2', granboardName: 'TripleTwenty', profilePic: undefined, mprNumeric: 3.1, pprNumeric: 52.8, overallNumeric: 82, accentColor: '#22c55e', isDoublesTeam: false, status: 'waiting' },
-  { id: 'mock-3', player_id: 'mock-3', granboardName: 'BullseyeQueen', profilePic: undefined, mprNumeric: 2.5, pprNumeric: 38.5, overallNumeric: 68, accentColor: '#3b82f6', isDoublesTeam: false, status: 'waiting' },
-  { id: 'mock-4', player_id: 'mock-4', granboardName: 'SteelTipSteve', profilePic: undefined, mprNumeric: 2.9, pprNumeric: 48.1, overallNumeric: 78, accentColor: '#f59e0b', isDoublesTeam: false, status: 'idle', idleTimeRemaining: 180 },
-  { id: 'mock-5', player_id: 'mock-5', granboardName: 'NineDarter', profilePic: undefined, mprNumeric: 3.5, pprNumeric: 61.2, overallNumeric: 91, accentColor: '#ec4899', isDoublesTeam: false, status: 'waiting' },
-  { id: 'mock-6', player_id: 'mock-6', granboardName: 'CricketKing', profilePic: undefined, mprNumeric: 2.2, pprNumeric: 35.0, overallNumeric: 62, accentColor: '#8b5cf6', isDoublesTeam: true, partnerName: 'DartBuddy', status: 'waiting' },
-  { id: 'mock-7', player_id: 'mock-7', granboardName: 'CheckoutChamp', profilePic: undefined, mprNumeric: 2.7, pprNumeric: 44.3, overallNumeric: 73, accentColor: '#06b6d4', isDoublesTeam: false, status: 'idle', idleTimeRemaining: 60 },
-  { id: 'mock-8', player_id: 'mock-8', granboardName: 'T20Hunter', profilePic: undefined, mprNumeric: 3.0, pprNumeric: 50.5, overallNumeric: 80, accentColor: '#84cc16', isDoublesTeam: false, status: 'in_match' },
-  { id: 'mock-9', player_id: 'mock-9', granboardName: 'DoubleTrouble', profilePic: undefined, mprNumeric: 2.4, pprNumeric: 40.2, overallNumeric: 66, accentColor: '#f97316', isDoublesTeam: false, status: 'waiting' },
-  { id: 'mock-10', player_id: 'mock-10', granboardName: 'LegFinisher', profilePic: undefined, mprNumeric: 2.6, pprNumeric: 42.8, overallNumeric: 70, accentColor: '#14b8a6', isDoublesTeam: false, status: 'in_match' },
-  { id: 'mock-11', player_id: 'mock-11', granboardName: 'ArrowAce', profilePic: undefined, mprNumeric: 2.9, pprNumeric: 47.5, overallNumeric: 76, accentColor: '#a855f7', isDoublesTeam: false, status: 'waiting' },
-  { id: 'mock-12', player_id: 'mock-12', granboardName: 'ShanghaiSam', profilePic: undefined, mprNumeric: 2.3, pprNumeric: 36.8, overallNumeric: 64, accentColor: '#eab308', isDoublesTeam: false, status: 'waiting' },
-  { id: 'mock-13', player_id: 'mock-13', granboardName: 'TonMachine', profilePic: undefined, mprNumeric: 3.2, pprNumeric: 55.0, overallNumeric: 85, accentColor: '#10b981', isDoublesTeam: false, status: 'waiting' },
-  { id: 'mock-14', player_id: 'mock-14', granboardName: 'FinishFirst', profilePic: undefined, mprNumeric: 2.7, pprNumeric: 43.5, overallNumeric: 72, accentColor: '#f43f5e', isDoublesTeam: false, status: 'waiting' },
-  { id: 'mock-15', player_id: 'mock-15', granboardName: 'BoardBoss', profilePic: undefined, mprNumeric: 3.0, pprNumeric: 51.2, overallNumeric: 81, accentColor: '#0ea5e9', isDoublesTeam: false, status: 'waiting' },
-];
 
 export function OnlineLobby({
   onBack,
@@ -99,6 +84,7 @@ export function OnlineLobby({
   onGameAccepted,
   missedRequests = [],
   onClearMissedRequests,
+  onOpenSettings,
 }: OnlineLobbyProps) {
   const [availablePlayers, setAvailablePlayers] = useState<AvailablePlayer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -134,8 +120,6 @@ export function OnlineLobby({
 
   const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
   const IDLE_WARNING_DURATION_S = 300; // 5 minutes in seconds
-  const USE_MOCK_DATA = true; // Toggle for development UI
-  const INCLUDE_REAL_PLAYERS = true; // Show real DB players alongside mock data
 
   // Wrap logout to clean up lobby entry first
   const handleLogout = useCallback(async () => {
@@ -325,33 +309,26 @@ export function OnlineLobby({
 
       let allPlayers: AvailablePlayer[] = [];
 
-      // Add mock players if enabled
-      if (USE_MOCK_DATA) {
-        allPlayers = [...MOCK_PLAYERS];
-      }
+      // Small delay for visual feedback
+      await new Promise(resolve => setTimeout(resolve, 300));
 
-      // Fetch real players from database (either in addition to mock, or exclusively)
-      if (!USE_MOCK_DATA || INCLUDE_REAL_PLAYERS) {
-        // Small delay for visual feedback
-        await new Promise(resolve => setTimeout(resolve, 300));
+      // Fetch all statuses (waiting, idle, in_match) - filter out current user
+      // Also filter out stale entries (last_seen > 2 minutes ago)
+      const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+      const { data: lobbyData, error: lobbyError } = await (supabase as any)
+        .schema('companion')
+        .from('online_lobby')
+        .select('*')
+        .in('status', ['waiting', 'idle', 'in_match'])
+        .neq('player_id', userId)
+        .gte('last_seen', twoMinutesAgo)
+        .order('last_seen', { ascending: false })
+        .order('created_at', { ascending: false });
 
-        // Fetch all statuses (waiting, idle, in_match) - filter out current user
-        // Also filter out stale entries (last_seen > 2 minutes ago)
-        const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
-        const { data: lobbyData, error: lobbyError } = await (supabase as any)
-          .schema('companion')
-          .from('online_lobby')
-          .select('*')
-          .in('status', ['waiting', 'idle', 'in_match'])
-          .neq('player_id', userId)
-          .gte('last_seen', twoMinutesAgo)
-          .order('last_seen', { ascending: false })
-          .order('created_at', { ascending: false });
-
-        if (lobbyError) {
-          console.error('Error fetching lobby data:', lobbyError);
-        } else if (lobbyData && lobbyData.length > 0) {
-          const playersWithData = await Promise.all(
+      if (lobbyError) {
+        console.error('Error fetching lobby data:', lobbyError);
+      } else if (lobbyData && lobbyData.length > 0) {
+        const playersWithData = await Promise.all(
             lobbyData.map(async lobbyEntry => {
               const playerId = lobbyEntry.player_id;
               const isYouth = lobbyEntry.is_youth;
@@ -388,10 +365,10 @@ export function OnlineLobby({
 
               const statsQuery = isYouth
                 ? (supabase as any).schema('youth').from('youth_stats')
-                : supabase.from('player_stats');
+                : (supabase as any).schema('player').from('player_stats');
 
               const { data: rawStatsData, error: statsError } = await statsQuery
-                .select('mpr_numeric, ppr_numeric, overall_numeric, solo_games_played, solo_wins, solo_win_rate, solo_highest_checkout')
+                .select('mpr_numeric, ppr_numeric, overall_numeric, mpr_letter, ppr_letter, overall_letter, solo_games_played, solo_wins, solo_win_rate, solo_highest_checkout')
                 .eq('id', playerId)
                 .single();
 
@@ -404,6 +381,9 @@ export function OnlineLobby({
                 mpr_numeric: number | null;
                 ppr_numeric: number | null;
                 overall_numeric: number | null;
+                mpr_letter: string | null;
+                ppr_letter: string | null;
+                overall_letter: string | null;
                 solo_games_played: number | null;
                 solo_wins: number | null;
                 solo_win_rate: number | null;
@@ -436,6 +416,9 @@ export function OnlineLobby({
                 mprNumeric: statsData?.mpr_numeric ?? 0,
                 pprNumeric: statsData?.ppr_numeric ?? 0,
                 overallNumeric: statsData?.overall_numeric ?? 0,
+                mprLetter: statsData?.mpr_letter || undefined,
+                pprLetter: statsData?.ppr_letter || undefined,
+                overallLetter: statsData?.overall_letter || undefined,
                 accentColor: profileData?.profilecolor || '#a855f7',
                 isDoublesTeam: !!lobbyEntry.partner_id,
                 partnerId: lobbyEntry.partner_id || undefined,
@@ -446,25 +429,17 @@ export function OnlineLobby({
             })
           );
 
-          const validPlayers = playersWithData.filter((p): p is AvailablePlayer => p !== null);
-          // Add real players to the combined list
-          allPlayers = [...allPlayers, ...validPlayers];
-        } else {
-          console.log('No real players in lobby');
-        }
+        const validPlayers = playersWithData.filter((p): p is AvailablePlayer => p !== null);
+        allPlayers = [...allPlayers, ...validPlayers];
+      } else {
+        console.log('No players in lobby');
       }
 
-      // Sort all players (mock + real combined) by status
       const sorted = sortByStatus(allPlayers);
       setAvailablePlayers(sorted);
     } catch (err) {
       console.error('Error in fetchAvailablePlayers:', err);
-      // If error, at least show mock players if enabled
-      if (USE_MOCK_DATA) {
-        setAvailablePlayers(sortByStatus(MOCK_PLAYERS));
-      } else {
-        setAvailablePlayers([]);
-      }
+      setAvailablePlayers([]);
     } finally {
       setLoading(false);
       setIsRefreshing(false);
@@ -856,10 +831,8 @@ export function OnlineLobby({
             createdAt: r.timestamp,
           }))}
           onClearMissedRequests={onClearMissedRequests}
-          profilePic={profilePic}
-          accentColor={accentColor}
-          userName={userName}
           onLogout={handleLogout}
+          onOpenSettings={onOpenSettings}
         />
 
         {/* Players Grid - Vertical Scrolling */}
@@ -1011,11 +984,46 @@ export function OnlineLobby({
                         <p className="text-red-400 text-xs font-semibold">IN MATCH</p>
                       )}
 
-                      {/* Stats - no background, just text */}
+                      {/* Stats - 3 columns matching PlayerGameSetup */}
                       {isWaiting && (
-                        <p className="text-xs text-gray-500 mt-1" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                          {player.mprNumeric.toFixed(1)} / {player.pprNumeric.toFixed(1)}
-                        </p>
+                        <div className="flex items-center justify-center gap-3 mt-2">
+                          <div className="text-center">
+                            <div className="text-[8px] uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>01</div>
+                            <div
+                              className="text-sm font-bold"
+                              style={{ color: playerAccentColor }}
+                            >
+                              {player.pprLetter || '--'}
+                            </div>
+                            <div className="text-[9px] text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                              {player.pprNumeric > 0 ? player.pprNumeric.toFixed(1) : '--'}
+                            </div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-[8px] uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>ALL</div>
+                            <div
+                              className="text-sm font-bold"
+                              style={{ color: playerAccentColor }}
+                            >
+                              {player.overallLetter || '--'}
+                            </div>
+                            <div className="text-[9px] text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                              {player.overallNumeric > 0 ? player.overallNumeric.toFixed(1) : '--'}
+                            </div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-[8px] uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>CR</div>
+                            <div
+                              className="text-sm font-bold"
+                              style={{ color: playerAccentColor }}
+                            >
+                              {player.mprLetter || '--'}
+                            </div>
+                            <div className="text-[9px] text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                              {player.mprNumeric > 0 ? player.mprNumeric.toFixed(1) : '--'}
+                            </div>
+                          </div>
+                        </div>
                       )}
                     </div>
                     </div>

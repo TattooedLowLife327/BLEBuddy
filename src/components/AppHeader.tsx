@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { ChevronLeft, RefreshCw, Bell } from 'lucide-react';
 import {
   DropdownMenu,
@@ -8,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
 import { UserMenu } from './UserMenu';
+import { createClient } from '../utils/supabase/client';
 
 const bluetoothIcon = '/assets/dashboardicon.png';
 
@@ -34,10 +36,7 @@ interface AppHeaderProps {
   // Notifications (optional)
   missedRequests?: GameRequestNotification[];
   onClearMissedRequests?: () => void;
-  // User menu (required)
-  profilePic: string | null;
-  accentColor: string;
-  userName: string;
+  // User menu actions
   onLogout: () => void;
   onOpenSettings?: () => void;
 }
@@ -54,13 +53,57 @@ export function AppHeader({
   onRefresh,
   missedRequests = [],
   onClearMissedRequests,
-  profilePic,
-  accentColor,
-  userName,
   onLogout,
   onOpenSettings,
 }: AppHeaderProps) {
+  const [profilepic, setProfilepic] = useState<string | null>(null);
+  const [accentColor, setAccentColor] = useState('#a855f7');
+  const [userName, setUserName] = useState('');
+
+  const supabase = createClient();
   const notificationCount = missedRequests.length;
+
+  // Fetch user profile data internally
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const session = sessionData?.session;
+        if (!session?.user) return;
+
+        // Try player schema first (default schema)
+        const { data: playerProfile } = await supabase
+          .from('player_profiles')
+          .select('profilepic, profilecolor, granboard_name')
+          .eq('id', session.user.id)
+          .maybeSingle();
+
+        if (playerProfile) {
+          if (playerProfile.profilepic) setProfilepic(playerProfile.profilepic);
+          if (playerProfile.profilecolor) setAccentColor(playerProfile.profilecolor);
+          if (playerProfile.granboard_name) setUserName(playerProfile.granboard_name);
+        } else {
+          // Fallback to youth schema
+          const { data: youthProfile } = await (supabase as any)
+            .schema('youth')
+            .from('youth_profiles')
+            .select('profilepic, profilecolor, granboard_name')
+            .eq('id', session.user.id)
+            .maybeSingle();
+
+          if (youthProfile) {
+            if (youthProfile.profilepic) setProfilepic(youthProfile.profilepic);
+            if (youthProfile.profilecolor) setAccentColor(youthProfile.profilecolor);
+            if (youthProfile.granboard_name) setUserName(youthProfile.granboard_name);
+          }
+        }
+      } catch (error) {
+        console.error('AppHeader: Failed to fetch user profile:', error);
+      }
+    };
+
+    fetchProfile();
+  }, []);
 
   const handleBLEClick = async () => {
     if (!onBLEConnect || !onBLEDisconnect) return;
@@ -204,7 +247,7 @@ export function AppHeader({
 
         {/* User menu */}
         <UserMenu
-          profilePic={profilePic}
+          profilepic={profilepic}
           accentColor={accentColor}
           userName={userName}
           onLogout={onLogout}
