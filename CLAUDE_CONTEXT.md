@@ -1,6 +1,6 @@
 # BLE Buddy - Claude Context
 
-**Last Updated**: December 12, 2025 (Cork screen throw sync, permission prompts, WebRTC retry logic)
+**Last Updated**: December 12, 2025 (AppHeader self-contained, Dashboard prop cleanup, mock player removal WIP)
 
 ---
 
@@ -295,9 +295,13 @@ const { localStream, remoteStream, connectionState, initialize, disconnect } = u
 - **WebRTC retry logic** - Offer retries up to 5 times if no answer received
 - **GameContext** - App-wide game state management (mode, partner, activeGame, pendingRejoin)
 - **Pages refactor** - Page components moved to `src/pages/`, components stay in `src/components/`
-- Build passing
+- **AppHeader self-contained** - Fetches its own profilepic, profilecolor, granboard_name from database (no more prop drilling)
+- **Dashboard prop cleanup** - Removed unused userName, profilePic, accentColor props from Dashboard interface and App.tsx
+- **UserMenu prop fix** - Changed profilePic to profilepic (lowercase) to match database column name
 
 ### ⏳ In Progress / TODO
+1. **OnlineLobby mock player removal** - MOCK_PLAYERS array and USE_MOCK_DATA constants removed, but there's a syntax error in the file that needs fixing (try/catch structure issue around line 306)
+
 1. **WebRTC Testing**
    - Video streaming between two real devices
    - Debug signaling if needed (detailed logging added)

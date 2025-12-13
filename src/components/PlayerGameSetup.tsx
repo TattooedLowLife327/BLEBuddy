@@ -32,6 +32,9 @@ interface PlayerGameSetupProps {
     mprNumeric: number;
     pprNumeric: number;
     overallNumeric: number;
+    mprLetter?: string;
+    pprLetter?: string;
+    overallLetter?: string;
     accentColor: string;
     isDoublesTeam: boolean;
     partnerId?: string;
@@ -56,9 +59,14 @@ interface GameConfiguration {
 }
 
 interface PlayerStats {
+  granid: string | null;
+  overallLetter: string | null;
   overallNumeric: number;
+  mprLetter: string | null;
   mprNumeric: number;
+  pprLetter: string | null;
   pprNumeric: number;
+  gameCount: number;
   soloGamesPlayed: number;
   soloWins: number;
   soloWinRate: number;
@@ -109,6 +117,7 @@ export function PlayerGameSetup({
   const [loading, setLoading] = useState(true);
   const [flight, setFlight] = useState<FlightAnimation | null>(null);
   const [modalScale, setModalScale] = useState(1);
+  const [fetchedProfilePic, setFetchedProfilePic] = useState<string | null>(null);
 
   const supabase = createClient();
   
@@ -167,36 +176,68 @@ export function PlayerGameSetup({
 
         // Determine if opponent is youth (we need to check their profile)
         let opponentIsYouth = false;
-        
-        // Try player schema first
-        const { data: opponentProfile, error: profileError } = await supabase
+
+        // Try player schema first and get profilepic
+        const playerSchema = (supabase as any).schema('player');
+        const { data: opponentProfile, error: profileError } = await playerSchema
           .from('player_profiles')
-          .select('id')
+          .select('id, profilepic')
           .eq('id', player.player_id)
           .single();
 
+        // Helper to resolve profile pic URL
+        const resolveProfilePicUrl = (pic: string): string => {
+          if (pic.startsWith('http')) {
+            return pic;
+          } else if (pic.startsWith('/assets') || pic.startsWith('assets') || pic === 'default-pfp.png') {
+            return pic.startsWith('/') ? pic : `/${pic}`;
+          } else {
+            // Storage bucket path
+            const { data: urlData } = supabase.storage.from('profilepic').getPublicUrl(pic);
+            return urlData.publicUrl;
+          }
+        };
+
         if (profileError || !opponentProfile) {
-          // Must be youth player
+          // Must be youth player - try youth schema
           opponentIsYouth = true;
+          const youthSchema = (supabase as any).schema('youth');
+          const { data: youthProfile } = await youthSchema
+            .from('youth_profiles')
+            .select('id, profilepic')
+            .eq('id', player.player_id)
+            .single();
+
+          if (youthProfile?.profilepic) {
+            setFetchedProfilePic(resolveProfilePicUrl(youthProfile.profilepic));
+          }
+        } else if (opponentProfile?.profilepic) {
+          setFetchedProfilePic(resolveProfilePicUrl(opponentProfile.profilepic));
         }
 
         // Fetch opponent's solo stats
-        const statsQuery = opponentIsYouth
-          ? supabase.schema('youth').from('youth_stats')
-          : supabase.from('player_stats');
+        const statsSchema = opponentIsYouth
+          ? (supabase as any).schema('youth')
+          : (supabase as any).schema('player');
 
-        const { data: statsData, error: statsError } = await statsQuery
-          .select('overall_numeric, mpr_numeric, ppr_numeric, solo_games_played, solo_wins, solo_win_rate, solo_highest_checkout')
+        const { data: statsData, error: statsError } = await statsSchema
+          .from(opponentIsYouth ? 'youth_stats' : 'player_stats')
+          .select('granid, overall_letter, overall_numeric, mpr_letter, mpr_numeric, ppr_letter, ppr_numeric, online_game_count, solo_games_played, solo_wins, solo_win_rate, solo_highest_checkout')
           .eq('id', player.player_id)
           .single();
 
         if (statsError) {
           console.error('Error fetching stats:', statsError);
-          // Use provided data as fallback
+          // Use provided data as fallback (including letter ratings from props)
           setSoloStats({
+            granid: null,
+            overallLetter: player.overallLetter || null,
             overallNumeric: player.overallNumeric,
+            mprLetter: player.mprLetter || null,
             mprNumeric: player.mprNumeric,
+            pprLetter: player.pprLetter || null,
             pprNumeric: player.pprNumeric,
+            gameCount: 0,
             soloGamesPlayed: 0,
             soloWins: 0,
             soloWinRate: 0,
@@ -204,9 +245,14 @@ export function PlayerGameSetup({
           });
         } else {
           setSoloStats({
+            granid: statsData.granid || null,
+            overallLetter: statsData.overall_letter || null,
             overallNumeric: statsData.overall_numeric || 0,
+            mprLetter: statsData.mpr_letter || null,
             mprNumeric: statsData.mpr_numeric || 0,
+            pprLetter: statsData.ppr_letter || null,
             pprNumeric: statsData.ppr_numeric || 0,
+            gameCount: statsData.online_game_count || 0,
             soloGamesPlayed: statsData.solo_games_played || 0,
             soloWins: statsData.solo_wins || 0,
             soloWinRate: statsData.solo_win_rate || 0,
@@ -221,12 +267,13 @@ export function PlayerGameSetup({
           // Determine if partner is youth
           let partnerIsYouth = opponentIsYouth; // Assume same schema for now
 
-          const partnerStatsQuery = partnerIsYouth
-            ? supabase.schema('youth').from('youth_stats')
-            : supabase.from('player_stats');
+          const partnerStatsSchema = partnerIsYouth
+            ? (supabase as any).schema('youth')
+            : (supabase as any).schema('player');
 
-          const { data: partnerStatsData, error: partnerStatsError } = await partnerStatsQuery
-            .select('overall_numeric, mpr_numeric, ppr_numeric, solo_games_played, solo_wins, solo_win_rate, solo_highest_checkout')
+          const { data: partnerStatsData, error: partnerStatsError } = await partnerStatsSchema
+            .from(partnerIsYouth ? 'youth_stats' : 'player_stats')
+            .select('granid, overall_letter, overall_numeric, mpr_letter, mpr_numeric, ppr_letter, ppr_numeric, online_game_count, solo_games_played, solo_wins, solo_win_rate, solo_highest_checkout')
             .eq('id', player.partnerId)
             .single();
 
@@ -265,11 +312,16 @@ export function PlayerGameSetup({
         }
       } catch (err) {
         console.error('Error in fetchPlayerStats:', err);
-        // Use provided data as fallback
+        // Use provided data as fallback (including letter ratings from props)
         setSoloStats({
+          granid: null,
+          overallLetter: player.overallLetter || null,
           overallNumeric: player.overallNumeric,
+          mprLetter: player.mprLetter || null,
           mprNumeric: player.mprNumeric,
+          pprLetter: player.pprLetter || null,
           pprNumeric: player.pprNumeric,
+          gameCount: 0,
           soloGamesPlayed: 0,
           soloWins: 0,
           soloWinRate: 0,
@@ -329,7 +381,7 @@ export function PlayerGameSetup({
   const has01Game = games.some(g => g === '501'); // Format options only for 01 games
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in duration-300">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xl flex items-center justify-center p-6 animate-in fade-in duration-300">
       {/* Flying animation overlay */}
       <AnimatePresence>
         {flight && (
@@ -349,27 +401,27 @@ export function PlayerGameSetup({
       </AnimatePresence>
 
       <div
-        className="rounded-2xl border backdrop-blur-xl bg-zinc-900/25 overflow-hidden flex flex-col origin-center"
+        className="rounded-lg border bg-zinc-900/90 overflow-hidden flex flex-col origin-center"
         style={{
           width: '700px',
           maxHeight: '550px',
-          borderColor: hexToRgba(player.accentColor, 0.4),
-          boxShadow: `0 0 40px ${hexToRgba(player.accentColor, 0.3)}, 0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1)`,
+          borderColor: player.accentColor,
+          boxShadow: `0 0 12px ${hexToRgba(player.accentColor, 0.4)}`,
           transform: `scale(${modalScale})`,
         }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: player.accentColor + '40' }}>
+        <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: player.accentColor }}>
           <div className="flex items-center gap-3">
             <Avatar
-              className="w-12 h-12 border-2"
+              className="w-16 h-16 border-2"
               style={{
                 borderColor: player.accentColor,
-                boxShadow: `0 0 15px ${hexToRgba(player.accentColor, 0.6)}`,
+                boxShadow: `0 0 20px ${hexToRgba(player.accentColor, 0.6)}`,
               }}
             >
-              <AvatarImage src={player.profilePic} />
-              <AvatarFallback className="bg-white/10 text-white text-lg">
+              <AvatarImage src={fetchedProfilePic || player.profilePic} />
+              <AvatarFallback className="bg-white/10 text-white text-xl">
                 {player.granboardName.charAt(0)}
               </AvatarFallback>
             </Avatar>
@@ -380,6 +432,11 @@ export function PlayerGameSetup({
               >
                 {player.granboardName}
               </h2>
+              {soloStats?.granid && (
+                <p className="text-gray-400 text-xs" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                  {soloStats.granid}
+                </p>
+              )}
               {player.isDoublesTeam && player.partnerName && (
                 <p className="text-gray-400 text-xs" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
                   + {player.partnerName}
@@ -448,69 +505,85 @@ export function PlayerGameSetup({
         {/* Content */}
         <div className="flex-1 flex overflow-hidden">
           {/* Left Side - Stats */}
-          <div className="w-1/3 p-4 border-r overflow-y-auto" style={{ borderColor: player.accentColor + '40' }}>
-            <h3
-              className="text-sm mb-3 text-white"
-              style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
-            >
-              {player.isDoublesTeam ? 'Team Stats' : 'Player Stats'}
-            </h3>
-
+          <div className="w-1/3 p-4 border-r overflow-y-auto flex flex-col justify-center" style={{ borderColor: player.accentColor }}>
             {loading ? (
               <div className="text-gray-400 text-sm" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
                 Loading stats...
               </div>
             ) : displayStats ? (
               <div>
-                {/* Averages Section */}
-                <div className="space-y-1.5 mb-3">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Overall Average</span>
-                    <span className="text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}>
-                      {displayStats.overallNumeric.toFixed(1)}
-                    </span>
+                {/* Rating Cards - 3 columns like LLOGB */}
+                <div className="grid grid-cols-3 gap-3 mb-4">
+                  {/* 01 AVG */}
+                  <div className="text-center">
+                    <div className="text-xs uppercase tracking-wider text-gray-500 mb-1" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                      01 AVG
+                    </div>
+                    <div
+                      className="text-2xl font-bold"
+                      style={{ fontFamily: 'Helvetica, Arial, sans-serif', color: player.accentColor }}
+                    >
+                      {'pprLetter' in displayStats && displayStats.pprLetter ? displayStats.pprLetter : '--'}
+                    </div>
+                    <div className="text-sm text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                      {displayStats.pprNumeric > 0 ? displayStats.pprNumeric.toFixed(2) : '--'}
+                    </div>
                   </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>01 Average</span>
-                    <span className="text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}>
-                      {displayStats.mprNumeric.toFixed(1)}
-                    </span>
+
+                  {/* OVERALL */}
+                  <div className="text-center">
+                    <div className="text-xs uppercase tracking-wider text-gray-500 mb-1" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                      OVERALL
+                    </div>
+                    <div
+                      className="text-2xl font-bold"
+                      style={{ fontFamily: 'Helvetica, Arial, sans-serif', color: player.accentColor }}
+                    >
+                      {'overallLetter' in displayStats && displayStats.overallLetter ? displayStats.overallLetter : '--'}
+                    </div>
+                    <div className="text-sm text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                      {displayStats.overallNumeric > 0 ? displayStats.overallNumeric.toFixed(2) : '--'}
+                    </div>
                   </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Cricket Average</span>
-                    <span className="text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}>
-                      {displayStats.pprNumeric.toFixed(2)}
-                    </span>
+
+                  {/* CR AVG */}
+                  <div className="text-center">
+                    <div className="text-xs uppercase tracking-wider text-gray-500 mb-1" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                      CR AVG
+                    </div>
+                    <div
+                      className="text-2xl font-bold"
+                      style={{ fontFamily: 'Helvetica, Arial, sans-serif', color: player.accentColor }}
+                    >
+                      {'mprLetter' in displayStats && displayStats.mprLetter ? displayStats.mprLetter : '--'}
+                    </div>
+                    <div className="text-sm text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                      {displayStats.mprNumeric > 0 ? displayStats.mprNumeric.toFixed(2) : '--'}
+                    </div>
                   </div>
                 </div>
 
                 {/* Divider */}
-                <Separator className="my-3" style={{ backgroundColor: player.accentColor + '40' }} />
+                <div className="my-3 h-[1px] w-full" style={{ backgroundColor: player.accentColor }} />
 
-                {/* Other Stats Section */}
+                {/* Game Stats Section */}
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-xs">
                     <span className="text-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Games Played</span>
                     <span className="text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}>
-                      {'gamesPlayed' in displayStats ? displayStats.gamesPlayed : displayStats.soloGamesPlayed}
+                      {'gamesPlayed' in displayStats ? displayStats.gamesPlayed : ('gameCount' in displayStats ? displayStats.gameCount : 0)}
                     </span>
                   </div>
                   <div className="flex justify-between text-xs">
                     <span className="text-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Wins</span>
                     <span className="text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}>
-                      {'wins' in displayStats ? displayStats.wins : displayStats.soloWins}
+                      {'wins' in displayStats ? displayStats.wins : ('soloWins' in displayStats ? displayStats.soloWins : 0)}
                     </span>
                   </div>
                   <div className="flex justify-between text-xs">
                     <span className="text-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Win Rate</span>
                     <span className="text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}>
-                      {'winRate' in displayStats ? displayStats.winRate.toFixed(1) : displayStats.soloWinRate.toFixed(1)}%
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Highest Checkout</span>
-                    <span className="text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}>
-                      {'highestCheckout' in displayStats ? displayStats.highestCheckout : displayStats.soloHighestCheckout}
+                      {'winRate' in displayStats ? displayStats.winRate.toFixed(1) : ('soloWinRate' in displayStats ? displayStats.soloWinRate.toFixed(1) : '0.0')}%
                     </span>
                   </div>
                 </div>

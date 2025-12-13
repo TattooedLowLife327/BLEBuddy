@@ -23,9 +23,6 @@ type GameRequestNotification = {
 
 interface DashboardProps {
   userId: string;
-  userName: string;
-  profilePic: string | null;
-  accentColor: string;
   isYouthPlayer: boolean;
   userRole: string | null;
   userGender: string | null;
@@ -47,9 +44,6 @@ interface DashboardProps {
 
 export function Dashboard({
   userId,
-  userName,
-  profilePic,
-  accentColor,
   isYouthPlayer,
   userRole,
   userGender,
@@ -233,9 +227,6 @@ export function Dashboard({
           onBLEDisconnect={onBLEDisconnect}
           missedRequests={missedRequests}
           onClearMissedRequests={onClearMissedRequests}
-          profilePic={profilePic}
-          accentColor={accentColor}
-          userName={userName}
           onLogout={onLogout}
           onOpenSettings={onOpenSettings}
         />
@@ -288,7 +279,7 @@ export function Dashboard({
                       description={card.description}
                       icon={'icon' in card ? card.icon : undefined}
                       customIcon={'customIcon' in card ? card.customIcon : undefined}
-                      accentColor={card.accentColor || accentColor}
+                      accentColor={card.accentColor}
                       ageGated={card.ageGated}
                       protected={card.protected}
                       expandable={card.expandable}

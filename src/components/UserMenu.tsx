@@ -5,7 +5,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 
 interface UserMenuProps {
-  profilePic?: string | null;
+  profilepic?: string | null;
   accentColor?: string;
   userName?: string | null;
   onLogout: () => void | Promise<void>;
@@ -15,7 +15,7 @@ interface UserMenuProps {
 }
 
 export function UserMenu({
-  profilePic,
+  profilepic,
   accentColor = '#a855f7',
   userName,
   onLogout,
@@ -47,7 +47,7 @@ export function UserMenu({
           aria-label="Open user menu"
         >
           <Avatar className={`${sizeClasses[size]} border-2`} style={{ borderColor: accentColor }}>
-            <AvatarImage src={profilePic || undefined} alt={userName ?? 'Profile picture'} />
+            <AvatarImage src={profilepic || undefined} alt={userName ?? 'Profile picture'} />
             <AvatarFallback className="bg-white/10 text-white text-base font-semibold">
               {initials}
             </AvatarFallback>
@@ -63,7 +63,7 @@ export function UserMenu({
       >
         <DropdownMenuLabel className="flex items-center gap-3">
           <Avatar className="w-10 h-10 border border-zinc-700">
-            <AvatarImage src={profilePic || undefined} alt={userName ?? 'Profile picture'} />
+            <AvatarImage src={profilepic || undefined} alt={userName ?? 'Profile picture'} />
             <AvatarFallback className="bg-white/10 text-white text-sm font-semibold">
               {initials}
             </AvatarFallback>

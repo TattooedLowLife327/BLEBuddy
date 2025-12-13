@@ -136,6 +136,7 @@ export default function App() {
         setUserId(session.user.id);
 
         // Fetch profile - try player schema first, then youth schema
+        // Note: supabase client defaults to 'player' schema in client.ts
         const { data: playerData, error: playerError } = await supabase
           .from('player_profiles')
           .select('profilecolor, profilepic, role, gender, birthday_month, birthday_day, birthday_year, granboard_name')
@@ -198,16 +199,9 @@ export default function App() {
 
         if (profileData?.profilecolor) setAccentColor(profileData.profilecolor);
 
+        // profilepic is either a full URL or an assets/ path - use directly
         if (profileData?.profilepic) {
-          if (profileData.profilepic.startsWith('http')) {
-            setProfilePic(profileData.profilepic);
-          } else if (profileData.profilepic.startsWith('/assets') || profileData.profilepic.startsWith('assets') || profileData.profilepic === 'default-pfp.png') {
-            const localPath = profileData.profilepic.startsWith('/') ? profileData.profilepic : `/${profileData.profilepic}`;
-            setProfilePic(localPath);
-          } else {
-            const { data: urlData } = supabase.storage.from('profilepic').getPublicUrl(profileData.profilepic);
-            setProfilePic(urlData.publicUrl);
-          }
+          setProfilePic(profileData.profilepic);
         }
 
         // Check for active games to rejoin
@@ -472,9 +466,6 @@ export default function App() {
         !isAuthenticated ? <Navigate to={`/login${queryString}`} /> :
         <Dashboard
           userId={userId}
-          userName={userName}
-          profilePic={profilePic}
-          accentColor={accentColor}
           isYouthPlayer={isYouthPlayer}
           userRole={userRole}
           userGender={userGender}
@@ -512,6 +503,7 @@ export default function App() {
           onGameAccepted={handleGameAccepted}
           missedRequests={missedRequests.map(r => ({ id: r.id, challengerName: r.fromPlayerName, challengerId: r.fromPlayerId, timestamp: r.createdAt }))}
           onClearMissedRequests={() => setMissedRequests([])}
+          onOpenSettings={() => setShowSettingsModal(true)}
         />
       } />
 
