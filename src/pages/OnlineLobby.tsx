@@ -109,7 +109,24 @@ export function OnlineLobby({
   const [showIdleWarning, setShowIdleWarning] = useState(false);
   const [idleCountdown, setIdleCountdown] = useState(300); // 5 minutes in seconds
   const [cardScale, setCardScale] = useState(1);
+  const [alreadyInMatchError, setAlreadyInMatchError] = useState(false);
   const supabase = createClient();
+
+  // Check if user already has an active game
+  const checkForExistingGame = async (): Promise<boolean> => {
+    try {
+      const { data } = await (supabase as any)
+        .schema('companion')
+        .from('active_games')
+        .select('id')
+        .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
+        .in('status', ['pending', 'accepted', 'playing'])
+        .limit(1);
+      return data && data.length > 0;
+    } catch {
+      return false;
+    }
+  };
 
   const lastActivityRef = useRef<number>(Date.now());
   const idleCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -549,6 +566,14 @@ export function OnlineLobby({
   const handleAcceptGame = async () => {
     if (!incomingRequest) return;
 
+    // Check if user already has an active game
+    const hasExisting = await checkForExistingGame();
+    if (hasExisting) {
+      setAlreadyInMatchError(true);
+      setIncomingRequest(null);
+      return;
+    }
+
     try {
       const { error } = await (supabase as any)
         .schema('companion')
@@ -604,7 +629,15 @@ export function OnlineLobby({
   const handleStartGame = async (gameConfig: any) => {
     console.log('Starting game with config:', gameConfig);
     console.log('Against player:', selectedPlayer);
-    
+
+    // Check if user already has an active game
+    const hasExisting = await checkForExistingGame();
+    if (hasExisting) {
+      setAlreadyInMatchError(true);
+      setSelectedPlayer(null);
+      return;
+    }
+
     // Create game in active_games table
     try {
       const { data: gameData, error: gameError } = await (supabase as any)
@@ -632,7 +665,7 @@ export function OnlineLobby({
     } catch (err) {
       console.error('Error in handleStartGame:', err);
     }
-    
+
     setSelectedPlayer(null);
   };
 
@@ -784,6 +817,24 @@ export function OnlineLobby({
               className="w-full px-4 py-3 bg-yellow-600 hover:bg-yellow-700 text-black font-semibold rounded-lg transition-colors"
             >
               I'm Still Here
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Already In Match Error Modal */}
+      {alreadyInMatchError && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80">
+          <div className="bg-zinc-900 border border-red-600 rounded-xl p-6 max-w-sm w-full mx-4 text-center">
+            <h2 className="text-white text-lg font-bold mb-2">Already In A Match</h2>
+            <p className="text-zinc-400 text-sm mb-4">
+              You already have an active match. Leave or finish your current match before starting a new one.
+            </p>
+            <button
+              onClick={() => setAlreadyInMatchError(false)}
+              className="w-full px-4 py-3 bg-zinc-700 hover:bg-zinc-600 text-white font-semibold rounded-lg transition-colors"
+            >
+              OK
             </button>
           </div>
         </div>
