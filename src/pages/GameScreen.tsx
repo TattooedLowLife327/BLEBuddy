@@ -1144,100 +1144,6 @@ export function GameScreen({ onLeaveMatch }: GameScreenProps) {
         </>
       )}
 
-      {/* PPR Stats Display - P1 (Left) */}
-      {introComplete && isOhOneGame && p1DartsThrown > 0 && (
-        <div style={{
-          position: 'absolute',
-          left: `calc(20 * ${scale})`,
-          bottom: `calc(${FIGMA.bar.h + 10} * ${scale})`,
-          display: 'flex',
-          alignItems: 'center',
-          gap: `calc(6 * ${scale})`,
-          padding: `calc(4 * ${scale}) calc(10 * ${scale})`,
-          background: eightyPercentTriggered ? 'rgba(102, 0, 255, 0.3)' : 'rgba(0, 0, 0, 0.5)',
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
-          borderRadius: `calc(6 * ${scale})`,
-          border: eightyPercentTriggered ? '1px solid rgba(102, 0, 255, 0.5)' : '1px solid rgba(255, 255, 255, 0.1)',
-          zIndex: 40,
-        }}>
-          <span style={{
-            fontFamily: FONT_NAME,
-            fontSize: `calc(14 * ${scale})`,
-            fontWeight: 500,
-            color: eightyPercentTriggered ? '#a855f7' : 'rgba(255, 255, 255, 0.6)',
-          }}>
-            PPR
-          </span>
-          <span style={{
-            fontFamily: FONT_SCORE,
-            fontSize: `calc(24 * ${scale})`,
-            fontWeight: 300,
-            color: '#FFFFFF',
-            textShadow: eightyPercentTriggered ? '0 0 8px rgba(168, 85, 247, 0.5)' : 'none',
-          }}>
-            {p1DisplayPPR.toFixed(1)}
-          </span>
-          {eightyPercentTriggered && (
-            <span style={{
-              fontFamily: FONT_NAME,
-              fontSize: `calc(10 * ${scale})`,
-              fontWeight: 500,
-              color: '#a855f7',
-            }}>
-              80%
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* PPR Stats Display - P2 (Right) */}
-      {introComplete && isOhOneGame && p2DartsThrown > 0 && (
-        <div style={{
-          position: 'absolute',
-          right: `calc(20 * ${scale})`,
-          bottom: `calc(${FIGMA.bar.h + 10} * ${scale})`,
-          display: 'flex',
-          alignItems: 'center',
-          gap: `calc(6 * ${scale})`,
-          padding: `calc(4 * ${scale}) calc(10 * ${scale})`,
-          background: eightyPercentTriggered ? 'rgba(251, 0, 255, 0.3)' : 'rgba(0, 0, 0, 0.5)',
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
-          borderRadius: `calc(6 * ${scale})`,
-          border: eightyPercentTriggered ? '1px solid rgba(251, 0, 255, 0.5)' : '1px solid rgba(255, 255, 255, 0.1)',
-          zIndex: 40,
-        }}>
-          {eightyPercentTriggered && (
-            <span style={{
-              fontFamily: FONT_NAME,
-              fontSize: `calc(10 * ${scale})`,
-              fontWeight: 500,
-              color: '#fb00ff',
-            }}>
-              80%
-            </span>
-          )}
-          <span style={{
-            fontFamily: FONT_SCORE,
-            fontSize: `calc(24 * ${scale})`,
-            fontWeight: 300,
-            color: '#FFFFFF',
-            textShadow: eightyPercentTriggered ? '0 0 8px rgba(251, 0, 255, 0.5)' : 'none',
-          }}>
-            {p2DisplayPPR.toFixed(1)}
-          </span>
-          <span style={{
-            fontFamily: FONT_NAME,
-            fontSize: `calc(14 * ${scale})`,
-            fontWeight: 500,
-            color: eightyPercentTriggered ? '#fb00ff' : 'rgba(255, 255, 255, 0.6)',
-          }}>
-            PPR
-          </span>
-        </div>
-      )}
-
       {/* Player 1 Bar - Left */}
       <div style={{
         position: 'absolute',
@@ -1317,20 +1223,36 @@ export function GameScreen({ onLeaveMatch }: GameScreenProps) {
             animation: p1Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
           }} />
         )}
-        {/* Name */}
-        <span style={{
+        {/* Name + PPR */}
+        <div style={{
           position: 'absolute',
           left: `calc(${FIGMA.nameLeft} * ${scale})`,
           top: '50%',
           transform: 'translateY(-50%)',
-          fontFamily: FONT_NAME,
-          fontWeight: 400,
-          fontSize: `calc(${FIGMA.nameSize} * ${scale})`,
-          color: p1Active ? '#FFFFFF' : INACTIVE,
+          display: 'flex',
+          flexDirection: 'column',
           zIndex: 3,
         }}>
-          {PLAYERS.p1.name}
-        </span>
+          <span style={{
+            fontFamily: FONT_NAME,
+            fontWeight: 400,
+            fontSize: `calc(${FIGMA.nameSize} * ${scale})`,
+            color: p1Active ? '#FFFFFF' : INACTIVE,
+          }}>
+            {PLAYERS.p1.name}
+          </span>
+          {introComplete && isOhOneGame && (
+            <span style={{
+              fontFamily: FONT_NAME,
+              fontWeight: 400,
+              fontSize: `calc(16 * ${scale})`,
+              color: p1Active ? 'rgba(255, 255, 255, 0.6)' : 'rgba(126, 126, 126, 0.6)',
+              marginTop: `calc(-4 * ${scale})`,
+            }}>
+              PPR: {p1DisplayPPR.toFixed(1)}{eightyPercentTriggered ? ' (80%)' : ''}
+            </span>
+          )}
+        </div>
         {/* Score */}
         <span style={{
           position: 'absolute',
@@ -1415,20 +1337,37 @@ export function GameScreen({ onLeaveMatch }: GameScreenProps) {
         }}>
           {p2Score}
         </span>
-        {/* Name - in middle for P2 */}
-        <span style={{
+        {/* Name + PPR - in middle for P2 */}
+        <div style={{
           position: 'absolute',
           right: `calc(${FIGMA.nameLeft} * ${scale})`,
           top: '50%',
           transform: 'translateY(-50%)',
-          fontFamily: FONT_NAME,
-          fontWeight: 400,
-          fontSize: `calc(${FIGMA.nameSize} * ${scale})`,
-          color: p2Active ? '#FFFFFF' : INACTIVE,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'flex-end',
           zIndex: 3,
         }}>
-          {PLAYERS.p2.name}
-        </span>
+          <span style={{
+            fontFamily: FONT_NAME,
+            fontWeight: 400,
+            fontSize: `calc(${FIGMA.nameSize} * ${scale})`,
+            color: p2Active ? '#FFFFFF' : INACTIVE,
+          }}>
+            {PLAYERS.p2.name}
+          </span>
+          {introComplete && isOhOneGame && (
+            <span style={{
+              fontFamily: FONT_NAME,
+              fontWeight: 400,
+              fontSize: `calc(16 * ${scale})`,
+              color: p2Active ? 'rgba(255, 255, 255, 0.6)' : 'rgba(126, 126, 126, 0.6)',
+              marginTop: `calc(-4 * ${scale})`,
+            }}>
+              PPR: {p2DisplayPPR.toFixed(1)}{eightyPercentTriggered ? ' (80%)' : ''}
+            </span>
+          )}
+        </div>
         {/* Avatar - grey base */}
         <div style={{
           position: 'absolute',
