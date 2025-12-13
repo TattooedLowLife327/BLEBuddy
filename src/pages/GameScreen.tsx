@@ -1007,10 +1007,10 @@ export function GameScreen({ onLeaveMatch }: GameScreenProps) {
         </div>
       )}
 
-      {/* Center score - 320px in Figma, bumped up to make room for dart results */}
+      {/* Center score - shifts away from active player's larger camera */}
       <div style={{
         position: 'absolute',
-        left: '50%',
+        left: introComplete ? (p1Active ? '55%' : '45%') : '50%',
         top: '40%',
         transform: 'translate(-50%, -50%)',
         fontFamily: FONT_SCORE,
@@ -1020,6 +1020,7 @@ export function GameScreen({ onLeaveMatch }: GameScreenProps) {
         color: '#FFFFFF',
         textShadow: '-6px 6px 9.7px rgba(0, 0, 0, 0.78)',
         zIndex: 10,
+        transition: 'left 0.3s ease-out',
       }}>
         {currentThrower === 'p1' ? p1Score : p2Score}
       </div>
@@ -1399,21 +1400,23 @@ export function GameScreen({ onLeaveMatch }: GameScreenProps) {
         )}
       </div>
 
-      {/* Video Feeds - Top Corners */}
+      {/* Video Feeds - Centered Vertically, Active Player Larger */}
       {introComplete && (
         <>
-          {/* Your Camera - Top Left */}
+          {/* P1 Camera - Left Side */}
           <div style={{
             position: 'absolute',
-            top: `calc(80 * ${scale})`,
+            top: '50%',
             left: `calc(20 * ${scale})`,
-            width: `calc(160 * ${scale})`,
-            height: `calc(90 * ${scale})`,
+            transform: 'translateY(-50%)',
+            width: p1Active ? `calc(220 * ${scale})` : `calc(140 * ${scale})`,
+            height: p1Active ? `calc(124 * ${scale})` : `calc(79 * ${scale})`,
             background: 'rgba(0, 0, 0, 0.8)',
             borderRadius: `calc(8 * ${scale})`,
-            border: `2px solid ${PLAYERS.p1.profilecolor}`,
+            border: `2px solid ${p1Active ? PLAYERS.p1.profilecolor : INACTIVE}`,
             overflow: 'hidden',
             zIndex: 60,
+            transition: 'all 0.3s ease-out',
           }}>
             <video
               id="local-video"
@@ -1435,25 +1438,27 @@ export function GameScreen({ onLeaveMatch }: GameScreenProps) {
               alignItems: 'center',
               justifyContent: 'center',
               fontFamily: FONT_NAME,
-              fontSize: `calc(10 * ${scale})`,
+              fontSize: `calc(12 * ${scale})`,
               color: 'rgba(255, 255, 255, 0.4)',
             }}>
-              Your Cam
+              You
             </div>
           </div>
 
-          {/* Opponent Camera - Top Right (before menu) */}
+          {/* P2 Camera - Right Side */}
           <div style={{
             position: 'absolute',
-            top: `calc(80 * ${scale})`,
-            right: `calc(80 * ${scale})`,
-            width: `calc(160 * ${scale})`,
-            height: `calc(90 * ${scale})`,
+            top: '50%',
+            right: `calc(20 * ${scale})`,
+            transform: 'translateY(-50%)',
+            width: p2Active ? `calc(220 * ${scale})` : `calc(140 * ${scale})`,
+            height: p2Active ? `calc(124 * ${scale})` : `calc(79 * ${scale})`,
             background: 'rgba(0, 0, 0, 0.8)',
             borderRadius: `calc(8 * ${scale})`,
-            border: `2px solid ${PLAYERS.p2.profilecolor}`,
+            border: `2px solid ${p2Active ? PLAYERS.p2.profilecolor : INACTIVE}`,
             overflow: 'hidden',
             zIndex: 60,
+            transition: 'all 0.3s ease-out',
           }}>
             <video
               id="remote-video"
@@ -1473,10 +1478,10 @@ export function GameScreen({ onLeaveMatch }: GameScreenProps) {
               alignItems: 'center',
               justifyContent: 'center',
               fontFamily: FONT_NAME,
-              fontSize: `calc(10 * ${scale})`,
+              fontSize: `calc(12 * ${scale})`,
               color: 'rgba(255, 255, 255, 0.4)',
             }}>
-              Opponent Cam
+              Opponent
             </div>
           </div>
         </>
