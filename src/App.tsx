@@ -47,7 +47,6 @@ export default function App() {
   const [userId, setUserId] = useState<string>('');
   const [userName, setUserName] = useState<string>('');
   const [missedRequests, setMissedRequests] = useState<GameRequestNotification[]>([]);
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const supabase = createClient();
   const locationRef = useRef(location.pathname);
@@ -108,11 +107,12 @@ export default function App() {
   useEffect(() => {
     const lockOrientation = async () => {
       try {
-        if (screen.orientation && 'lock' in screen.orientation) {
-          await screen.orientation.lock('landscape');
+        const orientation = screen.orientation as any;
+        if (orientation && typeof orientation.lock === 'function') {
+          await orientation.lock('landscape');
         }
-      } catch (err) {
-        console.log('Screen orientation lock not supported, using CSS fallback');
+      } catch {
+        // Screen orientation lock not supported, using CSS fallback
       }
     };
     lockOrientation();
@@ -140,10 +140,10 @@ export default function App() {
           .eq('id', session.user.id)
           .single();
 
-        let profileData = playerData;
+        let profileData: any = playerData;
 
         if (playerError || !playerData) {
-          const { data: youthData } = await supabase
+          const { data: youthData } = await (supabase as any)
             .schema('youth')
             .from('youth_profiles')
             .select('profilecolor, profilepic, role, gender, birthday_month, birthday_day, birthday_year, parent_id, granboard_name')
@@ -172,7 +172,7 @@ export default function App() {
 
         // Check for active tournament
         try {
-          const { data: tournamentData } = await supabase
+          const { data: tournamentData } = await (supabase as any)
             .schema('tournament')
             .from('tournament_registrations')
             .select('id')
@@ -180,11 +180,11 @@ export default function App() {
             .eq('status', 'active')
             .limit(1);
           if (tournamentData && tournamentData.length > 0) setHasActiveTournament(true);
-        } catch (err) {}
+        } catch {}
 
         // Check for active league
         try {
-          const { data: leagueData } = await supabase
+          const { data: leagueData } = await (supabase as any)
             .schema('league')
             .from('league_schedules')
             .select('id')
@@ -192,7 +192,7 @@ export default function App() {
             .eq('status', 'scheduled')
             .limit(1);
           if (leagueData && leagueData.length > 0) setHasActiveLeague(true);
-        } catch (err) {}
+        } catch {}
 
         if (profileData?.profilecolor) setAccentColor(profileData.profilecolor);
 
@@ -208,31 +208,24 @@ export default function App() {
           }
         }
 
-        // Check for active games to rejoin (or auto-clean if user abandoned)
+        // Check for active games to rejoin
         try {
-          const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-          const { data: activeGames } = await (supabase as any)
-            .schema('companion')
-            .from('active_games')
-            .select('id, player1_id, player2_id, player1_granboard_name, player2_granboard_name, status, created_at')
-            .or(`player1_id.eq.${session.user.id},player2_id.eq.${session.user.id}`)
-            .in('status', ['accepted', 'playing'])
-            .gte('created_at', twoHoursAgo);
-
-          if (activeGames && activeGames.length > 0) {
-            const abandonedId = localStorage.getItem('bb-abandoned-game');
-
-            // If user previously clicked abandon, auto-clean matching games
-            if (abandonedId) {
-              await removeActiveGame(abandonedId, session.user.id);
-              localStorage.removeItem('bb-abandoned-game');
-            }
-
-            // Remove any lingering rows for this user regardless of status to kill the prompt
-            await removeActiveGame(undefined, session.user.id);
-
-            // Refresh after cleanup to see if anything remains
-            const { data: remainingGames } = await (supabase as any)
+          // If user previously abandoned, clear the flag and skip the rejoin check entirely
+          const abandonedId = localStorage.getItem('bb-abandoned-game');
+          if (abandonedId) {
+            // Try to clean up the abandoned game
+            await (supabase as any)
+              .schema('companion')
+              .from('active_games')
+              .delete()
+              .eq('id', abandonedId);
+            localStorage.removeItem('bb-abandoned-game');
+            sessionStorage.removeItem('blebuddy_game');
+            // Don't show rejoin prompt - user explicitly abandoned
+          } else {
+            // Only check for rejoin if user didn't abandon
+            const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+            const { data: activeGames } = await (supabase as any)
               .schema('companion')
               .from('active_games')
               .select('id, player1_id, player2_id, player1_granboard_name, player2_granboard_name, status, created_at')
@@ -240,7 +233,7 @@ export default function App() {
               .in('status', ['accepted', 'playing'])
               .gte('created_at', twoHoursAgo);
 
-            const validGame = remainingGames?.find(g => g.status === 'accepted' || g.status === 'playing');
+            const validGame = activeGames?.find((g: any) => g.status === 'accepted' || g.status === 'playing');
 
             if (validGame) {
               const isPlayer1 = validGame.player1_id === session.user.id;
@@ -252,7 +245,9 @@ export default function App() {
               });
             }
           }
-        } catch (err) {}
+        } catch (err) {
+          console.error('[App] Error checking for rejoin games:', err);
+        }
       } catch (error) {
         setIsAuthenticated(false);
       } finally {
@@ -271,13 +266,11 @@ export default function App() {
 
   const handleLogout = async () => {
     try {
-      setIsLoggingOut(true);
       await supabase.auth.signOut({ scope: 'local' });
       localStorage.removeItem('sb-sndsyxxcnuwjmjgikzgg-auth-token');
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
-      setIsLoggingOut(false);
       setIsAuthenticated(false);
       setUserId('');
       setUserName('');
@@ -325,11 +318,11 @@ export default function App() {
 
             try {
               const profileQuery = schema === 'youth'
-                ? supabase.schema('youth').from('youth_profiles')
+                ? (supabase as any).schema('youth').from('youth_profiles')
                 : supabase.from('player_profiles');
               const { data: profile } = await profileQuery.select('granboard_name').eq('id', challengerId).single();
-              if (profile?.granboard_name) challengerName = profile.granboard_name;
-            } catch (error) {}
+              if ((profile as any)?.granboard_name) challengerName = (profile as any).granboard_name;
+            } catch {}
 
             setMissedRequests(prev => {
               if (prev.some(n => n.id === notificationId)) return prev;
@@ -370,9 +363,27 @@ export default function App() {
 
   const handleAbandonGame = async () => {
     if (!pendingRejoinGame) return;
-    localStorage.setItem('bb-abandoned-game', pendingRejoinGame.gameId);
-    await removeActiveGame(pendingRejoinGame.gameId);
+    const gameId = pendingRejoinGame.gameId;
+
+    // Clear local state FIRST so prompt disappears immediately
+    localStorage.setItem('bb-abandoned-game', gameId);
+    sessionStorage.removeItem('blebuddy_game');
     setPendingRejoinGame(null);
+    setActiveGame(null);
+
+    // Then try to delete from DB (non-blocking)
+    try {
+      await (supabase as any)
+        .schema('companion')
+        .from('active_games')
+        .delete()
+        .eq('id', gameId);
+      localStorage.removeItem('bb-abandoned-game');
+    } catch (err) {
+      console.error('[App] Error deleting abandoned game:', err);
+      // Keep the localStorage flag so next load will retry cleanup
+    }
+
     navigate('/dashboard');
   };
 
@@ -381,7 +392,7 @@ export default function App() {
     navigate('/cork');
   };
 
-  const handleCorkComplete = (firstPlayerId: string) => {
+  const handleCorkComplete = (_firstPlayerId: string) => {
     // For now, jump to the HUD preview after cork
     navigate('/game-preview');
   };
@@ -393,24 +404,24 @@ export default function App() {
     navigate('/online-lobby');
   };
 
-  const handleLocalDubsContinue = async (partnerId: string, userGoesFirst: boolean) => {
+  const handleLocalDubsContinue = async (partnerId: string, _userGoesFirst: boolean) => {
     try {
       const { data: partnerData } = await supabase.from('player_profiles').select('granboard_name').eq('id', partnerId).single();
       if (!partnerData) {
-        const { data: youthPartnerData } = await supabase.schema('youth').from('youth_profiles').select('granboard_name').eq('id', partnerId).single();
+        const { data: youthPartnerData } = await (supabase as any).schema('youth').from('youth_profiles').select('granboard_name').eq('id', partnerId).single();
         if (youthPartnerData) setPartner({ id: partnerId, name: youthPartnerData.granboard_name });
       } else {
-        setPartner({ id: partnerId, name: partnerData.granboard_name });
+        setPartner({ id: partnerId, name: (partnerData as any).granboard_name });
       }
-    } catch (err) {}
+    } catch {}
     navigate('/online-lobby');
   };
 
   const handleRemoteDubsContinue = async (partnerId: string) => {
     try {
       const { data: partnerData } = await supabase.from('player_profiles').select('granboard_name').eq('id', partnerId).single();
-      if (partnerData) setPartner({ id: partnerId, name: partnerData.granboard_name });
-    } catch (err) {}
+      if (partnerData) setPartner({ id: partnerId, name: (partnerData as any).granboard_name });
+    } catch {}
     navigate('/online-lobby');
   };
 
@@ -461,7 +472,7 @@ export default function App() {
           hasActiveTournament={hasActiveTournament}
           hasActiveLeague={hasActiveLeague}
           bleConnected={bleConnected}
-          bleStatus={bleStatus}
+          bleStatus={bleStatus === 'error' ? 'disconnected' : bleStatus}
           onBLEConnect={bleConnect}
           onBLEDisconnect={bleDisconnect}
           onNavigateToOnlineLobby={() => navigate('/online-lobby')}
