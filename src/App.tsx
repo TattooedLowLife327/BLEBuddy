@@ -406,6 +406,13 @@ export default function App() {
     navigate('/online-lobby');
   };
 
+  const handleLeaveMatch = async () => {
+    await removeActiveGame(activeGame?.gameId);
+    setActiveGame(null);
+    setPendingRejoinGame(null);
+    navigate('/dashboard');
+  };
+
   const handleLocalDubsContinue = async (partnerId: string, _userGoesFirst: boolean) => {
     try {
       const { data: partnerData } = await supabase.from('player_profiles').select('granboard_name').eq('id', partnerId).single();
@@ -551,7 +558,7 @@ export default function App() {
       {/* Preview for post-cork match HUD */}
       <Route path="/game-preview" element={
         !isAuthenticated ? <Navigate to={`/login${queryString}`} /> :
-        <GameScreen />
+        <GameScreen onLeaveMatch={handleLeaveMatch} />
       } />
 
       <Route path="/" element={<Navigate to={isAuthenticated ? `/dashboard${queryString}` : `/login${queryString}`} />} />

@@ -1,4 +1,8 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+
+interface GameScreenProps {
+  onLeaveMatch?: () => void;
+}
 
 type Player = {
   id: string;
@@ -23,7 +27,8 @@ type Visit = {
 
 // Lightweight, static preview of the in-match HUD shown after cork.
 // No live data yet—this is for layout approval.
-export function GameScreen() {
+export function GameScreen({ onLeaveMatch }: GameScreenProps) {
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const players: Player[] = useMemo(
     () => [
       {
@@ -75,6 +80,14 @@ export function GameScreen() {
           <div className="flex items-center gap-3 text-sm text-zinc-300">
             <span className="px-3 py-1 rounded-full bg-white/5 border border-white/10">Round 5</span>
             <span className="px-3 py-1 rounded-full bg-white/5 border border-white/10">Throws: 3 / 3</span>
+            {onLeaveMatch && (
+              <button
+                onClick={() => setShowLeaveConfirm(true)}
+                className="px-3 py-1 rounded-full bg-red-600/20 border border-red-600/50 text-red-400 hover:bg-red-600/30 transition-colors"
+              >
+                Leave Match
+              </button>
+            )}
           </div>
         </div>
 
@@ -193,6 +206,35 @@ export function GameScreen() {
           </div>
         </div>
       </div>
+
+      {/* Leave Match Confirmation */}
+      {showLeaveConfirm && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 max-w-sm w-full">
+            <h3 className="text-white text-lg font-bold mb-2">Leave Match?</h3>
+            <p className="text-zinc-400 text-sm mb-4">
+              You will forfeit this match and your opponent will be notified. This cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowLeaveConfirm(false)}
+                className="flex-1 px-4 py-3 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg text-sm font-semibold transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowLeaveConfirm(false);
+                  onLeaveMatch?.();
+                }}
+                className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold transition-colors"
+              >
+                Leave Match
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
