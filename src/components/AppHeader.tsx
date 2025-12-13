@@ -39,6 +39,7 @@ interface AppHeaderProps {
   accentColor: string;
   userName: string;
   onLogout: () => void;
+  onOpenSettings?: () => void;
 }
 
 export function AppHeader({
@@ -57,6 +58,7 @@ export function AppHeader({
   accentColor,
   userName,
   onLogout,
+  onOpenSettings,
 }: AppHeaderProps) {
   const notificationCount = missedRequests.length;
 
@@ -206,6 +208,7 @@ export function AppHeader({
           accentColor={accentColor}
           userName={userName}
           onLogout={onLogout}
+          onOpenSettings={onOpenSettings}
           size="sm"
         />
       </div>

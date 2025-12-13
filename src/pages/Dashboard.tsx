@@ -42,6 +42,7 @@ interface DashboardProps {
   missedRequests: GameRequestNotification[];
   onClearMissedRequests: () => void;
   onLogout: () => void;
+  onOpenSettings?: () => void;
 }
 
 export function Dashboard({
@@ -65,6 +66,7 @@ export function Dashboard({
   missedRequests,
   onClearMissedRequests,
   onLogout,
+  onOpenSettings,
 }: DashboardProps) {
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [flippingCard, setFlippingCard] = useState<string | null>(null);
@@ -235,6 +237,7 @@ export function Dashboard({
           accentColor={accentColor}
           userName={userName}
           onLogout={onLogout}
+          onOpenSettings={onOpenSettings}
         />
 
         <main className="flex-1 flex flex-col justify-center items-center">

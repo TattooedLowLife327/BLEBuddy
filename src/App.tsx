@@ -7,6 +7,7 @@ import { LocalDubsSetup } from './pages/LocalDubsSetup';
 import { RemoteDubsSetup } from './pages/RemoteDubsSetup';
 import { CorkScreen } from './components/CorkScreen';
 import { GameScreen } from './pages/GameScreen';
+import { SettingsModal } from './components/SettingsModal';
 import { createClient } from './utils/supabase/client';
 import { useBLE } from './contexts/BLEContext';
 import { useGame, type GameData } from './contexts/GameContext';
@@ -47,6 +48,7 @@ export default function App() {
   const [userId, setUserId] = useState<string>('');
   const [userName, setUserName] = useState<string>('');
   const [missedRequests, setMissedRequests] = useState<GameRequestNotification[]>([]);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   const supabase = createClient();
   const locationRef = useRef(location.pathname);
@@ -455,6 +457,7 @@ export default function App() {
   const queryString = location.search;
 
   return (
+    <>
     <Routes>
       <Route path="/login" element={isAuthenticated ? <Navigate to={`/dashboard${queryString}`} /> : <Login onLoginSuccess={handleLoginSuccess} />} />
 
@@ -481,6 +484,7 @@ export default function App() {
           missedRequests={missedRequests}
           onClearMissedRequests={() => setMissedRequests([])}
           onLogout={handleLogout}
+          onOpenSettings={() => setShowSettingsModal(true)}
         />
       } />
 
@@ -553,5 +557,8 @@ export default function App() {
       <Route path="/" element={<Navigate to={isAuthenticated ? `/dashboard${queryString}` : `/login${queryString}`} />} />
       <Route path="*" element={<Navigate to={isAuthenticated ? `/dashboard${queryString}` : `/login${queryString}`} />} />
     </Routes>
+
+    <SettingsModal isOpen={showSettingsModal} onClose={() => setShowSettingsModal(false)} />
+    </>
   );
 }

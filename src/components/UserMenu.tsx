@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { LogOut, User as UserIcon } from 'lucide-react';
+import { LogOut, Settings } from 'lucide-react';
 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from './ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
@@ -9,6 +9,7 @@ interface UserMenuProps {
   accentColor?: string;
   userName?: string | null;
   onLogout: () => void | Promise<void>;
+  onOpenSettings?: () => void;
   className?: string;
   size?: 'sm' | 'md' | 'lg';
 }
@@ -18,6 +19,7 @@ export function UserMenu({
   accentColor = '#a855f7',
   userName,
   onLogout,
+  onOpenSettings,
   className,
   size = 'lg',
 }: UserMenuProps) {
@@ -72,6 +74,18 @@ export function UserMenu({
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator className="bg-zinc-700" />
+        {onOpenSettings && (
+          <DropdownMenuItem
+            onSelect={event => {
+              event.preventDefault();
+              onOpenSettings();
+            }}
+            className="focus:bg-zinc-800 focus:text-white cursor-pointer"
+          >
+            <Settings className="mr-2 h-4 w-4" />
+            <span>Settings</span>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem
           onSelect={event => {
             event.preventDefault();
