@@ -75,6 +75,7 @@ export function useWebRTC(options: UseWebRTCOptions | null): UseWebRTCReturn {
 
     return () => {
       webRTCManager.offRemoteStream(handleRemoteStream);
+      webRTCManager.offConnectionState(handleConnectionState);
     };
   }, [options]);
 

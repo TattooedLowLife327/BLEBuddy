@@ -45,6 +45,10 @@ class WebRTCManager {
     this.onConnectionStateCallbacks.push(callback);
   }
 
+  offConnectionState(callback: (state: RTCPeerConnectionState) => void): void {
+    this.onConnectionStateCallbacks = this.onConnectionStateCallbacks.filter(cb => cb !== callback);
+  }
+
   async getLocalStream(): Promise<MediaStream | null> {
     // If we already have a stream, stop it first to release the camera
     if (this.localStream) {
