@@ -472,6 +472,17 @@ export function GameScreen({ onLeaveMatch, localStream, remoteStream }: GameScre
   const [p1HasStarted, setP1HasStarted] = useState(false);
   const [p2HasStarted, setP2HasStarted] = useState(false);
 
+  // Cricket state: marks on numbers 15-20 and Bull (0-3 marks per number)
+  // CRICKET_NUMBERS: 20, 19, 18, 17, 16, 15, 25 (Bull)
+  const CRICKET_NUMBERS = [20, 19, 18, 17, 16, 15, 25] as const;
+  type CricketMarks = Record<number, number>; // number -> marks (0-3)
+  const initialCricketMarks = (): CricketMarks => ({ 20: 0, 19: 0, 18: 0, 17: 0, 16: 0, 15: 0, 25: 0 });
+
+  const [p1CricketMarks, setP1CricketMarks] = useState<CricketMarks>(initialCricketMarks);
+  const [p2CricketMarks, setP2CricketMarks] = useState<CricketMarks>(initialCricketMarks);
+  const [p1CricketPoints, setP1CricketPoints] = useState(0); // Points from hitting open numbers
+  const [p2CricketPoints, setP2CricketPoints] = useState(0);
+
   // Match format: array of game types
   // Example: ['501', 'cricket', 'choice'] for a best-of-3
   const [matchGames] = useState<string[]>(['501', 'cricket', 'choice']); // Demo: best-of-3
@@ -490,8 +501,16 @@ export function GameScreen({ onLeaveMatch, localStream, remoteStream }: GameScre
   const isCricketGame = currentGameType === 'cricket';
   const isChoiceGame = currentGameType === 'choice';
 
+  // Get starting score for a game type
+  const getStartScore = (gameType: string): number => {
+    if (gameType === '501') return 501;
+    if (gameType === '301') return 301;
+    // Cricket and choice don't use 01 scoring, but default to 301 for now
+    return 301;
+  };
+
   // Starting score for 01 games (used for PPR calculation)
-  const startScore = currentGameType === '501' ? 501 : 301;
+  const startScore = getStartScore(currentGameType);
 
   // 80% threshold: points remaining when stats should freeze
   // 301: <=50 remaining (scored >=251)
@@ -554,11 +573,16 @@ export function GameScreen({ onLeaveMatch, localStream, remoteStream }: GameScre
       setMatchGameWinners(prev => [...prev, gameWinner]);
     }
 
+    // Determine the next game's starting score
+    const nextGameIndex = currentGameIndex + 1;
+    const nextGameType = matchGames[nextGameIndex] || '301';
+    const nextStartScore = getStartScore(nextGameType);
+
     // Reset game state
     setShowWinnerScreen(false);
     setGameWinner(null);
-    setP1Score(301);
-    setP2Score(301);
+    setP1Score(nextStartScore);
+    setP2Score(nextStartScore);
     setCurrentDarts([]);
     setRoundScore(0);
     setCurrentRound(1);
@@ -579,7 +603,13 @@ export function GameScreen({ onLeaveMatch, localStream, remoteStream }: GameScre
     setEightyPercentTriggered(false);
     setP1FrozenPPR(null);
     setP2FrozenPPR(null);
-  }, [gameWinner]);
+
+    // Reset cricket state for new game
+    setP1CricketMarks(initialCricketMarks());
+    setP2CricketMarks(initialCricketMarks());
+    setP1CricketPoints(0);
+    setP2CricketPoints(0);
+  }, [gameWinner, currentGameIndex, matchGames]);
 
   // Detect achievements based on the 3 darts thrown
   // Priority: win > ton80 > threeInBlack > shanghai > whiteHorse > hatTrick > threeInBed > highTon > lowTon > bust
@@ -688,14 +718,17 @@ export function GameScreen({ onLeaveMatch, localStream, remoteStream }: GameScre
     setUndosRemaining(prev => prev - 1);
   }, [dartHistory, undosRemaining]);
 
-  // Intro animation timer
+  // Intro animation timer - restarts when currentGameIndex changes (new game in medley)
   useEffect(() => {
+    // Only run when showGoodLuck is true (start of game or new game)
+    if (!showGoodLuck) return;
+
     const timer = setTimeout(() => {
       setShowGoodLuck(false);
       setIntroComplete(true);
     }, 4000); // Animation duration
     return () => clearTimeout(timer);
-  }, []);
+  }, [showGoodLuck, currentGameIndex]);
 
   useEffect(() => {
     if (showPlayerChange) {
@@ -747,6 +780,21 @@ export function GameScreen({ onLeaveMatch, localStream, remoteStream }: GameScre
     }
   }, [showPlayerChange, currentThrower, p1ThrewThisRound, p2ThrewThisRound, isOhOneGame, eightyPercentTriggered, p1Score, p2Score, eightyPercentThreshold, p1DartsThrown, p2DartsThrown, startScore]);
 
+  // Cricket helper: get number from segment
+  const getCricketNumber = (segment: string): number | null => {
+    if (segment === 'S25' || segment === 'D25') return 25;
+    if (segment === 'MISS') return null;
+    const match = segment.match(/[SDT](\d+)/);
+    if (!match) return null;
+    const num = parseInt(match[1], 10);
+    return CRICKET_NUMBERS.includes(num as typeof CRICKET_NUMBERS[number]) ? num : null;
+  };
+
+  // Cricket helper: check if a player has closed all numbers
+  const allNumbersClosed = (marks: CricketMarks): boolean => {
+    return CRICKET_NUMBERS.every(num => marks[num] >= 3);
+  };
+
   const throwDart = useCallback((segment: string, score: number, multiplier: number) => {
     if (currentDarts.length >= 3 || showPlayerChange || !introComplete) return;
 
@@ -765,20 +813,101 @@ export function GameScreen({ onLeaveMatch, localStream, remoteStream }: GameScre
     };
     setDartHistory(prev => [...prev, snapshot]);
 
+    // Common dart data
+    const newDart: DartThrow = { segment, score, multiplier };
+    const newDarts = [...currentDarts, newDart];
+
+    // Track darts thrown for stats
+    if (currentThrower === 'p1') {
+      setP1DartsThrown(prev => prev + 1);
+    } else {
+      setP2DartsThrown(prev => prev + 1);
+    }
+
+    // ======== CRICKET GAME LOGIC ========
+    if (isCricketGame) {
+      const cricketNumber = getCricketNumber(segment);
+      let marksToAdd = multiplier; // Single=1, Double=2, Triple=3
+
+      // Get current player's and opponent's marks
+      const myMarks = currentThrower === 'p1' ? { ...p1CricketMarks } : { ...p2CricketMarks };
+      const oppMarks = currentThrower === 'p1' ? p2CricketMarks : p1CricketMarks;
+      const setMyMarks = currentThrower === 'p1' ? setP1CricketMarks : setP2CricketMarks;
+      const myPoints = currentThrower === 'p1' ? p1CricketPoints : p2CricketPoints;
+      const setMyPoints = currentThrower === 'p1' ? setP1CricketPoints : setP2CricketPoints;
+
+      let pointsEarned = 0;
+      let totalMarksThisRound = roundScore; // We'll use roundScore to track marks for display
+
+      if (cricketNumber !== null) {
+        const currentMarks = myMarks[cricketNumber] || 0;
+        const oppCurrentMarks = oppMarks[cricketNumber] || 0;
+
+        // First apply marks to close the number
+        const marksNeededToClose = Math.max(0, 3 - currentMarks);
+        const marksApplied = Math.min(marksToAdd, marksNeededToClose);
+        myMarks[cricketNumber] = Math.min(3, currentMarks + marksToAdd);
+
+        // Extra marks become points IF opponent hasn't closed
+        const extraMarks = marksToAdd - marksApplied;
+        if (extraMarks > 0 && oppCurrentMarks < 3) {
+          // Points = number value * extra marks (bull = 25)
+          pointsEarned = cricketNumber * extraMarks;
+        }
+
+        // Also: if we already had 3+ marks and opponent hasn't closed, all marks are points
+        if (currentMarks >= 3 && oppCurrentMarks < 3) {
+          pointsEarned = cricketNumber * marksToAdd;
+        }
+
+        totalMarksThisRound += marksApplied;
+      }
+
+      setMyMarks(myMarks);
+      if (pointsEarned > 0) {
+        setMyPoints(myPoints + pointsEarned);
+      }
+
+      // Update display
+      setCurrentDarts(newDarts);
+      setRoundScore(totalMarksThisRound);
+
+      // Check for cricket win: all numbers closed AND points >= opponent OR first to close all
+      const newMyPoints = myPoints + pointsEarned;
+      const oppPoints = currentThrower === 'p1' ? p2CricketPoints : p1CricketPoints;
+      const didWin = allNumbersClosed(myMarks) && newMyPoints >= oppPoints;
+
+      if (didWin) {
+        const achievement = detectAchievement(newDarts, totalMarksThisRound, false, true);
+        triggerAchievement(achievement, currentThrower);
+        return;
+      }
+
+      // Check for achievements on 3rd dart
+      if (newDarts.length === 3) {
+        const achievement = detectAchievement(newDarts, totalMarksThisRound, false, false);
+        if (achievement) {
+          triggerAchievement(achievement);
+          setTimeout(() => setShowPlayerChange(true), 2000);
+          return;
+        }
+        setShowPlayerChange(true);
+      }
+      return;
+    }
+
+    // ======== 01 GAME LOGIC ========
     // Check dart types
-    const isDouble = multiplier === 2; // Outer ring doubles AND D25 (double bull)
+    const isDouble = multiplier === 2;
     const isTriple = multiplier === 3;
     const isSingleBull = segment === 'S25';
     const isDoubleBull = segment === 'D25';
     const isAnyBull = isSingleBull || isDoubleBull;
 
-    // Valid IN check based on inMode:
-    // - open: any dart
-    // - master: double, triple, or any bull (S25/D25)
-    // - double: outer ring double OR double bull (D25) only - NOT single bull
+    // Valid IN check based on inMode
     const isValidIn = inMode === 'open' ||
                       (inMode === 'master' && (isDouble || isTriple || isAnyBull)) ||
-                      (inMode === 'double' && isDouble); // D25 is multiplier 2, so isDouble covers it
+                      (inMode === 'double' && isDouble);
 
     // If player hasn't started and this isn't a valid in, dart counts but scores 0
     let effectiveScore = score;
@@ -786,84 +915,59 @@ export function GameScreen({ onLeaveMatch, localStream, remoteStream }: GameScre
 
     if (!hasStarted) {
       if (isValidIn && score > 0) {
-        // Player starts with this dart
         playerStartsNow = true;
         effectiveScore = score;
       } else {
-        // Dart thrown but doesn't count toward score
         effectiveScore = 0;
       }
     }
 
-    // Valid OUT check based on outMode:
-    // - open: any dart that makes score exactly 0
-    // - master: double, triple, or any bull AND makes score exactly 0
-    // - double: outer ring double OR double bull (D25) AND makes score exactly 0
+    // Valid OUT check based on outMode
     const potentialNewScore = currentScore - effectiveScore;
     const isValidOut = outMode === 'open' ||
                        (outMode === 'master' && (isDouble || isTriple || isAnyBull)) ||
-                       (outMode === 'double' && isDouble); // D25 is multiplier 2
+                       (outMode === 'double' && isDouble);
 
-    // Bust conditions:
-    // 1. Score goes below 0
-    // 2. Score lands on exactly 1 (can't finish with 1 remaining)
-    // 3. Score lands on 0 but the dart wasn't a valid out
+    // Bust conditions
     const isBust = potentialNewScore < 0 ||
                    potentialNewScore === 1 ||
                    (potentialNewScore === 0 && !isValidOut);
 
-    const newDart: DartThrow = { segment, score: effectiveScore, multiplier };
-    const newDarts = [...currentDarts, newDart];
     const newRoundScore = roundScore + effectiveScore;
 
-    // Track darts thrown for PPR calculation
-    if (currentThrower === 'p1') {
-      setP1DartsThrown(prev => prev + 1);
-    } else {
-      setP2DartsThrown(prev => prev + 1);
-    }
-
     if (isBust) {
-      // Show the dart but don't update score, then switch players
       setCurrentDarts(newDarts);
-      // Trigger bust achievement
       const achievement = detectAchievement(newDarts, newRoundScore, true, false);
       triggerAchievement(achievement);
-      setTimeout(() => setShowPlayerChange(true), 2000); // Wait for animation
+      setTimeout(() => setShowPlayerChange(true), 2000);
       return;
     }
 
-    // Check for win (score reaches exactly 0)
     const didWin = potentialNewScore === 0;
 
-    // Update state
     setCurrentDarts(newDarts);
     setRoundScore(newRoundScore);
     if (currentThrower === 'p1') setP1Score(potentialNewScore);
     else setP2Score(potentialNewScore);
 
-    // Mark player as started if they just hit a valid in
     if (playerStartsNow) {
       setHasStarted(true);
     }
 
-    // Check for achievements on 3rd dart or win
     if (newDarts.length === 3 || didWin) {
       const achievement = detectAchievement(newDarts, newRoundScore, false, didWin);
       if (achievement) {
-        // Pass winner for win achievements (single game = show winner screen after)
         const winner = didWin ? currentThrower : undefined;
         triggerAchievement(achievement, winner);
-        // Don't show player change on win - winners screen will show
         if (!didWin) {
-          setTimeout(() => setShowPlayerChange(true), 2000); // Wait for animation
+          setTimeout(() => setShowPlayerChange(true), 2000);
         }
         return;
       }
     }
 
     if (newDarts.length === 3) setShowPlayerChange(true);
-  }, [currentDarts, currentScore, currentThrower, roundScore, showPlayerChange, introComplete, p1Score, p2Score, p1HasStarted, p2HasStarted, inMode, outMode, detectAchievement, triggerAchievement]);
+  }, [currentDarts, currentScore, currentThrower, roundScore, showPlayerChange, introComplete, p1Score, p2Score, p1HasStarted, p2HasStarted, inMode, outMode, detectAchievement, triggerAchievement, isCricketGame, p1CricketMarks, p2CricketMarks, p1CricketPoints, p2CricketPoints]);
 
   // Handle BLE throws - convert DartThrowData to throwDart call
   useEffect(() => {
@@ -1829,12 +1933,14 @@ export function GameScreen({ onLeaveMatch, localStream, remoteStream }: GameScre
                   <button
                     onClick={() => {
                       // Reset everything for full rematch
+                      const firstGameType = matchGames[0] || '301';
+                      const firstGameScore = getStartScore(firstGameType);
                       setShowWinnerScreen(false);
                       setGameWinner(null);
                       setMatchGameWinners([]);
                       setCurrentGameIndex(0);
-                      setP1Score(301);
-                      setP2Score(301);
+                      setP1Score(firstGameScore);
+                      setP2Score(firstGameScore);
                       setCurrentDarts([]);
                       setRoundScore(0);
                       setCurrentRound(1);
@@ -1853,6 +1959,11 @@ export function GameScreen({ onLeaveMatch, localStream, remoteStream }: GameScre
                       setEightyPercentTriggered(false);
                       setP1FrozenPPR(null);
                       setP2FrozenPPR(null);
+                      // Reset cricket state
+                      setP1CricketMarks(initialCricketMarks());
+                      setP2CricketMarks(initialCricketMarks());
+                      setP1CricketPoints(0);
+                      setP2CricketPoints(0);
                     }}
                     style={{
                       padding: `calc(16 * ${scale}) calc(48 * ${scale})`,
