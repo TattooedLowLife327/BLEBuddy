@@ -184,7 +184,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
   }, [gameId, corkRound, player1.id, player2.id]);
 
   // Initialize WebRTC
-  useEffect(() => { initialize(); return () => { disconnect(); }; }, []);
+  useEffect(() => { initialize(); return () => { disconnect(); }; }, [initialize, disconnect]);
 
   // Attach local video stream
   useEffect(() => {

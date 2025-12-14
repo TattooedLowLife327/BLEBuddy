@@ -73,28 +73,8 @@ export function useBLEThrows(matchId?: string, playerId?: string): UseBLEThrowsR
     }
   }, [matchId, playerId, supabase]);
 
-  // Listen for BLE throws and save them
-  useEffect(() => {
-    const handleThrow = async (throwData: DartThrowData) => {
-      console.log('🎯 New throw detected:', throwData);
-      await saveThrowToDatabase(throwData);
-    };
-
-    bleConnection.onThrow(handleThrow);
-
-    // Load existing throws for this match
-    if (matchId) {
-      loadMatchThrows();
-    }
-
-    // Cleanup
-    return () => {
-      bleConnection.offThrow(handleThrow);
-    };
-  }, [matchId, playerId, saveThrowToDatabase]);
-
   // Load existing throws from database
-  const loadMatchThrows = async () => {
+  const loadMatchThrows = useCallback(async () => {
     if (!matchId) return;
 
     try {
@@ -114,7 +94,27 @@ export function useBLEThrows(matchId?: string, playerId?: string): UseBLEThrowsR
       console.error('Error loading throws:', err);
       setError((err as Error).message);
     }
-  };
+  }, [matchId, supabase]);
+
+  // Listen for BLE throws and save them
+  useEffect(() => {
+    const handleThrow = async (throwData: DartThrowData) => {
+      console.log('🎯 New throw detected:', throwData);
+      await saveThrowToDatabase(throwData);
+    };
+
+    bleConnection.onThrow(handleThrow);
+
+    // Load existing throws for this match
+    if (matchId) {
+      loadMatchThrows();
+    }
+
+    // Cleanup
+    return () => {
+      bleConnection.offThrow(handleThrow);
+    };
+  }, [matchId, playerId, saveThrowToDatabase, loadMatchThrows]);
 
   // Get throws for current player only
   const playerThrows = throws.filter(t => t.player_id === playerId);

@@ -35,6 +35,16 @@ export function useGameStatus(options: UseGameStatusOptions): UseGameStatusRetur
   const statusChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const hasSeenOpponentRef = useRef(false); // Track if we've ever seen opponent online
 
+  // Use refs for callbacks to avoid stale closures in useEffect
+  const onOpponentLeftRef = useRef(options.onOpponentLeft);
+  const onOpponentDisconnectedRef = useRef(options.onOpponentDisconnected);
+  const onOpponentReconnectedRef = useRef(options.onOpponentReconnected);
+
+  // Keep refs in sync with latest callbacks
+  onOpponentLeftRef.current = options.onOpponentLeft;
+  onOpponentDisconnectedRef.current = options.onOpponentDisconnected;
+  onOpponentReconnectedRef.current = options.onOpponentReconnected;
+
   // Clear countdown timer
   const clearCountdown = useCallback(() => {
     if (countdownIntervalRef.current) {
@@ -54,13 +64,13 @@ export function useGameStatus(options: UseGameStatusOptions): UseGameStatusRetur
         if (prev === null || prev <= 1) {
           clearCountdown();
           // Timeout reached - opponent is gone
-          options.onOpponentLeft();
+          onOpponentLeftRef.current();
           return null;
         }
         return prev - 1;
       });
     }, 1000);
-  }, [clearCountdown, options]);
+  }, [clearCountdown]);
 
   // Leave match - update DB and broadcast
   const leaveMatch = useCallback(async () => {
@@ -149,13 +159,13 @@ export function useGameStatus(options: UseGameStatusOptions): UseGameStatusRetur
             console.log('[GameStatus] Opponent came online/reconnected');
             clearCountdown();
             setIsOpponentOnline(true);
-            options.onOpponentReconnected?.();
+            onOpponentReconnectedRef.current?.();
           }
         } else if (!opponentOnline && hasSeenOpponentRef.current && isOpponentOnline) {
           // Opponent went offline AFTER we previously saw them - start countdown
           console.log('[GameStatus] Opponent disconnected after being online - starting countdown');
           setIsOpponentOnline(false);
-          options.onOpponentDisconnected?.();
+          onOpponentDisconnectedRef.current?.();
           startCountdown();
         } else if (!opponentOnline && !hasSeenOpponentRef.current) {
           // Opponent not online but we haven't seen them yet - just waiting
@@ -168,7 +178,7 @@ export function useGameStatus(options: UseGameStatusOptions): UseGameStatusRetur
           hasSeenOpponentRef.current = true;
           clearCountdown();
           setIsOpponentOnline(true);
-          options.onOpponentReconnected?.();
+          onOpponentReconnectedRef.current?.();
         }
       })
       .on('presence', { event: 'leave' }, ({ key }) => {
@@ -202,7 +212,7 @@ export function useGameStatus(options: UseGameStatusOptions): UseGameStatusRetur
 
           // Auto-return to lobby after showing message
           setTimeout(() => {
-            options.onOpponentLeft();
+            onOpponentLeftRef.current();
           }, 2500);
         }
       })

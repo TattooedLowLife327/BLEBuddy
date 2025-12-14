@@ -1,4 +1,7 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { useBLE } from '../contexts/BLEContext';
+import { isDevMode } from '../utils/devMode';
+import type { DartThrowData } from '../utils/ble/bleConnection';
 
 interface DartThrow {
   segment: string;
@@ -418,9 +421,20 @@ const goodLuckKeyframes = `
 
 interface GameScreenProps {
   onLeaveMatch?: () => void;
+  localStream?: MediaStream | null;
+  remoteStream?: MediaStream | null;
 }
 
-export function GameScreen({ onLeaveMatch }: GameScreenProps) {
+export function GameScreen({ onLeaveMatch, localStream, remoteStream }: GameScreenProps) {
+  // BLE integration
+  const { lastThrow, isConnected, simulateThrow: bleSimulateThrow } = useBLE();
+  const devMode = isDevMode();
+  const lastProcessedThrowRef = useRef<string | null>(null);
+
+  // Video element refs
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+
   const [p1Score, setP1Score] = useState(301);
   const [p2Score, setP2Score] = useState(301);
   const [currentThrower, setCurrentThrower] = useState<'p1' | 'p2'>('p1');
@@ -850,6 +864,47 @@ export function GameScreen({ onLeaveMatch }: GameScreenProps) {
 
     if (newDarts.length === 3) setShowPlayerChange(true);
   }, [currentDarts, currentScore, currentThrower, roundScore, showPlayerChange, introComplete, p1Score, p2Score, p1HasStarted, p2HasStarted, inMode, outMode, detectAchievement, triggerAchievement]);
+
+  // Handle BLE throws - convert DartThrowData to throwDart call
+  useEffect(() => {
+    if (!lastThrow) return;
+
+    // Avoid processing the same throw twice
+    if (lastThrow.timestamp === lastProcessedThrowRef.current) return;
+    lastProcessedThrowRef.current = lastThrow.timestamp;
+
+    // Convert BLE segment format to expected format
+    let segment = lastThrow.segment;
+    // Map BULL/DBL_BULL to S25/D25 format for consistency
+    if (lastThrow.segmentType === 'BULL') {
+      segment = 'S25';
+    } else if (lastThrow.segmentType === 'DBL_BULL') {
+      segment = 'D25';
+    }
+
+    console.log('[GameScreen] Processing BLE throw:', lastThrow);
+    throwDart(segment, lastThrow.score, lastThrow.multiplier);
+  }, [lastThrow, throwDart]);
+
+  // Dev mode throw simulator
+  const handleDevSimulateThrow = useCallback(() => {
+    if (!devMode) return;
+    bleSimulateThrow();
+  }, [devMode, bleSimulateThrow]);
+
+  // Connect local video stream to element
+  useEffect(() => {
+    if (localVideoRef.current && localStream) {
+      localVideoRef.current.srcObject = localStream;
+    }
+  }, [localStream]);
+
+  // Connect remote video stream to element
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStream) {
+      remoteVideoRef.current.srcObject = remoteStream;
+    }
+  }, [remoteStream]);
 
   const formatDart = (segment: string) => {
     if (segment === 'MISS') return 'MISS';
@@ -1418,7 +1473,7 @@ export function GameScreen({ onLeaveMatch }: GameScreenProps) {
             transition: 'all 0.3s ease-out',
           }}>
             <video
-              id="local-video"
+              ref={localVideoRef}
               autoPlay
               muted
               playsInline
@@ -1427,21 +1482,24 @@ export function GameScreen({ onLeaveMatch }: GameScreenProps) {
                 height: '100%',
                 objectFit: 'cover',
                 transform: 'scaleX(-1)', // Mirror for selfie view
+                display: localStream ? 'block' : 'none',
               }}
             />
             {/* Placeholder when no video */}
-            <div style={{
-              position: 'absolute',
-              inset: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontFamily: FONT_NAME,
-              fontSize: `calc(12 * ${scale})`,
-              color: 'rgba(255, 255, 255, 0.4)',
-            }}>
-              You
-            </div>
+            {!localStream && (
+              <div style={{
+                position: 'absolute',
+                inset: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontFamily: FONT_NAME,
+                fontSize: `calc(12 * ${scale})`,
+                color: 'rgba(255, 255, 255, 0.4)',
+              }}>
+                You
+              </div>
+            )}
           </div>
 
           {/* P2 Camera - Right Side */}
@@ -1460,28 +1518,31 @@ export function GameScreen({ onLeaveMatch }: GameScreenProps) {
             transition: 'all 0.3s ease-out',
           }}>
             <video
-              id="remote-video"
+              ref={remoteVideoRef}
               autoPlay
               playsInline
               style={{
                 width: '100%',
                 height: '100%',
                 objectFit: 'cover',
+                display: remoteStream ? 'block' : 'none',
               }}
             />
             {/* Placeholder when no video */}
-            <div style={{
-              position: 'absolute',
-              inset: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontFamily: FONT_NAME,
-              fontSize: `calc(12 * ${scale})`,
-              color: 'rgba(255, 255, 255, 0.4)',
-            }}>
-              Opponent
-            </div>
+            {!remoteStream && (
+              <div style={{
+                position: 'absolute',
+                inset: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontFamily: FONT_NAME,
+                fontSize: `calc(12 * ${scale})`,
+                color: 'rgba(255, 255, 255, 0.4)',
+              }}>
+                Opponent
+              </div>
+            )}
           </div>
         </>
       )}
@@ -1524,6 +1585,31 @@ export function GameScreen({ onLeaveMatch }: GameScreenProps) {
             overflow: 'hidden',
             minWidth: `calc(160 * ${scale})`,
           }}>
+            {/* Dev Mode Simulate Throw */}
+            {devMode && (
+              <button
+                onClick={() => {
+                  handleDevSimulateThrow();
+                  setMenuOpen(false);
+                }}
+                style={{
+                  width: '100%',
+                  padding: `calc(14 * ${scale}) calc(20 * ${scale})`,
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#FFA500',
+                  fontFamily: FONT_NAME,
+                  fontSize: `calc(18 * ${scale})`,
+                  fontWeight: 500,
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 165, 0, 0.1)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+              >
+                🎯 Simulate Throw
+              </button>
+            )}
             {/* Undo Dart */}
             <button
               onClick={() => {
@@ -1536,6 +1622,7 @@ export function GameScreen({ onLeaveMatch }: GameScreenProps) {
                 padding: `calc(14 * ${scale}) calc(20 * ${scale})`,
                 background: 'transparent',
                 border: 'none',
+                borderTop: devMode ? '1px solid rgba(255, 255, 255, 0.1)' : 'none',
                 color: (dartHistory.length === 0 || undosRemaining <= 0) ? '#555' : '#FFFFFF',
                 fontFamily: FONT_NAME,
                 fontSize: `calc(18 * ${scale})`,
