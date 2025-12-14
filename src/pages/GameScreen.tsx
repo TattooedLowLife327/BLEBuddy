@@ -937,6 +937,12 @@ export function GameScreen({ onLeaveMatch, localStream, remoteStream }: GameScre
 
     if (isBust) {
       setCurrentDarts(newDarts);
+      // Restore score to start of round (add back points already deducted this round)
+      if (currentThrower === 'p1') {
+        setP1Score(currentScore + roundScore);
+      } else {
+        setP2Score(currentScore + roundScore);
+      }
       const achievement = detectAchievement(newDarts, newRoundScore, true, false);
       triggerAchievement(achievement);
       setTimeout(() => setShowPlayerChange(true), 2000);
