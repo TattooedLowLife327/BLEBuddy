@@ -7,6 +7,8 @@ import { LocalDubsSetup } from './pages/LocalDubsSetup';
 import { RemoteDubsSetup } from './pages/RemoteDubsSetup';
 import { CorkScreen } from './components/CorkScreen';
 import { GameScreen } from './pages/GameScreen';
+import { O1GSPreview } from './pages/preview/01GSPreview';
+import { CRGSPreview } from './pages/preview/CRGSPreview';
 import { SettingsModal } from './components/SettingsModal';
 import { createClient } from './utils/supabase/client';
 import { useBLE } from './contexts/BLEContext';
@@ -553,8 +555,12 @@ export default function App() {
         <GameScreen onLeaveMatch={handleLeaveMatch} />
       } />
 
-      {/* UI Preview - no auth for testing */}
-      <Route path="/ui-preview" element={<GameScreen />} />
+      {/* Production games - no auth for testing */}
+      <Route path="/game/01" element={<GameScreen onLeaveMatch={() => window.location.href = '/dashboard'} />} />
+
+      {/* Preview screens - no auth for editing */}
+      <Route path="/preview/01" element={<O1GSPreview />} />
+      <Route path="/preview/cr" element={<CRGSPreview />} />
 
       <Route path="/" element={<Navigate to={isAuthenticated ? `/dashboard${queryString}` : `/login${queryString}`} />} />
       <Route path="*" element={<Navigate to={isAuthenticated ? `/dashboard${queryString}` : `/login${queryString}`} />} />

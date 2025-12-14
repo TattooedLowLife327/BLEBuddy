@@ -955,13 +955,113 @@ export function GameScreen({ onLeaveMatch, localStream, remoteStream }: GameScre
       {/* Inject keyframes */}
       <style>{goodLuckKeyframes}</style>
 
-      {/* Background */}
+      {/* Background - Split Screen Video Feeds */}
       <div style={{
         position: 'absolute',
         inset: 0,
-        backgroundImage: 'url(/assets/gamescreenbackground.png)',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
+        display: 'flex',
+      }}>
+        {/* P1 Camera - Left Half */}
+        <div style={{
+          flex: 1,
+          position: 'relative',
+          background: '#000',
+          borderRight: `2px solid ${p1Active ? PLAYERS.p1.profilecolor : 'rgba(255, 255, 255, 0.2)'}`,
+          transition: 'border-color 0.3s ease-out',
+        }}>
+          <video
+            ref={localVideoRef}
+            autoPlay
+            muted
+            playsInline
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              transform: 'scaleX(-1)', // Mirror for selfie view
+              display: localStream ? 'block' : 'none',
+            }}
+          />
+          {/* Placeholder when no video */}
+          {!localStream && (
+            <div style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontFamily: FONT_NAME,
+              fontSize: `calc(24 * ${scale})`,
+              color: 'rgba(255, 255, 255, 0.2)',
+              pointerEvents: 'none',
+            }}>
+              You
+            </div>
+          )}
+          {/* Active indicator glow */}
+          {p1Active && (
+            <div style={{
+              position: 'absolute',
+              inset: 0,
+              boxShadow: `inset 0 0 80px ${PLAYERS.p1.profilecolor}40`,
+              pointerEvents: 'none',
+            }} />
+          )}
+        </div>
+
+        {/* P2 Camera - Right Half */}
+        <div style={{
+          flex: 1,
+          position: 'relative',
+          background: '#000',
+          borderLeft: `2px solid ${p2Active ? PLAYERS.p2.profilecolor : 'rgba(255, 255, 255, 0.2)'}`,
+          transition: 'border-color 0.3s ease-out',
+        }}>
+          <video
+            ref={remoteVideoRef}
+            autoPlay
+            playsInline
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              display: remoteStream ? 'block' : 'none',
+            }}
+          />
+          {/* Placeholder when no video */}
+          {!remoteStream && (
+            <div style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontFamily: FONT_NAME,
+              fontSize: `calc(24 * ${scale})`,
+              color: 'rgba(255, 255, 255, 0.2)',
+              pointerEvents: 'none',
+            }}>
+              Opponent
+            </div>
+          )}
+          {/* Active indicator glow */}
+          {p2Active && (
+            <div style={{
+              position: 'absolute',
+              inset: 0,
+              boxShadow: `inset 0 0 80px ${PLAYERS.p2.profilecolor}40`,
+              pointerEvents: 'none',
+            }} />
+          )}
+        </div>
+      </div>
+
+      {/* Dark overlay for better UI visibility */}
+      <div style={{
+        position: 'absolute',
+        inset: 0,
+        background: 'rgba(0, 0, 0, 0.4)',
+        pointerEvents: 'none',
       }} />
 
       {/* Match Format / Checkout Display - Top Center */}
@@ -1066,7 +1166,7 @@ export function GameScreen({ onLeaveMatch, localStream, remoteStream }: GameScre
       <div style={{
         position: 'absolute',
         left: '50%',
-        top: '40%',
+        top: '50%',
         transform: 'translate(-50%, -50%)',
         fontFamily: FONT_SCORE,
         fontWeight: 300,
@@ -1453,99 +1553,6 @@ export function GameScreen({ onLeaveMatch, localStream, remoteStream }: GameScre
           }} />
         )}
       </div>
-
-      {/* Video Feeds - Centered Vertically, Active Player Larger */}
-      {introComplete && (
-        <>
-          {/* P1 Camera - Left Side */}
-          <div style={{
-            position: 'absolute',
-            top: '50%',
-            left: `calc(20 * ${scale})`,
-            transform: 'translateY(-50%)',
-            width: p1Active ? `calc(220 * ${scale})` : `calc(140 * ${scale})`,
-            height: p1Active ? `calc(124 * ${scale})` : `calc(79 * ${scale})`,
-            background: 'rgba(0, 0, 0, 0.8)',
-            borderRadius: `calc(8 * ${scale})`,
-            border: `2px solid ${p1Active ? PLAYERS.p1.profilecolor : INACTIVE}`,
-            overflow: 'hidden',
-            zIndex: 60,
-            transition: 'all 0.3s ease-out',
-          }}>
-            <video
-              ref={localVideoRef}
-              autoPlay
-              muted
-              playsInline
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                transform: 'scaleX(-1)', // Mirror for selfie view
-                display: localStream ? 'block' : 'none',
-              }}
-            />
-            {/* Placeholder when no video */}
-            {!localStream && (
-              <div style={{
-                position: 'absolute',
-                inset: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontFamily: FONT_NAME,
-                fontSize: `calc(12 * ${scale})`,
-                color: 'rgba(255, 255, 255, 0.4)',
-              }}>
-                You
-              </div>
-            )}
-          </div>
-
-          {/* P2 Camera - Right Side */}
-          <div style={{
-            position: 'absolute',
-            top: '50%',
-            right: `calc(20 * ${scale})`,
-            transform: 'translateY(-50%)',
-            width: p2Active ? `calc(220 * ${scale})` : `calc(140 * ${scale})`,
-            height: p2Active ? `calc(124 * ${scale})` : `calc(79 * ${scale})`,
-            background: 'rgba(0, 0, 0, 0.8)',
-            borderRadius: `calc(8 * ${scale})`,
-            border: `2px solid ${p2Active ? PLAYERS.p2.profilecolor : INACTIVE}`,
-            overflow: 'hidden',
-            zIndex: 60,
-            transition: 'all 0.3s ease-out',
-          }}>
-            <video
-              ref={remoteVideoRef}
-              autoPlay
-              playsInline
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                display: remoteStream ? 'block' : 'none',
-              }}
-            />
-            {/* Placeholder when no video */}
-            {!remoteStream && (
-              <div style={{
-                position: 'absolute',
-                inset: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontFamily: FONT_NAME,
-                fontSize: `calc(12 * ${scale})`,
-                color: 'rgba(255, 255, 255, 0.4)',
-              }}>
-                Opponent
-              </div>
-            )}
-          </div>
-        </>
-      )}
 
       {/* Hamburger Menu - Top Right */}
       <div style={{ position: 'absolute', top: `calc(20 * ${scale})`, right: `calc(20 * ${scale})`, zIndex: 100 }}>
