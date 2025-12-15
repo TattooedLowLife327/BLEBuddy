@@ -1,5 +1,9 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useBLE } from '../contexts/BLEContext';
+import { useGame } from '../contexts/GameContext';
+import { useBLEThrows } from '../hooks/useBLEThrows';
+import { useGameStatus } from '../hooks/useGameStatus';
+import { createClient } from '../utils/supabase/client';
 import { isDevMode } from '../utils/devMode';
 import type { DartThrowData } from '../utils/ble/bleConnection';
 
@@ -423,17 +427,116 @@ interface GameScreenProps {
   onLeaveMatch?: () => void;
   localStream?: MediaStream | null;
   remoteStream?: MediaStream | null;
+  // Player data can be passed as props or pulled from context
+  localPlayerId?: string;
+  localPlayerName?: string;
+  localPlayerColor?: string;
 }
 
-export function GameScreen({ onLeaveMatch, localStream, remoteStream }: GameScreenProps) {
+// Message type for realtime throw sync
+interface ThrowSyncMessage {
+  type: 'throw' | 'score_update' | 'turn_change';
+  playerId: string;
+  segment?: string;
+  score?: number;
+  multiplier?: number;
+  baseValue?: number;
+  dartNum?: number;
+  newScore?: number;
+  currentThrower?: 'p1' | 'p2';
+  timestamp: string;
+}
+
+export function GameScreen({ onLeaveMatch, localStream, remoteStream, localPlayerId, localPlayerName, localPlayerColor }: GameScreenProps) {
+  // Context hooks
+  const { activeGame } = useGame();
+  const supabase = createClient();
+
   // BLE integration
   const { lastThrow, isConnected, simulateThrow: bleSimulateThrow } = useBLE();
   const devMode = isDevMode();
   const lastProcessedThrowRef = useRef<string | null>(null);
 
+  // Realtime channel for throw sync
+  const throwChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
   // Video element refs
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+
+  // Determine player IDs - from props or context
+  const gameId = activeGame?.gameId;
+  const visiblePlayerId = localPlayerId || activeGame?.opponentId; // This player
+  const opponentId = activeGame?.opponentId;
+  const opponentName = activeGame?.opponentName || 'OPPONENT';
+  const opponentColor = activeGame?.opponentAccentColor || '#FB00FF';
+  const myName = localPlayerName || 'YOU';
+  const myColor = localPlayerColor || '#6600FF';
+
+  // Database hooks - only active if we have a gameId
+  const { saveThrow: saveThrowToDb, allThrows: dbThrows } = useBLEThrows(gameId, visiblePlayerId);
+
+  // Dynamic player data (overrides static PLAYERS constant when game is active)
+  const players = {
+    p1: { id: visiblePlayerId || 'p1', name: myName, profilecolor: myColor },
+    p2: { id: opponentId || 'p2', name: opponentName, profilecolor: opponentColor },
+  };
+
+  // Broadcast throw to opponent via realtime channel
+  const broadcastThrow = useCallback(async (throwData: {
+    segment: string;
+    score: number;
+    multiplier: number;
+    baseValue: number;
+    dartNum: number;
+    newScore: number;
+  }) => {
+    if (!throwChannelRef.current || !gameId) return;
+
+    const message: ThrowSyncMessage = {
+      type: 'throw',
+      playerId: visiblePlayerId || '',
+      segment: throwData.segment,
+      score: throwData.score,
+      multiplier: throwData.multiplier,
+      baseValue: throwData.baseValue,
+      dartNum: throwData.dartNum,
+      newScore: throwData.newScore,
+      timestamp: new Date().toISOString(),
+    };
+
+    console.log('[GameScreen] Broadcasting throw:', message);
+    await throwChannelRef.current.send({
+      type: 'broadcast',
+      event: 'game_throw',
+      payload: message,
+    });
+  }, [gameId, visiblePlayerId]);
+
+  // Update active_games table with current scores
+  const updateGameScores = useCallback(async (p1NewScore: number, p2NewScore: number, newThrower: 'p1' | 'p2') => {
+    if (!gameId) return;
+
+    try {
+      const { error } = await (supabase as any)
+        .schema('companion')
+        .from('active_games')
+        .update({
+          player1_score: p1NewScore,
+          player2_score: p2NewScore,
+          current_thrower_id: newThrower === 'p1' ? visiblePlayerId : opponentId,
+        })
+        .eq('id', gameId);
+
+      if (error) {
+        console.error('[GameScreen] Error updating game scores:', error);
+      } else {
+        console.log('[GameScreen] Game scores updated in database');
+      }
+    } catch (err) {
+      console.error('[GameScreen] Error updating game scores:', err);
+    }
+  }, [gameId, supabase, visiblePlayerId, opponentId]);
 
   const [p1Score, setP1Score] = useState(301);
   const [p2Score, setP2Score] = useState(301);
@@ -718,6 +821,49 @@ export function GameScreen({ onLeaveMatch, localStream, remoteStream }: GameScre
     setUndosRemaining(prev => prev - 1);
   }, [dartHistory, undosRemaining]);
 
+  // Setup realtime channel for throw sync with opponent
+  useEffect(() => {
+    if (!gameId) return;
+
+    const channelName = `game:${gameId}`;
+    console.log(`[GameScreen] Setting up throw sync channel: ${channelName}`);
+
+    const channel = supabase.channel(channelName, { config: { broadcast: { self: false } } });
+    throwChannelRef.current = channel;
+
+    channel
+      .on('broadcast', { event: 'game_throw' }, ({ payload }) => {
+        const msg = payload as ThrowSyncMessage;
+        console.log('[GameScreen] Received opponent throw:', msg);
+
+        // Only process opponent's throws
+        if (msg.playerId === visiblePlayerId) return;
+
+        // Process opponent's throw - update their score
+        // Since opponent is p2 from our perspective
+        if (msg.newScore !== undefined) {
+          setP2Score(msg.newScore);
+        }
+      })
+      .on('broadcast', { event: 'turn_change' }, ({ payload }) => {
+        const msg = payload as ThrowSyncMessage;
+        console.log('[GameScreen] Received turn change:', msg);
+
+        if (msg.currentThrower) {
+          setCurrentThrower(msg.currentThrower);
+        }
+      })
+      .subscribe((status) => {
+        console.log(`[GameScreen] Throw sync channel status: ${status}`);
+      });
+
+    return () => {
+      console.log('[GameScreen] Cleaning up throw sync channel');
+      channel.unsubscribe();
+      throwChannelRef.current = null;
+    };
+  }, [gameId, supabase, visiblePlayerId]);
+
   // Intro animation timer - restarts when currentGameIndex changes (new game in medley)
   useEffect(() => {
     // Only run when showGoodLuck is true (start of game or new game)
@@ -956,6 +1102,41 @@ export function GameScreen({ onLeaveMatch, localStream, remoteStream }: GameScre
     if (currentThrower === 'p1') setP1Score(potentialNewScore);
     else setP2Score(potentialNewScore);
 
+    // Sync throw to database and broadcast to opponent
+    const baseValue = segment === 'S25' || segment === 'D25' ? 25 : parseInt(segment.slice(1)) || 0;
+    broadcastThrow({
+      segment,
+      score: effectiveScore,
+      multiplier,
+      baseValue,
+      dartNum: newDarts.length,
+      newScore: potentialNewScore,
+    });
+
+    // Save to database
+    if (gameId && visiblePlayerId) {
+      saveThrowToDb({
+        throwData: {
+          segment,
+          score: effectiveScore,
+          multiplier,
+          baseValue,
+          segmentType: segment.startsWith('T') ? 'TRIPLE' : segment.startsWith('D') ? 'DOUBLE' : 'SINGLE_INNER',
+          dartNum: newDarts.length,
+          timestamp: new Date().toISOString(),
+        },
+        runningTotal: potentialNewScore,
+        legNum: 1,
+      });
+    }
+
+    // Update game scores in database periodically (on turn end or win)
+    if (newDarts.length === 3 || didWin) {
+      const newP1Score = currentThrower === 'p1' ? potentialNewScore : p1Score;
+      const newP2Score = currentThrower === 'p2' ? potentialNewScore : p2Score;
+      updateGameScores(newP1Score, newP2Score, currentThrower === 'p1' ? 'p2' : 'p1');
+    }
+
     if (playerStartsNow) {
       setHasStarted(true);
     }
@@ -973,7 +1154,7 @@ export function GameScreen({ onLeaveMatch, localStream, remoteStream }: GameScre
     }
 
     if (newDarts.length === 3) setShowPlayerChange(true);
-  }, [currentDarts, currentScore, currentThrower, roundScore, showPlayerChange, introComplete, p1Score, p2Score, p1HasStarted, p2HasStarted, inMode, outMode, detectAchievement, triggerAchievement, isCricketGame, p1CricketMarks, p2CricketMarks, p1CricketPoints, p2CricketPoints]);
+  }, [currentDarts, currentScore, currentThrower, roundScore, showPlayerChange, introComplete, p1Score, p2Score, p1HasStarted, p2HasStarted, inMode, outMode, detectAchievement, triggerAchievement, isCricketGame, p1CricketMarks, p2CricketMarks, p1CricketPoints, p2CricketPoints, broadcastThrow, saveThrowToDb, updateGameScores, gameId, visiblePlayerId]);
 
   // Handle BLE throws - convert DartThrowData to throwDart call
   useEffect(() => {
@@ -1789,7 +1970,7 @@ export function GameScreen({ onLeaveMatch, localStream, remoteStream }: GameScre
           <div style={{
             position: 'absolute',
             inset: 0,
-            background: `radial-gradient(circle, ${PLAYERS[currentThrower].profilecolor}33 0%, transparent 70%)`,
+            background: `radial-gradient(circle, ${players[currentThrower].profilecolor}33 0%, transparent 70%)`,
             animation: 'achievementPulse 2s ease-out forwards',
           }} />
           {/* Achievement text */}
@@ -1802,8 +1983,8 @@ export function GameScreen({ onLeaveMatch, localStream, remoteStream }: GameScre
             fontWeight: 300,
             fontSize: `calc(120 * ${scale})`,
             lineHeight: 1,
-            color: PLAYERS[currentThrower].profilecolor,
-            textShadow: `0 0 30px ${PLAYERS[currentThrower].profilecolor}, 0 0 60px ${PLAYERS[currentThrower].profilecolor}, -4px 4px 8px rgba(0, 0, 0, 0.8)`,
+            color: players[currentThrower].profilecolor,
+            textShadow: `0 0 30px ${players[currentThrower].profilecolor}, 0 0 60px ${players[currentThrower].profilecolor}, -4px 4px 8px rgba(0, 0, 0, 0.8)`,
             whiteSpace: 'nowrap',
             animation: 'achievementPulse 2s ease-out forwards, achievementGlow 0.5s ease-in-out infinite',
           }}>
@@ -1829,7 +2010,7 @@ export function GameScreen({ onLeaveMatch, localStream, remoteStream }: GameScre
           <div style={{
             position: 'absolute',
             inset: 0,
-            background: `radial-gradient(circle at center, ${PLAYERS[gameWinner].profilecolor}40 0%, transparent 60%)`,
+            background: `radial-gradient(circle at center, ${players[gameWinner].profilecolor}40 0%, transparent 60%)`,
           }} />
 
           {/* Match score for medley */}
@@ -1869,13 +2050,13 @@ export function GameScreen({ onLeaveMatch, localStream, remoteStream }: GameScre
             fontWeight: 300,
             fontSize: `calc(160 * ${scale})`,
             lineHeight: 1,
-            color: PLAYERS[gameWinner].profilecolor,
-            textShadow: `0 0 40px ${PLAYERS[gameWinner].profilecolor}, 0 0 80px ${PLAYERS[gameWinner].profilecolor}, -6px 6px 12px rgba(0, 0, 0, 0.8)`,
+            color: players[gameWinner].profilecolor,
+            textShadow: `0 0 40px ${players[gameWinner].profilecolor}, 0 0 80px ${players[gameWinner].profilecolor}, -6px 6px 12px rgba(0, 0, 0, 0.8)`,
             animation: 'winnerNameSlide 0.8s ease-out forwards',
             animationDelay: '0.4s',
             opacity: 0,
           }}>
-            {PLAYERS[gameWinner].name}
+            {players[gameWinner].name}
           </div>
 
           {/* Final score */}
@@ -1923,11 +2104,11 @@ export function GameScreen({ onLeaveMatch, localStream, remoteStream }: GameScre
                       fontSize: `calc(24 * ${scale})`,
                       fontWeight: 500,
                       color: '#FFFFFF',
-                      background: PLAYERS[gameWinner].profilecolor,
+                      background: players[gameWinner].profilecolor,
                       border: 'none',
                       borderRadius: `calc(12 * ${scale})`,
                       cursor: 'pointer',
-                      boxShadow: `0 0 30px ${PLAYERS[gameWinner].profilecolor}80`,
+                      boxShadow: `0 0 30px ${players[gameWinner].profilecolor}80`,
                     }}
                   >
                     Next Game
@@ -1977,11 +2158,11 @@ export function GameScreen({ onLeaveMatch, localStream, remoteStream }: GameScre
                       fontSize: `calc(24 * ${scale})`,
                       fontWeight: 500,
                       color: '#FFFFFF',
-                      background: PLAYERS[gameWinner].profilecolor,
+                      background: players[gameWinner].profilecolor,
                       border: 'none',
                       borderRadius: `calc(12 * ${scale})`,
                       cursor: 'pointer',
-                      boxShadow: `0 0 30px ${PLAYERS[gameWinner].profilecolor}80`,
+                      boxShadow: `0 0 30px ${players[gameWinner].profilecolor}80`,
                     }}
                   >
                     Rematch
