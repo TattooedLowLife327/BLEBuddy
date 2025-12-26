@@ -95,11 +95,11 @@ export function OnlineLobby({
   const [showIdleWarning, setShowIdleWarning] = useState(false);
   const [idleCountdown, setIdleCountdown] = useState(300); // 5 minutes in seconds
   const [cardScale, setCardScale] = useState(1);
-  const [alreadyInMatchError, setAlreadyInMatchError] = useState(false);
+  const [blockingGame, setBlockingGame] = useState<{ id: string; status: string; created_at: string } | null>(null);
   const supabase = createClient();
 
-  // Check if user already has an active game
-  const checkForExistingGame = async (): Promise<boolean> => {
+  // Check if user already has an active game - returns the blocking game or null
+  const checkForExistingGame = async (): Promise<{ id: string; status: string; created_at: string } | null> => {
     try {
       // Aggressive cleanup of ALL old/stale games for this user
       const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
@@ -139,9 +139,9 @@ export function OnlineLobby({
         .in('status', ['pending', 'accepted', 'playing'])
         .gte('created_at', fiveMinutesAgo)
         .limit(1);
-      return data && data.length > 0;
+      return data && data.length > 0 ? data[0] : null;
     } catch {
-      return false;
+      return null;
     }
   };
 
@@ -602,9 +602,9 @@ export function OnlineLobby({
     if (!incomingRequest) return;
 
     // Check if user already has an active game
-    const hasExisting = await checkForExistingGame();
-    if (hasExisting) {
-      setAlreadyInMatchError(true);
+    const existingGame = await checkForExistingGame();
+    if (existingGame) {
+      setBlockingGame(existingGame);
       setIncomingRequest(null);
       return;
     }
@@ -670,9 +670,9 @@ export function OnlineLobby({
     console.log('Against player:', selectedPlayer);
 
     // Check if user already has an active game
-    const hasExisting = await checkForExistingGame();
-    if (hasExisting) {
-      setAlreadyInMatchError(true);
+    const existingGame = await checkForExistingGame();
+    if (existingGame) {
+      setBlockingGame(existingGame);
       setSelectedPlayer(null);
       return;
     }
@@ -872,35 +872,38 @@ export function OnlineLobby({
       )}
 
       {/* Already In Match Error Modal */}
-      {alreadyInMatchError && (
+      {blockingGame && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80">
           <div className="bg-zinc-900 border border-red-600 rounded-xl p-6 max-w-sm w-full mx-4 text-center">
             <h2 className="text-white text-lg font-bold mb-2">Already In A Match</h2>
-            <p className="text-zinc-400 text-sm mb-4">
-              You already have an active match. Leave or finish your current match before starting a new one.
+            <p className="text-zinc-400 text-sm mb-2">
+              You have an active match blocking new games.
+            </p>
+            <p className="text-zinc-500 text-xs mb-4">
+              Status: {blockingGame.status} | Created: {new Date(blockingGame.created_at).toLocaleTimeString()}
             </p>
             <div className="flex gap-3">
               <button
                 onClick={async () => {
-                  // Force clear ALL games for this user
+                  // Clear only this specific blocking game
                   try {
                     await (supabase as any)
                       .schema('companion')
                       .from('active_games')
                       .delete()
-                      .or(`player1_id.eq.${userId},player2_id.eq.${userId}`);
-                    console.log('Force cleared all games');
+                      .eq('id', blockingGame.id);
+                    console.log('Cleared blocking game:', blockingGame.id);
                   } catch (err) {
-                    console.error('Error force clearing games:', err);
+                    console.error('Error clearing game:', err);
                   }
-                  setAlreadyInMatchError(false);
+                  setBlockingGame(null);
                 }}
                 className="flex-1 px-4 py-3 bg-red-700 hover:bg-red-600 text-white font-semibold rounded-lg transition-colors"
               >
-                Force Clear
+                Clear This Match
               </button>
               <button
-                onClick={() => setAlreadyInMatchError(false)}
+                onClick={() => setBlockingGame(null)}
                 className="flex-1 px-4 py-3 bg-zinc-700 hover:bg-zinc-600 text-white font-semibold rounded-lg transition-colors"
               >
                 OK
