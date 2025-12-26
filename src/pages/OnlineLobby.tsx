@@ -101,8 +101,17 @@ export function OnlineLobby({
   // Check if user already has an active game
   const checkForExistingGame = async (): Promise<boolean> => {
     try {
-      // First, clean up stale games (pending > 5 min old, or cancelled/declined)
+      // Aggressive cleanup of ALL old/stale games for this user
       const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+
+      // Delete ALL games older than 2 hours (stuck games from crashes, etc.)
+      await (supabase as any)
+        .schema('companion')
+        .from('active_games')
+        .delete()
+        .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
+        .lt('created_at', twoHoursAgo);
 
       // Delete stale pending games (unanswered requests older than 5 min)
       await (supabase as any)
@@ -113,7 +122,7 @@ export function OnlineLobby({
         .eq('status', 'pending')
         .lt('created_at', fiveMinutesAgo);
 
-      // Delete cancelled/declined games (they shouldn't block new games)
+      // Delete cancelled/declined/abandoned games (they shouldn't block new games)
       await (supabase as any)
         .schema('companion')
         .from('active_games')
@@ -121,18 +130,14 @@ export function OnlineLobby({
         .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
         .in('status', ['cancelled', 'declined', 'abandoned']);
 
-      // Now check for actually active games
-      // For 'pending', only check recent ones (last 5 min) since we just cleaned up old ones
-      // For 'accepted'/'playing', check last 2 hours
-      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-
+      // Now check for actually active games (only recent ones that survived cleanup)
       const { data } = await (supabase as any)
         .schema('companion')
         .from('active_games')
         .select('id, status, created_at')
         .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
         .in('status', ['pending', 'accepted', 'playing'])
-        .gte('created_at', twoHoursAgo)
+        .gte('created_at', fiveMinutesAgo)
         .limit(1);
       return data && data.length > 0;
     } catch {
@@ -259,8 +264,19 @@ export function OnlineLobby({
       try {
         console.log('Joining online lobby...');
 
-        // Clean up stale game records on lobby entry
+        // Aggressive cleanup of ALL old/stale games for this user
         const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+        const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+
+        // Delete ALL games older than 2 hours (stuck games from crashes, etc.)
+        await (supabase as any)
+          .schema('companion')
+          .from('active_games')
+          .delete()
+          .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
+          .lt('created_at', twoHoursAgo);
+
+        // Delete stale pending games (unanswered requests older than 5 min)
         await (supabase as any)
           .schema('companion')
           .from('active_games')
@@ -269,6 +285,7 @@ export function OnlineLobby({
           .eq('status', 'pending')
           .lt('created_at', fiveMinutesAgo);
 
+        // Delete cancelled/declined/abandoned games
         await (supabase as any)
           .schema('companion')
           .from('active_games')
@@ -862,12 +879,33 @@ export function OnlineLobby({
             <p className="text-zinc-400 text-sm mb-4">
               You already have an active match. Leave or finish your current match before starting a new one.
             </p>
-            <button
-              onClick={() => setAlreadyInMatchError(false)}
-              className="w-full px-4 py-3 bg-zinc-700 hover:bg-zinc-600 text-white font-semibold rounded-lg transition-colors"
-            >
-              OK
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={async () => {
+                  // Force clear ALL games for this user
+                  try {
+                    await (supabase as any)
+                      .schema('companion')
+                      .from('active_games')
+                      .delete()
+                      .or(`player1_id.eq.${userId},player2_id.eq.${userId}`);
+                    console.log('Force cleared all games');
+                  } catch (err) {
+                    console.error('Error force clearing games:', err);
+                  }
+                  setAlreadyInMatchError(false);
+                }}
+                className="flex-1 px-4 py-3 bg-red-700 hover:bg-red-600 text-white font-semibold rounded-lg transition-colors"
+              >
+                Force Clear
+              </button>
+              <button
+                onClick={() => setAlreadyInMatchError(false)}
+                className="flex-1 px-4 py-3 bg-zinc-700 hover:bg-zinc-600 text-white font-semibold rounded-lg transition-colors"
+              >
+                OK
+              </button>
+            </div>
           </div>
         </div>
       )}
