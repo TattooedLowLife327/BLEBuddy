@@ -2,8 +2,9 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useBLE } from '../contexts/BLEContext';
 import { useWebRTC } from '../hooks/useWebRTC';
 import { useGameStatus } from '../hooks/useGameStatus';
+import { AppHeader } from './AppHeader';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
-import { Bluetooth, X, WifiOff } from 'lucide-react';
+import { Bluetooth, X, WifiOff, RefreshCw, DoorOpen } from 'lucide-react';
 import type { DartThrowData } from '../utils/ble/bleConnection';
 import { isDevMode } from '../utils/devMode';
 import { createClient } from '../utils/supabase/client';
@@ -57,7 +58,7 @@ const resolveProfilePicUrl = (pic?: string): string | undefined => {
 };
 
 export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitiator, onCorkComplete, onCancel }: CorkScreenProps) {
-  const { lastThrow, isConnected, connect, status: bleStatus } = useBLE();
+  const { lastThrow, isConnected, connect, disconnect: bleDisconnect, status: bleStatus } = useBLE();
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const mountTimeRef = useRef<number>(Date.now());
@@ -71,7 +72,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
     gameId, localPlayerId: visiblePlayerId, remotePlayerId, isInitiator
   }), [gameId, visiblePlayerId, remotePlayerId, isInitiator]);
 
-  const { localStream, remoteStream, connectionState, error, initialize, disconnect } = useWebRTC(webRTCOptions);
+  const { localStream, remoteStream, connectionState, error, initialize, disconnect: webrtcDisconnect } = useWebRTC(webRTCOptions);
 
   const { isOpponentOnline, disconnectCountdown, leaveMatch, opponentLeftMessage } = useGameStatus({
     gameId,
@@ -187,7 +188,29 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
   }, [gameId, corkRound, player1.id, player2.id]);
 
   // Initialize WebRTC
-  useEffect(() => { initialize(); return () => { disconnect(); }; }, [initialize, disconnect]);
+  useEffect(() => { initialize(); return () => { webrtcDisconnect(); }; }, [initialize, webrtcDisconnect]);
+
+  // Request fullscreen on mount for true immersive experience
+  useEffect(() => {
+    const enterFullscreen = async () => {
+      try {
+        if (document.documentElement.requestFullscreen) {
+          await document.documentElement.requestFullscreen();
+        } else if ((document.documentElement as any).webkitRequestFullscreen) {
+          await (document.documentElement as any).webkitRequestFullscreen();
+        }
+      } catch {
+        // Fullscreen may fail if no user interaction yet - that's ok
+      }
+    };
+    enterFullscreen();
+
+    return () => {
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+    };
+  }, []);
 
   // Attach local video stream
   useEffect(() => {
@@ -274,6 +297,29 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
     }
   };
 
+  const handleRefreshVideo = async () => {
+    await webrtcDisconnect();
+    await initialize();
+  };
+
+  // Custom menu items for AppHeader
+  const customMenuItems = useMemo(() => [
+    {
+      label: 'Refresh Video',
+      icon: RefreshCw,
+      onClick: handleRefreshVideo,
+    },
+    {
+      label: 'Leave Match',
+      icon: DoorOpen,
+      onClick: () => setShowLeaveConfirm(true),
+      className: 'focus:bg-red-500/20 focus:text-white text-red-400 cursor-pointer',
+    },
+  ], [webrtcDisconnect, initialize]);
+
+  // For logout action in AppHeader, show leave confirmation (can't logout mid-game)
+  const handleLogoutAction = () => setShowLeaveConfirm(true);
+
   const renderPlayer = (player: typeof player1, state: PlayerCorkState, pNum: 1 | 2, isLocal: boolean) => {
     const isMyTurn = isLocal && !myThrowSent && state.status === 'waiting';
     const showResult = revealed || player.id === visiblePlayerId;
@@ -302,7 +348,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
 
           {/* Status */}
           <p className={`text-xs mb-1 ${isMyTurn ? 'text-yellow-400 font-bold' : 'text-zinc-500'}`}>
-            {state.status === 'thrown' ? (revealed ? '' : 'Thrown!') : isMyTurn ? 'YOUR TURN - THROW!' : 'Waiting...'}
+            {state.status === 'thrown' ? (revealed ? '' : 'Thrown!') : isMyTurn ? 'THROW!' : 'Waiting...'}
           </p>
 
           {/* Score */}
@@ -379,34 +425,17 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
         </div>
       )}
 
-      {/* Header with Leave button and BLE status */}
-      <div className="flex items-center justify-between p-3 border-b border-zinc-800">
-        <button
-          onClick={handleLeaveClick}
-          className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold transition-colors"
-        >
-          <X className="w-4 h-4" />
-          Leave Match
-        </button>
-
-        <h1 className="text-lg font-bold text-white">CORK FOR FIRST {corkRound > 1 ? `(Round ${corkRound})` : ''}</h1>
-
-        {/* BLE Status/Connect */}
-        {isConnected ? (
-          <div className="flex items-center gap-2 px-3 py-2 bg-green-600/20 border border-green-600 rounded-lg">
-            <Bluetooth className="w-4 h-4 text-green-400" />
-            <span className="text-green-400 text-xs font-medium">Connected</span>
-          </div>
-        ) : (
-          <button
-            onClick={handleBLEConnect}
-            disabled={bleStatus === 'connecting' || bleStatus === 'scanning'}
-            className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white rounded-lg text-xs font-semibold transition-colors"
-          >
-            <Bluetooth className="w-4 h-4" />
-            {bleStatus === 'connecting' || bleStatus === 'scanning' ? 'Connecting...' : 'Connect Board'}
-          </button>
-        )}
+      {/* Header using AppHeader component */}
+      <div className="px-3 pt-2 border-b border-zinc-800">
+        <AppHeader
+          title={`CORK${corkRound > 1 ? ` R${corkRound}` : ''}`}
+          bleConnected={isConnected}
+          bleStatus={bleStatus}
+          onBLEConnect={connect}
+          onBLEDisconnect={bleDisconnect}
+          onLogout={handleLogoutAction}
+          customMenuItems={customMenuItems}
+        />
       </div>
 
       {/* Opponent offline indicator in header area */}

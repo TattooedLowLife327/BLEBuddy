@@ -8,7 +8,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
-import { UserMenu } from './UserMenu';
+import { UserMenu, type CustomMenuItem } from './UserMenu';
 import { createClient } from '../utils/supabase/client';
 
 const bluetoothIcon = '/assets/dashboardicon.png';
@@ -39,6 +39,7 @@ interface AppHeaderProps {
   // User menu actions
   onLogout: () => void;
   onOpenSettings?: () => void;
+  customMenuItems?: CustomMenuItem[];
 }
 
 export function AppHeader({
@@ -55,6 +56,7 @@ export function AppHeader({
   onClearMissedRequests,
   onLogout,
   onOpenSettings,
+  customMenuItems,
 }: AppHeaderProps) {
   const [profilepic, setProfilepic] = useState<string | null>(null);
   const [accentColor, setAccentColor] = useState('#a855f7');
@@ -252,6 +254,7 @@ export function AppHeader({
           userName={userName}
           onLogout={onLogout}
           onOpenSettings={onOpenSettings}
+          customItems={customMenuItems}
           size="sm"
         />
       </div>

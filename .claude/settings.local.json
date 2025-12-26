@@ -16,7 +16,10 @@
       "Bash(npm run build:*)",
       "Bash(dir:*)",
       "Bash(findstr:*)",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(git fetch:*)",
+      "Bash(git show:*)",
+      "Bash(npx tsc:*)"
     ],
     "deny": [],
     "ask": []

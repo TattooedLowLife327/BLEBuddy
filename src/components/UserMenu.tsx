@@ -1,8 +1,15 @@
 import { useMemo } from 'react';
-import { LogOut, Settings } from 'lucide-react';
+import { LogOut, Settings, type LucideIcon } from 'lucide-react';
 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from './ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
+
+export interface CustomMenuItem {
+  label: string;
+  icon?: LucideIcon;
+  onClick: () => void;
+  className?: string;
+}
 
 interface UserMenuProps {
   profilepic?: string | null;
@@ -10,6 +17,7 @@ interface UserMenuProps {
   userName?: string | null;
   onLogout: () => void | Promise<void>;
   onOpenSettings?: () => void;
+  customItems?: CustomMenuItem[];
   className?: string;
   size?: 'sm' | 'md' | 'lg';
 }
@@ -20,6 +28,7 @@ export function UserMenu({
   userName,
   onLogout,
   onOpenSettings,
+  customItems,
   className,
   size = 'lg',
 }: UserMenuProps) {
@@ -86,6 +95,20 @@ export function UserMenu({
             <span>Settings</span>
           </DropdownMenuItem>
         )}
+        {customItems && customItems.map((item, index) => (
+          <DropdownMenuItem
+            key={index}
+            onSelect={event => {
+              event.preventDefault();
+              item.onClick();
+            }}
+            className={item.className || "focus:bg-zinc-800 focus:text-white cursor-pointer"}
+          >
+            {item.icon && <item.icon className="mr-2 h-4 w-4" />}
+            <span>{item.label}</span>
+          </DropdownMenuItem>
+        ))}
+        {customItems && customItems.length > 0 && <DropdownMenuSeparator className="bg-zinc-700" />}
         <DropdownMenuItem
           onSelect={event => {
             event.preventDefault();
