@@ -98,10 +98,7 @@ export function UserMenu({
         {customItems && customItems.map((item, index) => (
           <DropdownMenuItem
             key={index}
-            onSelect={event => {
-              event.preventDefault();
-              item.onClick();
-            }}
+            onSelect={() => item.onClick()}
             className={item.className || "focus:bg-zinc-800 focus:text-white cursor-pointer"}
           >
             {item.icon && <item.icon className="mr-2 h-4 w-4" />}
