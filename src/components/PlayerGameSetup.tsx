@@ -380,6 +380,9 @@ export function PlayerGameSetup({
   const isPickingLast = nextIndex === lastIndex;
   const has01Game = games.some(g => g === '501'); // Format options only for 01 games
 
+  // Check if at least one game is selected (required to start)
+  const hasGameSelected = games.some(g => g !== '');
+
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xl flex items-center justify-center p-6 animate-in fade-in duration-300">
       {/* Flying animation overlay */}
@@ -876,15 +879,18 @@ export function PlayerGameSetup({
             {/* Start Game Button */}
             <button
               onClick={handleStartGame}
-              className="w-full py-3 rounded-lg text-white text-sm transition-all hover:scale-[1.02]"
+              disabled={!hasGameSelected}
+              className={`w-full py-3 rounded-lg text-white text-sm transition-all ${
+                hasGameSelected ? 'hover:scale-[1.02]' : 'opacity-50 cursor-not-allowed'
+              }`}
               style={{
-                backgroundColor: player.accentColor,
+                backgroundColor: hasGameSelected ? player.accentColor : '#555',
                 fontFamily: 'Helvetica, Arial, sans-serif',
                 fontWeight: 'bold',
-                boxShadow: `0 0 20px ${hexToRgba(player.accentColor, 0.5)}`,
+                boxShadow: hasGameSelected ? `0 0 20px ${hexToRgba(player.accentColor, 0.5)}` : 'none',
               }}
             >
-              Start Game
+              {hasGameSelected ? 'Start Game' : 'Select a Game'}
             </button>
           </div>
         </div>

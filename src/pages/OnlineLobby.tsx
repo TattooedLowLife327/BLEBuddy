@@ -95,11 +95,11 @@ export function OnlineLobby({
   const [showIdleWarning, setShowIdleWarning] = useState(false);
   const [idleCountdown, setIdleCountdown] = useState(300); // 5 minutes in seconds
   const [cardScale, setCardScale] = useState(1);
-  const [blockingGame, setBlockingGame] = useState<{ id: string; status: string; created_at: string } | null>(null);
+  const [blockingGame, setBlockingGame] = useState<{ id: string; status: string; created_at: string; completed_at: string | null } | null>(null);
   const supabase = createClient();
 
   // Check if user already has an active game - returns the blocking game or null
-  const checkForExistingGame = async (): Promise<{ id: string; status: string; created_at: string } | null> => {
+  const checkForExistingGame = async (): Promise<{ id: string; status: string; created_at: string; completed_at: string | null } | null> => {
     try {
       // Aggressive cleanup of ALL old/stale games for this user
       const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
@@ -130,14 +130,14 @@ export function OnlineLobby({
         .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
         .in('status', ['cancelled', 'declined', 'abandoned']);
 
-      // Now check for actually active games (only recent ones that survived cleanup)
+      // Now check for actually active games: status is active AND completed_at is null
       const { data } = await (supabase as any)
         .schema('companion')
         .from('active_games')
-        .select('id, status, created_at')
+        .select('id, status, created_at, completed_at')
         .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
         .in('status', ['pending', 'accepted', 'playing'])
-        .gte('created_at', fiveMinutesAgo)
+        .is('completed_at', null)
         .limit(1);
       return data && data.length > 0 ? data[0] : null;
     } catch {
@@ -851,8 +851,14 @@ export function OnlineLobby({
 
       {/* Idle Warning Modal */}
       {showIdleWarning && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80">
-          <div className="bg-zinc-900 border border-yellow-600 rounded-xl p-6 max-w-sm w-full mx-4 text-center">
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div
+            className="bg-zinc-900 border border-yellow-600 rounded-xl p-6 max-w-sm w-full mx-4 text-center"
+            onClick={(e) => e.stopPropagation()}
+          >
             <Clock className="w-12 h-12 text-yellow-500 mx-auto mb-3" />
             <h2 className="text-white text-lg font-bold mb-2">Are You Still There?</h2>
             <p className="text-zinc-400 text-sm mb-4">

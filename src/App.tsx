@@ -224,14 +224,14 @@ export default function App() {
             // Don't show rejoin prompt - user explicitly abandoned
           } else {
             // Only check for rejoin if user didn't abandon
-            const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+            // Use completed_at IS NULL to ensure we only find truly active games
             const { data: activeGames } = await (supabase as any)
               .schema('companion')
               .from('active_games')
-              .select('id, player1_id, player2_id, player1_granboard_name, player2_granboard_name, status, created_at')
+              .select('id, player1_id, player2_id, player1_granboard_name, player2_granboard_name, status, created_at, completed_at')
               .or(`player1_id.eq.${session.user.id},player2_id.eq.${session.user.id}`)
               .in('status', ['accepted', 'playing'])
-              .gte('created_at', twoHoursAgo);
+              .is('completed_at', null);
 
             const validGame = activeGames?.find((g: any) => g.status === 'accepted' || g.status === 'playing');
 
