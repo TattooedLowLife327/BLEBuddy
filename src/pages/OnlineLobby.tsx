@@ -885,13 +885,16 @@ export function OnlineLobby({
             <div className="flex gap-3">
               <button
                 onClick={async () => {
-                  // Clear only this specific blocking game
+                  // Clear this specific blocking game from DB AND local storage
                   try {
                     await (supabase as any)
                       .schema('companion')
                       .from('active_games')
                       .delete()
                       .eq('id', blockingGame.id);
+                    // Also clear local storage to prevent rejoin prompts
+                    sessionStorage.removeItem('blebuddy_game');
+                    localStorage.removeItem('bb-abandoned-game');
                     console.log('Cleared blocking game:', blockingGame.id);
                   } catch (err) {
                     console.error('Error clearing game:', err);
