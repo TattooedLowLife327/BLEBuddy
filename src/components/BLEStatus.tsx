@@ -12,8 +12,14 @@ interface BLEStatusProps {
 export default function BLEStatus({ onThrowDetected, className = '' }: BLEStatusProps) {
   const [status, setStatus] = useState<BLEStatusType>('disconnected');
   const [deviceName, setDeviceName] = useState('');
+  const [canAutoReconnect, setCanAutoReconnect] = useState(false);
+  const [lastDeviceName, setLastDeviceName] = useState<string | null>(null);
 
   useEffect(() => {
+    // Check if auto-reconnect is available
+    bleConnection.canAutoReconnect().then(setCanAutoReconnect);
+    setLastDeviceName(bleConnection.getLastDeviceName());
+
     // Subscribe to status changes
     const handleStatusChange = (newStatus: BLEStatusType) => {
       setStatus(newStatus);
@@ -48,6 +54,18 @@ export default function BLEStatus({ onThrowDetected, className = '' }: BLEStatus
     const result = await bleConnection.connect();
     if (result.success && result.device) {
       setDeviceName(result.device.name || 'Granboard');
+      setCanAutoReconnect(true);
+    }
+  };
+
+  const handleAutoReconnect = async () => {
+    const result = await bleConnection.autoReconnect();
+    if (result.success && result.device) {
+      setDeviceName(result.device.name || 'Granboard');
+    } else {
+      // Fall back to manual connect if auto-reconnect fails
+      console.log('Auto-reconnect failed, trying manual connect');
+      await handleConnect();
     }
   };
 
@@ -115,13 +133,24 @@ export default function BLEStatus({ onThrowDetected, className = '' }: BLEStatus
               )}
             </>
           ) : (
-            <button
-              onClick={handleConnect}
-              disabled={status === 'connecting' || status === 'scanning'}
-              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors font-medium text-sm"
-            >
-              {status === 'scanning' ? 'Scanning...' : 'Connect Board'}
-            </button>
+            <>
+              {canAutoReconnect && lastDeviceName && (
+                <button
+                  onClick={handleAutoReconnect}
+                  disabled={status === 'connecting' || status === 'scanning'}
+                  className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors font-medium text-sm"
+                >
+                  Reconnect {lastDeviceName}
+                </button>
+              )}
+              <button
+                onClick={handleConnect}
+                disabled={status === 'connecting' || status === 'scanning'}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors font-medium text-sm"
+              >
+                {status === 'scanning' ? 'Scanning...' : canAutoReconnect ? 'New Board' : 'Connect Board'}
+              </button>
+            </>
           )}
         </div>
       </div>

@@ -131,15 +131,33 @@ export function OnlineLobby({
         .in('status', ['cancelled', 'declined', 'abandoned']);
 
       // Now check for actually active games: status is active AND completed_at is null
-      const { data } = await (supabase as any)
+      // BUT: Don't block on 'pending' if user is player2 (that's an incoming request, not a blocking game)
+
+      // First check for accepted/playing games (these always block)
+      const { data: activeGames } = await (supabase as any)
         .schema('companion')
         .from('active_games')
         .select('id, status, created_at, completed_at')
         .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
-        .in('status', ['pending', 'accepted', 'playing'])
+        .in('status', ['accepted', 'playing'])
         .is('completed_at', null)
         .limit(1);
-      return data && data.length > 0 ? data[0] : null;
+
+      if (activeGames && activeGames.length > 0) {
+        return activeGames[0];
+      }
+
+      // Then check for pending games where user is player1 (outgoing challenges block)
+      const { data: outgoingPending } = await (supabase as any)
+        .schema('companion')
+        .from('active_games')
+        .select('id, status, created_at, completed_at')
+        .eq('player1_id', userId)
+        .eq('status', 'pending')
+        .is('completed_at', null)
+        .limit(1);
+
+      return outgoingPending && outgoingPending.length > 0 ? outgoingPending[0] : null;
     } catch {
       return null;
     }
@@ -326,7 +344,7 @@ export function OnlineLobby({
         .from('online_lobby')
         .delete()
         .eq('player_id', userId)
-        .then(({ error }) => {
+        .then(({ error }: { error: any }) => {
           if (error) {
             console.error('Error leaving lobby:', error);
           } else {
@@ -389,7 +407,7 @@ export function OnlineLobby({
         console.error('Error fetching lobby data:', lobbyError);
       } else if (lobbyData && lobbyData.length > 0) {
         const playersWithData = await Promise.all(
-            lobbyData.map(async lobbyEntry => {
+            lobbyData.map(async (lobbyEntry: any) => {
               const playerId = lobbyEntry.player_id;
               const isYouth = lobbyEntry.is_youth;
               const playerStatus = (lobbyEntry.status as PlayerStatus) || 'waiting';

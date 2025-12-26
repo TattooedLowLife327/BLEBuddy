@@ -10,6 +10,9 @@ interface BLEContextType {
   deviceName: string | null;
   lastThrow: DartThrowData | null;
   connect: () => Promise<{ success: boolean; error?: string }>;
+  autoReconnect: () => Promise<{ success: boolean; error?: string }>;
+  canAutoReconnect: boolean;
+  lastDeviceName: string | null;
   disconnect: () => Promise<void>;
   simulateThrow: (segment?: string, score?: number) => DartThrowData;
   isSupported: boolean;
@@ -26,6 +29,13 @@ export function BLEProvider({ children }: BLEProviderProps) {
   const [deviceName, setDeviceName] = useState<string | null>(null);
   const [lastThrow, setLastThrow] = useState<DartThrowData | null>(null);
   const [isSupported] = useState(bleConnection.constructor.isSupported());
+  const [canAutoReconnect, setCanAutoReconnect] = useState(false);
+  const [lastDeviceName] = useState<string | null>(bleConnection.getLastDeviceName());
+
+  // Check if auto-reconnect is available on mount
+  useEffect(() => {
+    bleConnection.canAutoReconnect().then(setCanAutoReconnect);
+  }, []);
 
   useEffect(() => {
     // Subscribe to status changes
@@ -66,6 +76,15 @@ export function BLEProvider({ children }: BLEProviderProps) {
     const result = await bleConnection.connect();
     if (result.success && result.device) {
       setDeviceName(result.device.name || 'Granboard');
+      setCanAutoReconnect(true);
+    }
+    return result;
+  };
+
+  const autoReconnect = async (): Promise<{ success: boolean; error?: string }> => {
+    const result = await bleConnection.autoReconnect();
+    if (result.success && result.device) {
+      setDeviceName(result.device.name || 'Granboard');
     }
     return result;
   };
@@ -86,6 +105,9 @@ export function BLEProvider({ children }: BLEProviderProps) {
     deviceName,
     lastThrow,
     connect,
+    autoReconnect,
+    canAutoReconnect,
+    lastDeviceName,
     disconnect,
     simulateThrow,
     isSupported

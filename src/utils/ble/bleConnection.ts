@@ -175,6 +175,7 @@ class BLEConnection {
   private dartCount: number = 0;
   private connectionTime: number = 0;  // For warmup period
   private readonly WARMUP_MS = 2000;   // Ignore events for 2 seconds after connection
+  private readonly STORAGE_KEY = 'bb_last_ble_device';
 
   onThrow(callback: ThrowCallback): void {
     this.onThrowCallbacks.push(callback);
@@ -198,6 +199,139 @@ class BLEConnection {
 
   resetDartCount(): void {
     this.dartCount = 0;
+  }
+
+  /**
+   * Check if we can auto-reconnect to a previously paired device
+   */
+  async canAutoReconnect(): Promise<boolean> {
+    if (!navigator.bluetooth || !('getDevices' in navigator.bluetooth)) {
+      return false;
+    }
+    const savedName = localStorage.getItem(this.STORAGE_KEY);
+    if (!savedName) return false;
+
+    try {
+      const devices = await (navigator.bluetooth as any).getDevices();
+      return devices.some((d: BluetoothDevice) => d.name === savedName);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Get the name of the last connected device (for UI display)
+   */
+  getLastDeviceName(): string | null {
+    return localStorage.getItem(this.STORAGE_KEY);
+  }
+
+  /**
+   * Attempt to reconnect to a previously paired device without user prompt
+   */
+  async autoReconnect(): Promise<{ success: boolean; device?: BluetoothDevice; error?: string }> {
+    if (!navigator.bluetooth || !('getDevices' in navigator.bluetooth)) {
+      return { success: false, error: 'Auto-reconnect not supported in this browser' };
+    }
+
+    const savedName = localStorage.getItem(this.STORAGE_KEY);
+    if (!savedName) {
+      return { success: false, error: 'No previously connected device' };
+    }
+
+    try {
+      this.notifyStatusChange('connecting');
+      console.log(`🔄 Attempting auto-reconnect to: ${savedName}`);
+
+      const devices = await (navigator.bluetooth as any).getDevices();
+      const device = devices.find((d: BluetoothDevice) => d.name === savedName);
+
+      if (!device) {
+        this.notifyStatusChange('disconnected');
+        return { success: false, error: `Device "${savedName}" not found. Try manual connect.` };
+      }
+
+      this.device = device;
+
+      // Set up disconnect listener
+      this.device.addEventListener('gattserverdisconnected', () => {
+        this.handleDisconnection();
+      });
+
+      // Connect to GATT server
+      if (!this.device.gatt) {
+        throw new Error('Device does not support GATT');
+      }
+
+      this.server = await this.device.gatt.connect();
+      return this.setupCharacteristics();
+
+    } catch (error) {
+      const err = error as Error;
+      console.error('❌ Auto-reconnect failed:', err);
+      this.notifyStatusChange('disconnected');
+      return { success: false, error: `Auto-reconnect failed: ${err.message}` };
+    }
+  }
+
+  /**
+   * Setup characteristics after GATT connection (shared between connect and autoReconnect)
+   */
+  private async setupCharacteristics(): Promise<{ success: boolean; device?: BluetoothDevice; error?: string }> {
+    try {
+      this.service = await this.server!.getPrimaryService(SERVICE_UUID);
+
+      const characteristics = await this.service.getCharacteristics();
+      console.log('📋 Found characteristics:');
+      characteristics.forEach(c => {
+        console.log(`  - ${c.uuid}`);
+        console.log(`    notify: ${c.properties.notify}, write: ${c.properties.write}`);
+      });
+
+      this.rxCharacteristic = characteristics.find(c => c.properties.notify) || null;
+      this.txCharacteristic = characteristics.find(
+        c => c.properties.write || c.properties.writeWithoutResponse
+      ) || null;
+
+      if (!this.rxCharacteristic) {
+        this.rxCharacteristic = await this.service.getCharacteristic(RX_UUID);
+      }
+
+      if (!this.txCharacteristic) {
+        try {
+          this.txCharacteristic = await this.service.getCharacteristic(TX_UUID);
+        } catch {
+          console.log('⚠️ No TX characteristic - LED control unavailable');
+        }
+      }
+
+      await this.rxCharacteristic.startNotifications();
+
+      this.rxCharacteristic.addEventListener('characteristicvaluechanged', (event) => {
+        this.handleDartThrow(event);
+      });
+
+      this.isConnected = true;
+      this.dartCount = 0;
+      this.connectionTime = Date.now();
+      this.notifyStatusChange('connected');
+
+      // Save device name for auto-reconnect
+      if (this.device?.name) {
+        localStorage.setItem(this.STORAGE_KEY, this.device.name);
+      }
+
+      console.log('✅ Connected to Granboard:', this.device?.name);
+
+      return { success: true, device: this.device! };
+
+    } catch (error) {
+      const err = error as Error;
+      console.error('❌ Setup failed:', err);
+      this.isConnected = false;
+      this.notifyStatusChange('error');
+      return { success: false, error: err.message };
+    }
   }
 
   async connect(): Promise<{ success: boolean; device?: BluetoothDevice; error?: string }> {
@@ -238,6 +372,11 @@ class BLEConnection {
         });
       }
 
+      // Set up disconnect listener
+      this.device.addEventListener('gattserverdisconnected', () => {
+        this.handleDisconnection();
+      });
+
       this.notifyStatusChange('connecting');
 
       if (!this.device.gatt) {
@@ -245,62 +384,7 @@ class BLEConnection {
       }
 
       this.server = await this.device.gatt.connect();
-      this.service = await this.server.getPrimaryService(SERVICE_UUID);
-
-      // Get all characteristics and log them for debugging
-      const characteristics = await this.service.getCharacteristics();
-      console.log('📋 Found characteristics:');
-      characteristics.forEach(c => {
-        console.log(`  - ${c.uuid}`);
-        console.log(`    notify: ${c.properties.notify}, write: ${c.properties.write}, writeWithoutResponse: ${c.properties.writeWithoutResponse}`);
-      });
-
-      // Find the notify characteristic (for receiving dart throws)
-      this.rxCharacteristic = characteristics.find(c => c.properties.notify) || null;
-
-      // Find the write characteristic (for LED control)
-      this.txCharacteristic = characteristics.find(
-        c => c.properties.write || c.properties.writeWithoutResponse
-      ) || null;
-
-      if (!this.rxCharacteristic) {
-        // Fallback to specific UUID
-        this.rxCharacteristic = await this.service.getCharacteristic(RX_UUID);
-      }
-
-      // Try to get TX characteristic by UUID if not found
-      if (!this.txCharacteristic) {
-        try {
-          this.txCharacteristic = await this.service.getCharacteristic(TX_UUID);
-          console.log('✅ Found TX characteristic for LED control');
-        } catch {
-          console.log('⚠️ No TX characteristic found - LED control unavailable');
-        }
-      }
-
-      await this.rxCharacteristic.startNotifications();
-
-      this.rxCharacteristic.addEventListener('characteristicvaluechanged', (event) => {
-        this.handleDartThrow(event);
-      });
-
-      this.device.addEventListener('gattserverdisconnected', () => {
-        this.handleDisconnection();
-      });
-
-      this.isConnected = true;
-      this.dartCount = 0;
-      this.connectionTime = Date.now();  // Start warmup timer
-      this.notifyStatusChange('connected');
-
-      console.log('✅ Connected to Granboard:', this.device.name);
-      console.log(`⏳ Warmup period: ignoring events for ${this.WARMUP_MS}ms`);
-
-      if (this.txCharacteristic) {
-        console.log('💡 LED control available via TX characteristic');
-      }
-
-      return { success: true, device: this.device };
+      return this.setupCharacteristics();
 
     } catch (error) {
       const err = error as Error;
