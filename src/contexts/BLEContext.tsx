@@ -32,9 +32,25 @@ export function BLEProvider({ children }: BLEProviderProps) {
   const [canAutoReconnect, setCanAutoReconnect] = useState(false);
   const [lastDeviceName] = useState<string | null>(bleConnection.getLastDeviceName());
 
-  // Check if auto-reconnect is available on mount
+  // Check if auto-reconnect is available on mount and auto-reconnect if possible
   useEffect(() => {
-    bleConnection.canAutoReconnect().then(setCanAutoReconnect);
+    const checkAndAutoReconnect = async () => {
+      const canReconnect = await bleConnection.canAutoReconnect();
+      setCanAutoReconnect(canReconnect);
+
+      // Auto-reconnect if we have a saved device and aren't already connected
+      if (canReconnect && status === 'disconnected') {
+        console.log('[BLEContext] Auto-reconnecting to saved device...');
+        const result = await bleConnection.autoReconnect();
+        if (result.success && result.device) {
+          setDeviceName(result.device.name || 'Unknown Device');
+          console.log('[BLEContext] Auto-reconnect successful:', result.device.name);
+        } else {
+          console.log('[BLEContext] Auto-reconnect failed:', result.error);
+        }
+      }
+    };
+    checkAndAutoReconnect();
   }, []);
 
   useEffect(() => {
