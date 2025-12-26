@@ -2,9 +2,11 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useBLE } from '../contexts/BLEContext';
 import { useWebRTC } from '../hooks/useWebRTC';
 import { useGameStatus } from '../hooks/useGameStatus';
+import { AppHeader } from '../components/AppHeader';
 import { createClient } from '../utils/supabase/client';
 import { isDevMode } from '../utils/devMode';
 import type { DartThrowData } from '../utils/ble/bleConnection';
+import { RefreshCw, DoorOpen } from 'lucide-react';
 
 type Target = '20' | '19' | '18' | '17' | '16' | '15' | 'B';
 type PlayerId = 'p1' | 'p2';
@@ -159,9 +161,10 @@ export function CROnlineGameScreen({ gameId, localPlayer, remotePlayer, isInitia
   const p2 = isInitiator ? remotePlayer : localPlayer;
   const localIsP1 = isInitiator;
 
-  // BLE for throw detection
-  const { lastThrow, isConnected: bleConnected } = useBLE();
+  // BLE for throw detection and status
+  const { lastThrow, isConnected: bleConnected, connect: bleConnect, disconnect: bleDisconnect, status: bleStatus } = useBLE();
   const lastProcessedThrowRef = useRef<string | null>(null);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
 
   // WebRTC for video - memoize options to prevent infinite re-initialization
   const webRTCOptions = useMemo(() => ({
@@ -171,7 +174,7 @@ export function CROnlineGameScreen({ gameId, localPlayer, remotePlayer, isInitia
     isInitiator,
   }), [gameId, localPlayer.id, remotePlayer.id, isInitiator]);
 
-  const { localStream, remoteStream, connectionState } = useWebRTC(webRTCOptions);
+  const { localStream, remoteStream, connectionState, initialize: webrtcInit, disconnect: webrtcDisconnect } = useWebRTC(webRTCOptions);
 
   // Game status for presence/disconnect detection
   const { isOpponentOnline, disconnectCountdown, leaveMatch, opponentLeftMessage } = useGameStatus({
@@ -194,6 +197,37 @@ export function CROnlineGameScreen({ gameId, localPlayer, remotePlayer, isInitia
       remoteVideoRef.current.srcObject = remoteStream;
     }
   }, [remoteStream]);
+
+  // Refresh video handler
+  const handleRefreshVideo = useCallback(async () => {
+    await webrtcDisconnect();
+    await webrtcInit();
+  }, [webrtcDisconnect, webrtcInit]);
+
+  // Custom menu items for AppHeader
+  const customMenuItems = useMemo(() => [
+    {
+      label: 'Refresh Video',
+      icon: RefreshCw,
+      onClick: handleRefreshVideo,
+    },
+    {
+      label: 'Leave Match',
+      icon: DoorOpen,
+      onClick: () => setShowLeaveConfirm(true),
+      className: 'focus:bg-red-500/20 focus:text-white text-red-400 cursor-pointer',
+    },
+  ], [handleRefreshVideo]);
+
+  // For logout action in AppHeader, show leave confirmation
+  const handleLogoutAction = () => setShowLeaveConfirm(true);
+
+  // Handle confirm leave
+  const handleConfirmLeave = async () => {
+    setShowLeaveConfirm(false);
+    await leaveMatch();
+    onLeaveMatch();
+  };
 
   // Cricket state
   const [marks, setMarks] = useState<Record<PlayerId, Record<Target, number>>>({
@@ -555,6 +589,60 @@ export function CROnlineGameScreen({ gameId, localPlayer, remotePlayer, isInitia
       overflow: 'hidden',
     }}>
       <style>{goodLuckKeyframes}</style>
+
+      {/* AppHeader with BLE status and profile menu */}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100, padding: '8px 12px', borderBottom: '1px solid #333' }}>
+        <AppHeader
+          title="CRICKET"
+          bleConnected={bleConnected}
+          bleStatus={bleStatus}
+          onBLEConnect={bleConnect}
+          onBLEDisconnect={bleDisconnect}
+          onLogout={handleLogoutAction}
+          customMenuItems={customMenuItems}
+        />
+      </div>
+
+      {/* Leave Confirmation Dialog */}
+      {showLeaveConfirm && (
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: 500,
+          background: 'rgba(0,0,0,0.8)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', padding: 16,
+        }}>
+          <div style={{
+            background: '#18181b', border: '1px solid #3f3f46',
+            borderRadius: 12, padding: 24, maxWidth: 320, width: '100%',
+          }}>
+            <h2 style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', marginBottom: 8 }}>Leave Match?</h2>
+            <p style={{ color: '#a1a1aa', fontSize: 14, marginBottom: 16 }}>
+              Your opponent will be notified and the match will be cancelled.
+            </p>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                onClick={() => setShowLeaveConfirm(false)}
+                style={{
+                  flex: 1, padding: '8px 16px', background: '#3f3f46',
+                  color: '#fff', border: 'none', borderRadius: 8,
+                  fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                Stay
+              </button>
+              <button
+                onClick={handleConfirmLeave}
+                style={{
+                  flex: 1, padding: '8px 16px', background: '#dc2626',
+                  color: '#fff', border: 'none', borderRadius: 8,
+                  fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                Leave
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* SPLIT SCREEN VIDEO BACKGROUND */}
       <div style={{
