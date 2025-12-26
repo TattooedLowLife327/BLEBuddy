@@ -10,7 +10,7 @@ export default defineConfig({
     VitePWA({
       injectRegister: false, // we'll register manually (and skip on LAN)
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'assets/5darts.png'],
+      includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
       manifest: {
         name: 'BLE Buddy - LowLife Companion',
         short_name: 'BLE Buddy',
