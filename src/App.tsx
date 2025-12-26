@@ -10,6 +10,7 @@ import { GameScreen } from './pages/GameScreen';
 import { O1GSPreview } from './pages/preview/01GSPreview';
 import { CRGSPreview } from './pages/preview/CRGSPreview';
 import { MedleyPreview } from './pages/preview/MedleyPreview';
+import { CorkPreview } from './pages/preview/CorkPreview';
 import { CROnlineGameScreen } from './pages/CROnlineGameScreen';
 import { SettingsModal } from './components/SettingsModal';
 import { createClient } from './utils/supabase/client';
@@ -471,6 +472,7 @@ export default function App() {
       <Route path="/preview/01" element={<O1GSPreview />} />
       <Route path="/preview/cr" element={<CRGSPreview />} />
       <Route path="/preview/medley" element={<MedleyPreview />} />
+      <Route path="/preview/cork" element={<CorkPreview />} />
 
       <Route path="/login" element={isAuthenticated ? <Navigate to={`/dashboard${queryString}`} /> : <Login onLoginSuccess={handleLoginSuccess} />} />
 

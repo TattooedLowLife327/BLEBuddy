@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { ChevronLeft } from 'lucide-react';
 import { useBLE } from '../contexts/BLEContext';
 import { useWebRTC } from '../hooks/useWebRTC';
 import { useGameStatus } from '../hooks/useGameStatus';
-import { AppHeader } from './AppHeader';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
+import { UserMenu, type CustomMenuItem } from './UserMenu';
 import { Bluetooth, X, WifiOff, RefreshCw, DoorOpen } from 'lucide-react';
 import type { DartThrowData } from '../utils/ble/bleConnection';
 import { isDevMode } from '../utils/devMode';
@@ -35,6 +36,30 @@ interface CorkThrowMessage {
   round: number;
 }
 
+// CSS keyframes for animations
+const corkKeyframes = `
+@keyframes colorSwipeUp {
+  0% { clip-path: inset(100% 0 0 0); }
+  100% { clip-path: inset(0 0 0 0); }
+}
+@keyframes colorSwipeDown {
+  0% { clip-path: inset(0 0 0 0); }
+  100% { clip-path: inset(100% 0 0 0); }
+}
+@keyframes winnerPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+@keyframes winnerSlideIn {
+  0% { transform: translateX(-100%); opacity: 0; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+@keyframes tiePulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+`;
+
 function getCorkScore(throwData: DartThrowData): { score: number; valid: boolean; display: string } {
   const { segmentType, baseValue } = throwData;
   if (segmentType === 'SINGLE_INNER') return { score: baseValue, valid: true, display: `${baseValue}` };
@@ -57,11 +82,16 @@ const resolveProfilePicUrl = (pic?: string): string | undefined => {
   return `https://sndsyxxcnuwjmjgikzgg.supabase.co/storage/v1/object/public/profilepic/${pic}`;
 };
 
+const GREY = '#7E7E7E';
+const FONT_NAME = "'Helvetica Condensed', 'Helvetica', Arial, sans-serif";
+const FONT_SCORE = "'Helvetica Compressed', 'Helvetica', Arial, sans-serif";
+
 export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitiator, onCorkComplete, onCancel }: CorkScreenProps) {
   const { lastThrow, isConnected, connect, disconnect: bleDisconnect, status: bleStatus } = useBLE();
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const mountTimeRef = useRef<number>(Date.now());
+  const containerRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
 
   const remotePlayerId = visiblePlayerId === player1.id ? player2.id : player1.id;
@@ -84,8 +114,8 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
     onOpponentReconnected: () => console.log('[CorkScreen] Opponent reconnected'),
   });
 
-  const [p1State, setP1State] = useState<PlayerCorkState>({ status: 'waiting', score: null, wasValid: false, display: '--' });
-  const [p2State, setP2State] = useState<PlayerCorkState>({ status: 'waiting', score: null, wasValid: false, display: '--' });
+  const [p1State, setP1State] = useState<PlayerCorkState>({ status: 'waiting', score: null, wasValid: false, display: '-' });
+  const [p2State, setP2State] = useState<PlayerCorkState>({ status: 'waiting', score: null, wasValid: false, display: '-' });
   const [tieAlert, setTieAlert] = useState(false);
   const [winner, setWinner] = useState<string | null>(null);
   const [revealed, setRevealed] = useState(false);
@@ -96,8 +126,24 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const devMode = isDevMode();
 
+  // Responsive scaling
+  const [scale, setScale] = useState(1);
+  useEffect(() => {
+    const updateScale = () => {
+      if (!containerRef.current) return;
+      const w = containerRef.current.clientWidth;
+      const h = containerRef.current.clientHeight;
+      // Reference: 1180 x 820 from game screens
+      setScale(Math.min(w / 1180, h / 820));
+    };
+    updateScale();
+    window.addEventListener('resize', updateScale);
+    return () => window.removeEventListener('resize', updateScale);
+  }, []);
+
   // Determine if local player is P1 or P2
   const amP1 = visiblePlayerId === player1.id;
+  const isP1Local = amP1;
 
   // Send cork throw to Supabase channel
   const sendCorkThrow = useCallback(async (score: number, wasValid: boolean, display: string) => {
@@ -130,7 +176,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
 
   // Dev mode: simulate a throw
   const simulateThrow = (type: 'inner' | 'bull' | 'dblbull' | 'miss', value: number = 20) => {
-    if (myThrowSent) return; // Already threw this round
+    if (myThrowSent) return;
 
     const segmentTypes: Record<string, DartThrowData['segmentType']> = {
       inner: 'SINGLE_INNER',
@@ -164,13 +210,11 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
         const msg = payload as CorkThrowMessage;
         console.log('[Cork] Received throw:', msg);
 
-        // Only process throws for current round
         if (msg.round !== corkRound) {
           console.log('[Cork] Ignoring throw from different round');
           return;
         }
 
-        // Update opponent's state
         if (msg.playerId === player1.id) {
           setP1State({ status: 'thrown', score: msg.score, wasValid: msg.wasValid, display: msg.display });
         } else if (msg.playerId === player2.id) {
@@ -190,7 +234,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
   // Initialize WebRTC
   useEffect(() => { initialize(); return () => { webrtcDisconnect(); }; }, [initialize, webrtcDisconnect]);
 
-  // Request fullscreen on mount for true immersive experience
+  // Request fullscreen on mount
   useEffect(() => {
     const enterFullscreen = async () => {
       try {
@@ -200,7 +244,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
           await (document.documentElement as any).webkitRequestFullscreen();
         }
       } catch {
-        // Fullscreen may fail if no user interaction yet - that's ok
+        // Fullscreen may fail if no user interaction yet
       }
     };
     enterFullscreen();
@@ -222,11 +266,10 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
     if (remoteVideoRef.current && remoteStream) remoteVideoRef.current.srcObject = remoteStream;
   }, [remoteStream]);
 
-  // Handle BLE throws - send MY throws to the channel
+  // Handle BLE throws
   useEffect(() => {
     if (!lastThrow || winner || myThrowSent) return;
 
-    // Ignore stale throws from before this component mounted (prevents phantom auto-throws)
     const throwTime = new Date(lastThrow.timestamp).getTime();
     if (throwTime <= mountTimeRef.current) return;
 
@@ -245,18 +288,17 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
     setTimeout(() => {
       if (p1State.score! > p2State.score!) {
         setWinner(player1.id);
-        setTimeout(() => onCorkComplete(player1.id), 2000);
+        setTimeout(() => onCorkComplete(player1.id), 2500);
       } else if (p2State.score! > p1State.score!) {
         setWinner(player2.id);
-        setTimeout(() => onCorkComplete(player2.id), 2000);
+        setTimeout(() => onCorkComplete(player2.id), 2500);
       } else {
-        // Tie - reset for another round
         setTieAlert(true);
         setTimeout(() => {
           setTieAlert(false);
           setRevealed(false);
-          setP1State({ status: 'waiting', score: null, wasValid: false, display: '--' });
-          setP2State({ status: 'waiting', score: null, wasValid: false, display: '--' });
+          setP1State({ status: 'waiting', score: null, wasValid: false, display: '-' });
+          setP2State({ status: 'waiting', score: null, wasValid: false, display: '-' });
           setCorkRound(r => r + 1);
           setMyThrowSent(false);
         }, 2500);
@@ -264,23 +306,19 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
     }, 1000);
   }, [p1State, p2State, winner, player1.id, player2.id, onCorkComplete]);
 
-  const getDisplay = (state: PlayerCorkState, pid: string) => {
-    if (state.status === 'waiting') return '--';
+  // Score display logic - hide opponent until both thrown
+  const getScoreDisplay = (state: PlayerCorkState, playerId: string): string => {
+    if (state.status === 'waiting') return '-';
     if (revealed) return state.display;
-    // Show own score immediately, opponent shows "OK" until both thrown
-    return pid === visiblePlayerId ? state.display : 'OK';
+    return playerId === visiblePlayerId ? state.display : '-';
   };
 
-  const isP1Local = player1.id === visiblePlayerId;
-
-  const handleBLEConnect = async () => {
-    const result = await connect();
-    if (!result.success && result.error) {
-      alert(`Connection failed: ${result.error}`);
-    }
+  // Score color - profile color when shown, white dash otherwise
+  const getScoreColor = (state: PlayerCorkState, playerId: string, accentColor: string): string => {
+    if (state.status === 'waiting') return '#FFFFFF';
+    if (revealed || playerId === visiblePlayerId) return accentColor;
+    return '#FFFFFF';
   };
-
-  const handleLeaveClick = () => setShowLeaveConfirm(true);
 
   const handleConfirmLeave = async () => {
     setShowLeaveConfirm(false);
@@ -288,22 +326,13 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
     onCancel();
   };
 
-  const handleCancelLeave = () => setShowLeaveConfirm(false);
-
-  const handleBLEReconnect = async () => {
-    const result = await connect();
-    if (!result.success && result.error) {
-      alert(`Reconnection failed: ${result.error}`);
-    }
-  };
-
   const handleRefreshVideo = async () => {
     await webrtcDisconnect();
     await initialize();
   };
 
-  // Custom menu items for AppHeader
-  const customMenuItems = useMemo(() => [
+  // Custom menu items for UserMenu
+  const customMenuItems: CustomMenuItem[] = useMemo(() => [
     {
       label: 'Refresh Video',
       icon: RefreshCw,
@@ -315,53 +344,47 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
       onClick: () => setShowLeaveConfirm(true),
       className: 'focus:bg-red-500/20 focus:text-white text-red-400 cursor-pointer',
     },
-  ], [webrtcDisconnect, initialize]);
+  ], []);
 
-  // For logout action in AppHeader, show leave confirmation (can't logout mid-game)
   const handleLogoutAction = () => setShowLeaveConfirm(true);
 
-  const renderPlayer = (player: typeof player1, state: PlayerCorkState, pNum: 1 | 2, isLocal: boolean) => {
-    const isMyTurn = isLocal && !myThrowSent && state.status === 'waiting';
-    const showResult = revealed || player.id === visiblePlayerId;
-    const borderColor = isMyTurn ? 'border-yellow-400' : state.status === 'thrown' && showResult ? (state.wasValid ? 'border-green-500' : 'border-red-500') : 'border-zinc-700';
+  // Determine states for UI
+  const p1HasThrown = p1State.status === 'thrown';
+  const p2HasThrown = p2State.status === 'thrown';
+  const p1IsWinner = winner === player1.id;
+  const p2IsWinner = winner === player2.id;
+  const p1IsLoser = winner !== null && !p1IsWinner;
+  const p2IsLoser = winner !== null && !p2IsWinner;
 
-    return (
-      <div className={`flex-1 p-3 rounded-xl border-2 ${borderColor} transition-colors`} style={{ backgroundColor: 'rgba(39,39,42,0.6)' }}>
-        <div className="flex flex-col items-center">
-          {/* Video feed */}
-          <div className="w-full aspect-video bg-zinc-900 rounded-lg mb-2 overflow-hidden relative" style={{ borderColor: player.accentColor, borderWidth: '2px' }}>
-            {isLocal ? (
-              localStream ? <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
-              : <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs p-2 text-center">
-                  {devMode ? 'No camera (dev mode)' : error || 'Starting camera...'}
-                </div>
-            ) : (
-              remoteStream ? <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
-              : <div className="w-full h-full flex items-center justify-center">
-                  <Avatar className="w-12 h-12"><AvatarImage src={resolveProfilePicUrl(player.profilePic)} /><AvatarFallback className="bg-zinc-800 text-white text-lg">{player.name.charAt(0)}</AvatarFallback></Avatar>
-                </div>
-            )}
-            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-2 py-1">
-              <p className="text-white font-semibold text-xs truncate">{player.name}</p>
-            </div>
-          </div>
-
-          {/* Status */}
-          <p className={`text-xs mb-1 ${isMyTurn ? 'text-yellow-400 font-bold' : 'text-zinc-500'}`}>
-            {state.status === 'thrown' ? (revealed ? '' : 'Thrown!') : isMyTurn ? 'THROW!' : 'Waiting...'}
-          </p>
-
-          {/* Score */}
-          <div className="text-2xl font-bold" style={{ color: state.status === 'waiting' ? '#71717a' : showResult ? (state.wasValid ? '#22c55e' : '#ef4444') : '#a1a1aa' }}>
-            {getDisplay(state, player.id)}
-          </div>
-        </div>
-      </div>
-    );
+  // Camera border logic: gray -> profile color when thrown, bolder for winner
+  const getCameraBorderStyle = (hasThrown: boolean, isWinner: boolean, isLoser: boolean, accentColor: string) => {
+    if (isLoser) return { borderColor: GREY, borderWidth: '3px', opacity: 0.5 };
+    if (isWinner) return { borderColor: accentColor, borderWidth: '5px', opacity: 1 };
+    if (hasThrown) return { borderColor: accentColor, borderWidth: '3px', opacity: 1 };
+    return { borderColor: GREY, borderWidth: '3px', opacity: 1 };
   };
 
+  // Player bar background gradient
+  const greyGradient = 'linear-gradient(179.4deg, rgba(126, 126, 126, 0.2) 0.52%, rgba(0, 0, 0, 0.2) 95.46%)';
+  const getColorGradient = (accentColor: string) =>
+    `linear-gradient(179.4deg, ${accentColor}33 0.52%, rgba(0, 0, 0, 0.2) 95.46%)`;
+
   return (
-    <div className="fixed inset-0 bg-black z-50 flex flex-col">
+    <div ref={containerRef} className="fixed inset-0 bg-black z-50 flex flex-col overflow-hidden">
+      {/* Inject keyframes */}
+      <style>{corkKeyframes}</style>
+
+      {/* Game screen background overlay */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          backgroundImage: `url('/assets/gamescreenbackground.png')`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+        }}
+      />
+
       {/* Leave Confirmation Dialog */}
       {showLeaveConfirm && (
         <div className="absolute inset-0 z-[60] bg-black/80 flex items-center justify-center p-4">
@@ -371,7 +394,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
               Your opponent will be notified and the match will be cancelled.
             </p>
             <div className="flex gap-3">
-              <button onClick={handleCancelLeave} className="flex-1 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg text-sm font-semibold transition-colors">
+              <button onClick={() => setShowLeaveConfirm(false)} className="flex-1 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg text-sm font-semibold transition-colors">
                 Stay
               </button>
               <button onClick={handleConfirmLeave} className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold transition-colors">
@@ -415,7 +438,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
             <h2 className="text-white text-lg font-bold mb-2">Board Disconnected</h2>
             <p className="text-zinc-400 text-sm mb-4">Your Granboard connection was lost. Reconnect to continue playing.</p>
             <button
-              onClick={handleBLEReconnect}
+              onClick={connect}
               disabled={bleStatus === 'connecting' || bleStatus === 'scanning'}
               className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white rounded-lg text-sm font-semibold transition-colors"
             >
@@ -425,96 +448,440 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
         </div>
       )}
 
-      {/* Header using AppHeader component */}
-      <div className="px-3 pt-2 border-b border-zinc-800">
-        <AppHeader
-          title={`CORK${corkRound > 1 ? ` R${corkRound}` : ''}`}
-          bleConnected={isConnected}
-          bleStatus={bleStatus}
-          onBLEConnect={connect}
-          onBLEDisconnect={bleDisconnect}
-          onLogout={handleLogoutAction}
-          customMenuItems={customMenuItems}
-        />
+      {/* Header */}
+      <div
+        className="relative flex items-center justify-center shrink-0 z-20"
+        style={{ height: `calc(60 * ${scale})`, padding: `calc(10 * ${scale})` }}
+      >
+        {/* Back button */}
+        <button
+          onClick={() => setShowLeaveConfirm(true)}
+          className="absolute left-0 p-2 text-white hover:opacity-80 transition-opacity"
+          style={{ left: `calc(10 * ${scale})` }}
+          aria-label="Back"
+        >
+          <ChevronLeft style={{ width: `calc(28 * ${scale})`, height: `calc(28 * ${scale})` }} />
+        </button>
+
+        {/* Title */}
+        <h1
+          className="text-white uppercase tracking-wider font-bold"
+          style={{ fontFamily: FONT_NAME, fontSize: `calc(24 * ${scale})` }}
+        >
+          THROW CORK{corkRound > 1 ? ` R${corkRound}` : ''}
+        </h1>
+
+        {/* User menu */}
+        <div className="absolute right-0" style={{ right: `calc(10 * ${scale})` }}>
+          <UserMenu
+            onLogout={handleLogoutAction}
+            customItems={customMenuItems}
+            size="sm"
+          />
+        </div>
       </div>
 
-      {/* Opponent offline indicator in header area */}
+      {/* Opponent offline indicator */}
       {!isOpponentOnline && disconnectCountdown === null && (
-        <div className="bg-yellow-600/20 border-b border-yellow-600 px-3 py-1 flex items-center justify-center gap-2">
-          <WifiOff className="w-3 h-3 text-yellow-500" />
-          <span className="text-yellow-500 text-xs">{remotePlayerName} appears offline</span>
+        <div
+          className="bg-yellow-600/20 border-b border-yellow-600 flex items-center justify-center gap-2 z-10"
+          style={{ padding: `calc(6 * ${scale})` }}
+        >
+          <WifiOff style={{ width: `calc(14 * ${scale})`, height: `calc(14 * ${scale})` }} className="text-yellow-500" />
+          <span className="text-yellow-500" style={{ fontSize: `calc(14 * ${scale})` }}>{remotePlayerName} appears offline</span>
         </div>
       )}
 
-      {/* Main content */}
-      <div className="flex-1 flex flex-col items-center justify-center p-3 relative">
-        {/* Rules hint */}
-        <p className="text-zinc-600 text-xs mb-3 text-center">Inner singles & bulls = face value | Others = 0</p>
-
-        {/* Tie/Winner overlays */}
+      {/* Main content - Video feeds */}
+      <div className="flex-1 flex items-center justify-center relative z-10" style={{ padding: `calc(20 * ${scale})` }}>
+        {/* Tie overlay */}
         {tieAlert && (
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-yellow-600 text-black px-6 py-3 rounded-xl animate-pulse">
-            <p className="text-lg font-bold">TIE! Both rethrow!</p>
-          </div>
-        )}
-        {winner && (
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-green-600 text-white px-6 py-3 rounded-xl">
-            <p className="text-lg font-bold">{winner === player1.id ? player1.name : player2.name} throws first!</p>
+          <div
+            className="absolute z-50 bg-yellow-600 text-black px-8 py-4 rounded-xl"
+            style={{
+              animation: 'tiePulse 0.5s ease-in-out infinite',
+              fontSize: `calc(28 * ${scale})`,
+              fontFamily: FONT_NAME,
+              fontWeight: 700,
+            }}
+          >
+            TIE! Both rethrow!
           </div>
         )}
 
-        {/* Players side by side */}
-        <div className="flex items-stretch justify-center gap-3 w-full max-w-3xl">
-          {renderPlayer(player1, p1State, 1, isP1Local)}
-          <div className="flex items-center">
-            <div className="text-zinc-700 text-lg font-bold">VS</div>
+        {/* Video container */}
+        <div
+          className="flex items-stretch justify-center gap-4 w-full"
+          style={{ maxWidth: `calc(900 * ${scale})`, gap: `calc(30 * ${scale})` }}
+        >
+          {/* Player 1 Video */}
+          <div className="flex-1 relative">
+            {(() => {
+              const borderStyle = getCameraBorderStyle(p1HasThrown, p1IsWinner, p1IsLoser, player1.accentColor);
+              return (
+                <div
+                  className="w-full aspect-video bg-zinc-900 rounded-lg overflow-hidden relative transition-all duration-500"
+                  style={{
+                    borderStyle: 'solid',
+                    borderColor: borderStyle.borderColor,
+                    borderWidth: borderStyle.borderWidth,
+                    opacity: borderStyle.opacity,
+                  }}
+                >
+                  {isP1Local ? (
+                    localStream ? (
+                      <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-zinc-500" style={{ fontSize: `calc(14 * ${scale})` }}>
+                        {devMode ? 'No camera (dev mode)' : error || 'Starting camera...'}
+                      </div>
+                    )
+                  ) : (
+                    remoteStream ? (
+                      <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Avatar style={{ width: `calc(60 * ${scale})`, height: `calc(60 * ${scale})` }}>
+                          <AvatarImage src={resolveProfilePicUrl(player1.profilePic)} />
+                          <AvatarFallback className="bg-zinc-800 text-white" style={{ fontSize: `calc(24 * ${scale})` }}>
+                            {player1.name.charAt(0)}
+                          </AvatarFallback>
+                        </Avatar>
+                      </div>
+                    )
+                  )}
+
+                  {/* Winner banner overlay */}
+                  {p1IsWinner && (
+                    <div
+                      className="absolute inset-x-0 bottom-0 flex items-center justify-center"
+                      style={{
+                        height: `calc(50 * ${scale})`,
+                        background: `linear-gradient(90deg, transparent 0%, ${player1.accentColor}CC 20%, ${player1.accentColor}CC 80%, transparent 100%)`,
+                        animation: 'winnerSlideIn 0.5s ease-out forwards',
+                      }}
+                    >
+                      <span
+                        className="text-white font-bold uppercase tracking-widest"
+                        style={{ fontFamily: FONT_NAME, fontSize: `calc(24 * ${scale})`, textShadow: '2px 2px 4px rgba(0,0,0,0.5)' }}
+                      >
+                        WINNER
+                      </span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
-          {renderPlayer(player2, p2State, 2, !isP1Local)}
+
+          {/* VS divider */}
+          <div className="flex items-center">
+            <span
+              className="text-zinc-600 font-bold"
+              style={{ fontFamily: FONT_NAME, fontSize: `calc(24 * ${scale})` }}
+            >
+              VS
+            </span>
+          </div>
+
+          {/* Player 2 Video */}
+          <div className="flex-1 relative">
+            {(() => {
+              const borderStyle = getCameraBorderStyle(p2HasThrown, p2IsWinner, p2IsLoser, player2.accentColor);
+              return (
+                <div
+                  className="w-full aspect-video bg-zinc-900 rounded-lg overflow-hidden relative transition-all duration-500"
+                  style={{
+                    borderStyle: 'solid',
+                    borderColor: borderStyle.borderColor,
+                    borderWidth: borderStyle.borderWidth,
+                    opacity: borderStyle.opacity,
+                  }}
+                >
+                  {!isP1Local ? (
+                    localStream ? (
+                      <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-zinc-500" style={{ fontSize: `calc(14 * ${scale})` }}>
+                        {devMode ? 'No camera (dev mode)' : error || 'Starting camera...'}
+                      </div>
+                    )
+                  ) : (
+                    remoteStream ? (
+                      <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Avatar style={{ width: `calc(60 * ${scale})`, height: `calc(60 * ${scale})` }}>
+                          <AvatarImage src={resolveProfilePicUrl(player2.profilePic)} />
+                          <AvatarFallback className="bg-zinc-800 text-white" style={{ fontSize: `calc(24 * ${scale})` }}>
+                            {player2.name.charAt(0)}
+                          </AvatarFallback>
+                        </Avatar>
+                      </div>
+                    )
+                  )}
+
+                  {/* Winner banner overlay */}
+                  {p2IsWinner && (
+                    <div
+                      className="absolute inset-x-0 bottom-0 flex items-center justify-center"
+                      style={{
+                        height: `calc(50 * ${scale})`,
+                        background: `linear-gradient(90deg, transparent 0%, ${player2.accentColor}CC 20%, ${player2.accentColor}CC 80%, transparent 100%)`,
+                        animation: 'winnerSlideIn 0.5s ease-out forwards',
+                      }}
+                    >
+                      <span
+                        className="text-white font-bold uppercase tracking-widest"
+                        style={{ fontFamily: FONT_NAME, fontSize: `calc(24 * ${scale})`, textShadow: '2px 2px 4px rgba(0,0,0,0.5)' }}
+                      >
+                        WINNER
+                      </span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      </div>
+
+      {/* Player Bars at bottom */}
+      <div className="relative z-20" style={{ height: `calc(90 * ${scale})` }}>
+        {/* Player 1 Bar - Left */}
+        <div style={{
+          position: 'absolute',
+          width: `calc(450 * ${scale})`,
+          height: `calc(90 * ${scale})`,
+          left: '0px',
+          bottom: '0px',
+          borderTopRightRadius: `calc(16 * ${scale})`,
+          overflow: 'hidden',
+        }}>
+          {/* Grey base */}
+          <div style={{ position: 'absolute', inset: 0, background: greyGradient }} />
+
+          {/* Color fill overlay with swipe animation */}
+          {p1HasThrown && !p1IsLoser && (
+            <div
+              key={`p1-bar-${corkRound}`}
+              style={{
+                position: 'absolute',
+                inset: 0,
+                background: getColorGradient(player1.accentColor),
+                animation: 'colorSwipeUp 0.5s ease-out forwards',
+              }}
+            />
+          )}
+
+          {/* Winner bar - bolder */}
+          {p1IsWinner && (
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: '4px',
+              background: player1.accentColor,
+            }} />
+          )}
+
+          {/* Avatar on left outer edge */}
+          <div style={{
+            position: 'absolute',
+            width: `calc(60 * ${scale})`,
+            height: `calc(60 * ${scale})`,
+            left: `calc(10 * ${scale})`,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            background: '#000',
+            border: `3px solid ${p1HasThrown && !p1IsLoser ? player1.accentColor : GREY}`,
+            borderRadius: '50%',
+            overflow: 'hidden',
+            zIndex: 2,
+            transition: 'border-color 0.3s ease',
+            opacity: p1IsLoser ? 0.5 : 1,
+          }}>
+            <Avatar className="w-full h-full">
+              <AvatarImage src={resolveProfilePicUrl(player1.profilePic)} />
+              <AvatarFallback className="bg-zinc-800 text-white">{player1.name.charAt(0)}</AvatarFallback>
+            </Avatar>
+          </div>
+
+          {/* Name */}
+          <span style={{
+            position: 'absolute',
+            left: `calc(80 * ${scale})`,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            fontFamily: FONT_NAME,
+            fontWeight: 400,
+            fontSize: `calc(28 * ${scale})`,
+            color: p1IsLoser ? GREY : (p1HasThrown ? '#FFFFFF' : GREY),
+            transition: 'color 0.3s ease',
+            zIndex: 3,
+          }}>
+            {player1.name}
+          </span>
+
+          {/* Score on right side of bar */}
+          <span style={{
+            position: 'absolute',
+            right: `calc(20 * ${scale})`,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            fontFamily: FONT_SCORE,
+            fontWeight: 300,
+            fontSize: `calc(56 * ${scale})`,
+            color: getScoreColor(p1State, player1.id, player1.accentColor),
+            opacity: p1IsLoser ? 0.5 : 1,
+            transition: 'color 0.3s ease',
+            zIndex: 3,
+          }}>
+            {getScoreDisplay(p1State, player1.id)}
+          </span>
         </div>
 
-        {/* Video status */}
-        <p className="text-zinc-700 text-xs mt-3">Video: {connectionState}</p>
+        {/* Player 2 Bar - Right */}
+        <div style={{
+          position: 'absolute',
+          width: `calc(450 * ${scale})`,
+          height: `calc(90 * ${scale})`,
+          right: '0px',
+          bottom: '0px',
+          borderTopLeftRadius: `calc(16 * ${scale})`,
+          overflow: 'hidden',
+        }}>
+          {/* Grey base */}
+          <div style={{ position: 'absolute', inset: 0, background: greyGradient }} />
 
-        {/* Dev Mode Throw Simulator */}
-        {devMode && (
-          <div className="mt-4 p-3 bg-orange-900/30 border border-orange-600 rounded-lg">
-            <p className="text-orange-400 text-xs font-bold mb-2">DEV MODE - Throw Simulator {myThrowSent ? '(Already thrown)' : ''}</p>
-            <div className="flex flex-wrap gap-2 justify-center">
-              {[1, 5, 10, 15, 20].map(v => (
-                <button
-                  key={v}
-                  onClick={() => simulateThrow('inner', v)}
-                  disabled={myThrowSent}
-                  className="px-3 py-1 bg-zinc-700 hover:bg-zinc-600 disabled:bg-zinc-800 disabled:text-zinc-600 text-white text-xs rounded"
-                >
-                  {v}
-                </button>
-              ))}
-              <button
-                onClick={() => simulateThrow('bull')}
-                disabled={myThrowSent}
-                className="px-3 py-1 bg-green-700 hover:bg-green-600 disabled:bg-green-900 disabled:text-green-700 text-white text-xs rounded"
-              >
-                BULL
-              </button>
-              <button
-                onClick={() => simulateThrow('dblbull')}
-                disabled={myThrowSent}
-                className="px-3 py-1 bg-red-700 hover:bg-red-600 disabled:bg-red-900 disabled:text-red-700 text-white text-xs rounded"
-              >
-                D-BULL
-              </button>
-              <button
-                onClick={() => simulateThrow('miss')}
-                disabled={myThrowSent}
-                className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-900 disabled:text-zinc-700 text-zinc-400 text-xs rounded"
-              >
-                MISS
-              </button>
-            </div>
+          {/* Color fill overlay with swipe animation */}
+          {p2HasThrown && !p2IsLoser && (
+            <div
+              key={`p2-bar-${corkRound}`}
+              style={{
+                position: 'absolute',
+                inset: 0,
+                background: getColorGradient(player2.accentColor),
+                animation: 'colorSwipeUp 0.5s ease-out forwards',
+              }}
+            />
+          )}
+
+          {/* Winner bar - bolder */}
+          {p2IsWinner && (
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: '4px',
+              background: player2.accentColor,
+            }} />
+          )}
+
+          {/* Score on left side of bar */}
+          <span style={{
+            position: 'absolute',
+            left: `calc(20 * ${scale})`,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            fontFamily: FONT_SCORE,
+            fontWeight: 300,
+            fontSize: `calc(56 * ${scale})`,
+            color: getScoreColor(p2State, player2.id, player2.accentColor),
+            opacity: p2IsLoser ? 0.5 : 1,
+            transition: 'color 0.3s ease',
+            zIndex: 3,
+          }}>
+            {getScoreDisplay(p2State, player2.id)}
+          </span>
+
+          {/* Name */}
+          <span style={{
+            position: 'absolute',
+            right: `calc(80 * ${scale})`,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            fontFamily: FONT_NAME,
+            fontWeight: 400,
+            fontSize: `calc(28 * ${scale})`,
+            color: p2IsLoser ? GREY : (p2HasThrown ? '#FFFFFF' : GREY),
+            transition: 'color 0.3s ease',
+            textAlign: 'right',
+            zIndex: 3,
+          }}>
+            {player2.name}
+          </span>
+
+          {/* Avatar on right outer edge */}
+          <div style={{
+            position: 'absolute',
+            width: `calc(60 * ${scale})`,
+            height: `calc(60 * ${scale})`,
+            right: `calc(10 * ${scale})`,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            background: '#000',
+            border: `3px solid ${p2HasThrown && !p2IsLoser ? player2.accentColor : GREY}`,
+            borderRadius: '50%',
+            overflow: 'hidden',
+            zIndex: 2,
+            transition: 'border-color 0.3s ease',
+            opacity: p2IsLoser ? 0.5 : 1,
+          }}>
+            <Avatar className="w-full h-full">
+              <AvatarImage src={resolveProfilePicUrl(player2.profilePic)} />
+              <AvatarFallback className="bg-zinc-800 text-white">{player2.name.charAt(0)}</AvatarFallback>
+            </Avatar>
           </div>
-        )}
+        </div>
       </div>
+
+      {/* Dev Mode Throw Simulator */}
+      {devMode && (
+        <div
+          className="absolute bottom-24 left-1/2 -translate-x-1/2 p-3 bg-orange-900/50 border border-orange-600 rounded-lg z-30"
+          style={{ minWidth: `calc(400 * ${scale})` }}
+        >
+          <p className="text-orange-400 text-xs font-bold mb-2 text-center">
+            DEV MODE - Throw Simulator {myThrowSent ? '(Already thrown)' : ''}
+          </p>
+          <div className="flex flex-wrap gap-2 justify-center">
+            {[1, 5, 10, 15, 20].map(v => (
+              <button
+                key={v}
+                onClick={() => simulateThrow('inner', v)}
+                disabled={myThrowSent}
+                className="px-3 py-1 bg-zinc-700 hover:bg-zinc-600 disabled:bg-zinc-800 disabled:text-zinc-600 text-white text-xs rounded"
+              >
+                {v}
+              </button>
+            ))}
+            <button
+              onClick={() => simulateThrow('bull')}
+              disabled={myThrowSent}
+              className="px-3 py-1 bg-green-700 hover:bg-green-600 disabled:bg-green-900 disabled:text-green-700 text-white text-xs rounded"
+            >
+              BULL
+            </button>
+            <button
+              onClick={() => simulateThrow('dblbull')}
+              disabled={myThrowSent}
+              className="px-3 py-1 bg-red-700 hover:bg-red-600 disabled:bg-red-900 disabled:text-red-700 text-white text-xs rounded"
+            >
+              D-BULL
+            </button>
+            <button
+              onClick={() => simulateThrow('miss')}
+              disabled={myThrowSent}
+              className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-900 disabled:text-zinc-700 text-zinc-400 text-xs rounded"
+            >
+              MISS
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -624,6 +624,28 @@ export function O1GSPreview({ onLeaveMatch }: O1GSPreviewProps) {
   const [gameWinner, setGameWinner] = useState<'p1' | 'p2' | null>(null);
   const [showWinnerScreen, setShowWinnerScreen] = useState(false);
 
+  // Request fullscreen on mobile/tablet
+  useEffect(() => {
+    const requestFullscreen = async () => {
+      try {
+        if (document.documentElement.requestFullscreen) {
+          await document.documentElement.requestFullscreen();
+        } else if ((document.documentElement as any).webkitRequestFullscreen) {
+          await (document.documentElement as any).webkitRequestFullscreen();
+        }
+      } catch (err) {
+        console.log('Fullscreen not available');
+      }
+    };
+    requestFullscreen();
+
+    return () => {
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+    };
+  }, []);
+
   // Medley match tracking
   const [matchGameWinners, setMatchGameWinners] = useState<('p1' | 'p2')[]>([]); // Winners of each game in match
   const [currentGameIndex, setCurrentGameIndex] = useState(0); // Which game we're on (0-indexed)
