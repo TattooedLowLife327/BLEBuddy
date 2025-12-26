@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useBLE } from '../contexts/BLEContext';
 import { useWebRTC } from '../hooks/useWebRTC';
 import { useGameStatus } from '../hooks/useGameStatus';
@@ -66,9 +66,12 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
   const remotePlayerId = visiblePlayerId === player1.id ? player2.id : player1.id;
   const remotePlayerName = visiblePlayerId === player1.id ? player2.name : player1.name;
 
-  const { localStream, remoteStream, connectionState, error, initialize, disconnect } = useWebRTC({
+  // Memoize WebRTC options to prevent infinite re-initialization loop
+  const webRTCOptions = useMemo(() => ({
     gameId, localPlayerId: visiblePlayerId, remotePlayerId, isInitiator
-  });
+  }), [gameId, visiblePlayerId, remotePlayerId, isInitiator]);
+
+  const { localStream, remoteStream, connectionState, error, initialize, disconnect } = useWebRTC(webRTCOptions);
 
   const { isOpponentOnline, disconnectCountdown, leaveMatch, opponentLeftMessage } = useGameStatus({
     gameId,

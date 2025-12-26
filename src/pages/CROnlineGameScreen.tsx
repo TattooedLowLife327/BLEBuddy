@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useBLE } from '../contexts/BLEContext';
 import { useWebRTC } from '../hooks/useWebRTC';
 import { useGameStatus } from '../hooks/useGameStatus';
@@ -163,13 +163,15 @@ export function CROnlineGameScreen({ gameId, localPlayer, remotePlayer, isInitia
   const { lastThrow, isConnected: bleConnected } = useBLE();
   const lastProcessedThrowRef = useRef<string | null>(null);
 
-  // WebRTC for video
-  const { localStream, remoteStream, connectionState } = useWebRTC({
+  // WebRTC for video - memoize options to prevent infinite re-initialization
+  const webRTCOptions = useMemo(() => ({
     gameId,
     localPlayerId: localPlayer.id,
     remotePlayerId: remotePlayer.id,
     isInitiator,
-  });
+  }), [gameId, localPlayer.id, remotePlayer.id, isInitiator]);
+
+  const { localStream, remoteStream, connectionState } = useWebRTC(webRTCOptions);
 
   // Game status for presence/disconnect detection
   const { isOpponentOnline, disconnectCountdown, leaveMatch, opponentLeftMessage } = useGameStatus({
