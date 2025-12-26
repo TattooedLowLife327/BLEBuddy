@@ -9,6 +9,8 @@ import { CorkScreen } from './components/CorkScreen';
 import { GameScreen } from './pages/GameScreen';
 import { O1GSPreview } from './pages/preview/01GSPreview';
 import { CRGSPreview } from './pages/preview/CRGSPreview';
+import { MedleyPreview } from './pages/preview/MedleyPreview';
+import { CROnlineGameScreen } from './pages/CROnlineGameScreen';
 import { SettingsModal } from './components/SettingsModal';
 import { createClient } from './utils/supabase/client';
 import { useBLE } from './contexts/BLEContext';
@@ -391,8 +393,8 @@ export default function App() {
   };
 
   const handleCorkComplete = (_firstPlayerId: string) => {
-    // For now, jump to the HUD preview after cork
-    navigate('/game-preview');
+    // Navigate to cricket online game screen
+    navigate('/game/cricket');
   };
 
   const handleCorkCancel = async () => {
@@ -430,7 +432,10 @@ export default function App() {
     navigate('/online-lobby');
   };
 
-  if (loading) {
+  // Preview routes bypass ALL auth/loading checks
+  const isPreviewRoute = location.pathname.startsWith('/preview');
+
+  if (loading && !isPreviewRoute) {
     return (
       <div className="min-h-screen w-full bg-black flex items-center justify-center">
         <div className="text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Loading...</div>
@@ -438,8 +443,8 @@ export default function App() {
     );
   }
 
-  // Rejoin game prompt
-  if (pendingRejoinGame) {
+  // Rejoin game prompt (skip for preview routes)
+  if (pendingRejoinGame && !isPreviewRoute) {
     return (
       <div className="fixed inset-0 bg-black z-50 flex items-center justify-center p-4">
         <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 max-w-md w-full">
@@ -462,6 +467,11 @@ export default function App() {
   return (
     <>
     <Routes>
+      {/* Preview screens - NO AUTH, must be first */}
+      <Route path="/preview/01" element={<O1GSPreview />} />
+      <Route path="/preview/cr" element={<CRGSPreview />} />
+      <Route path="/preview/medley" element={<MedleyPreview />} />
+
       <Route path="/login" element={isAuthenticated ? <Navigate to={`/dashboard${queryString}`} /> : <Login onLoginSuccess={handleLoginSuccess} />} />
 
       <Route path="/dashboard" element={
@@ -558,9 +568,28 @@ export default function App() {
       {/* Production games - no auth for testing */}
       <Route path="/game/01" element={<GameScreen onLeaveMatch={() => window.location.href = '/dashboard'} />} />
 
-      {/* Preview screens - no auth for editing */}
-      <Route path="/preview/01" element={<O1GSPreview />} />
-      <Route path="/preview/cr" element={<CRGSPreview />} />
+      {/* Cricket online game */}
+      <Route path="/game/cricket" element={
+        !isAuthenticated ? <Navigate to={`/login${queryString}`} /> :
+        !activeGame ? <Navigate to={`/dashboard${queryString}`} /> :
+        <CROnlineGameScreen
+          gameId={activeGame.gameId}
+          localPlayer={{
+            id: userId,
+            name: userName,
+            profilePic: profilePic || undefined,
+            accentColor: accentColor,
+          }}
+          remotePlayer={{
+            id: activeGame.opponentId,
+            name: activeGame.opponentName,
+            profilePic: activeGame.opponentProfilePic,
+            accentColor: activeGame.opponentAccentColor,
+          }}
+          isInitiator={activeGame.isInitiator}
+          onLeaveMatch={handleLeaveMatch}
+        />
+      } />
 
       <Route path="/" element={<Navigate to={isAuthenticated ? `/dashboard${queryString}` : `/login${queryString}`} />} />
       <Route path="*" element={<Navigate to={isAuthenticated ? `/dashboard${queryString}` : `/login${queryString}`} />} />

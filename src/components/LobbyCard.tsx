@@ -460,13 +460,6 @@ export function LobbyCard({
                   >
                     Tic Tac Toe
                   </button>
-                  <button
-                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/10 text-white hover:bg-white/20 transition-colors text-center"
-                    style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    Two Line
-                  </button>
                 </>
               ) : null}
             </div>

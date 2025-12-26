@@ -101,12 +101,38 @@ export function OnlineLobby({
   // Check if user already has an active game
   const checkForExistingGame = async (): Promise<boolean> => {
     try {
+      // First, clean up stale games (pending > 5 min old, or cancelled/declined)
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+
+      // Delete stale pending games (unanswered requests older than 5 min)
+      await (supabase as any)
+        .schema('companion')
+        .from('active_games')
+        .delete()
+        .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
+        .eq('status', 'pending')
+        .lt('created_at', fiveMinutesAgo);
+
+      // Delete cancelled/declined games (they shouldn't block new games)
+      await (supabase as any)
+        .schema('companion')
+        .from('active_games')
+        .delete()
+        .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
+        .in('status', ['cancelled', 'declined', 'abandoned']);
+
+      // Now check for actually active games
+      // For 'pending', only check recent ones (last 5 min) since we just cleaned up old ones
+      // For 'accepted'/'playing', check last 2 hours
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+
       const { data } = await (supabase as any)
         .schema('companion')
         .from('active_games')
-        .select('id')
+        .select('id, status, created_at')
         .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
         .in('status', ['pending', 'accepted', 'playing'])
+        .gte('created_at', twoHoursAgo)
         .limit(1);
       return data && data.length > 0;
     } catch {
@@ -232,7 +258,24 @@ export function OnlineLobby({
     async function joinLobby() {
       try {
         console.log('Joining online lobby...');
-        
+
+        // Clean up stale game records on lobby entry
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+        await (supabase as any)
+          .schema('companion')
+          .from('active_games')
+          .delete()
+          .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
+          .eq('status', 'pending')
+          .lt('created_at', fiveMinutesAgo);
+
+        await (supabase as any)
+          .schema('companion')
+          .from('active_games')
+          .delete()
+          .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
+          .in('status', ['cancelled', 'declined', 'abandoned']);
+
         // Insert current user into online_lobby (companion schema)
         const { error: insertError } = await (supabase as any)
           .schema('companion')
@@ -581,23 +624,27 @@ export function OnlineLobby({
 
   const handleDeclineGame = async () => {
     if (!incomingRequest) return;
-    
+
     try {
-      const { error } = await (supabase as any)
+      // Update to 'declined' first so opponent gets notified via realtime
+      await (supabase as any)
         .schema('companion')
         .from('active_games')
         .update({ status: 'declined' })
         .eq('id', incomingRequest.id);
 
-      if (error) {
-        console.error('Error declining game:', error);
-      } else {
-        console.log('Game declined');
-      }
+      // Then delete immediately so it doesn't block future requests
+      await (supabase as any)
+        .schema('companion')
+        .from('active_games')
+        .delete()
+        .eq('id', incomingRequest.id);
+
+      console.log('Game declined and cleaned up');
     } catch (err) {
       console.error('Error in handleDeclineGame:', err);
     }
-    
+
     setIncomingRequest(null);
   };
 
@@ -757,14 +804,24 @@ export function OnlineLobby({
               Waiting for <span className="text-white font-bold">{pendingOutgoingRequest.player2_granboard_name}</span> to respond...
             </p>
             <button
-              onClick={() => {
-                // Cancel the request
-                (supabase as any)
-                  .schema('companion')
-                  .from('active_games')
-                  .update({ status: 'cancelled' })
-                  .eq('id', pendingOutgoingRequest.id)
-                  .then(() => setPendingOutgoingRequest(null));
+              onClick={async () => {
+                // Cancel the request - update first for notification, then delete
+                const gameId = pendingOutgoingRequest.id;
+                setPendingOutgoingRequest(null);
+                try {
+                  await (supabase as any)
+                    .schema('companion')
+                    .from('active_games')
+                    .update({ status: 'cancelled' })
+                    .eq('id', gameId);
+                  await (supabase as any)
+                    .schema('companion')
+                    .from('active_games')
+                    .delete()
+                    .eq('id', gameId);
+                } catch (err) {
+                  console.error('Error cancelling game:', err);
+                }
               }}
               className="px-6 py-3 rounded-lg text-white transition-colors bg-gray-600 hover:bg-gray-700"
               style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}

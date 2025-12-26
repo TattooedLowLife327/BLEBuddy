@@ -55,6 +55,11 @@ All elements use `rounded-lg` (8px) for visual consistency:
 - **TODO (LLOGB)**: Add "last seen" for each admin in Owner Tools (admin dashboard)
 - **TODO (LLOGB)**: Fix read-only friends player card - weird black background behind card
 
+### BLE Buddy Features (Planned)
+- **TODO**: Race Mode - Race to X (up to 100 games), pausable across sessions, with leaderboards/challenge completions
+- **TODO**: Speed Cricket - Timed mode to see how fast you close out cricket, with leaderboards
+- **TODO**: Speed 01 - Timed mode to see how fast you close out 01 games, with leaderboards
+
 ---
 
 ## Color Palette

@@ -1,6 +1,6 @@
 # BLE Buddy - Claude Context
 
-**Last Updated**: December 13, 2025 (80% stat tracking for 01 games, medley match flow, Choice game)
+**Last Updated**: December 26, 2025 (Online cricket game wired end-to-end)
 
 ---
 
@@ -127,7 +127,12 @@ BLEBUDDY/
 │   │   ├── OnlineLobby.tsx        # Online player lobby
 │   │   ├── Login.tsx              # Auth screen with permission prompts
 │   │   ├── LocalDubsSetup.tsx     # Local doubles setup
-│   │   └── RemoteDubsSetup.tsx    # Remote doubles setup
+│   │   ├── RemoteDubsSetup.tsx    # Remote doubles setup
+│   │   ├── CROnlineGameScreen.tsx # Cricket online game (50/50 video split)
+│   │   └── preview/               # Preview screens for dev testing
+│   │       ├── 01GSPreview.tsx    # 01 game preview
+│   │       ├── CRGSPreview.tsx    # Cricket game preview
+│   │       └── MedleyPreview.tsx  # Medley game preview
 │   ├── components/
 │   │   ├── AppHeader.tsx          # Shared header (BLE status, notifications, user menu)
 │   │   ├── CorkScreen.tsx         # "Who throws first" with video + throw sync
@@ -305,26 +310,27 @@ const { localStream, remoteStream, connectionState, initialize, disconnect } = u
   - First player to hit 80% freezes BOTH players' PPR stats at end of round
   - Game continues normally after freeze
   - PPR displays above player bars with "80%" indicator when frozen
+- **Cricket preview scoring fix** - Uses `useRef` to track marks in real-time (avoids React state batching issues during same-turn throws)
+- **CROnlineGameScreen wired** - Full online cricket game with 50/50 split-screen video layout
+  - Route: `/game/cricket`
+  - Flow: OnlineLobby -> CorkScreen -> CROnlineGameScreen
+  - WebRTC video for front-facing cameras
+  - Supabase realtime broadcast for throw sync
+  - BLE throw detection integrated
 
 ### ⏳ In Progress / TODO
-1. **OnlineLobby mock player removal** - MOCK_PLAYERS array and USE_MOCK_DATA constants removed, but there's a syntax error in the file that needs fixing (try/catch structure issue around line 306)
-
 1. **WebRTC Testing**
    - Video streaming between two real devices
    - Debug signaling if needed (detailed logging added)
 
-2. **Game Screen**
-   - Score tracking (501/301/Cricket)
-   - Turn management
-   - Checkout logic
-   - Game over detection
-
-3. **Game State Sync**
-   - Realtime score sync between devices
-   - Throw broadcasting
-
-4. **End-to-end Testing**
+2. **End-to-end Testing**
    - Full game flow from challenge to game completion
+   - Test cricket scoring with real BLE throws
+
+3. **Future Features** (planned)
+   - Bluetooth board cams (webcams as second camera)
+   - Ghost mode (spectator mode - "ghost player on bracket")
+   - Twitch-style on-screen chat
 
 ---
 

@@ -8,6 +8,7 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      injectRegister: false, // we'll register manually (and skip on LAN)
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'assets/5darts.png'],
       manifest: {

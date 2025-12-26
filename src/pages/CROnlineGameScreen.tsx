@@ -1,4 +1,10 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { useBLE } from '../contexts/BLEContext';
+import { useWebRTC } from '../hooks/useWebRTC';
+import { useGameStatus } from '../hooks/useGameStatus';
+import { createClient } from '../utils/supabase/client';
+import { isDevMode } from '../utils/devMode';
+import type { DartThrowData } from '../utils/ble/bleConnection';
 
 type Target = '20' | '19' | '18' | '17' | '16' | '15' | 'B';
 type PlayerId = 'p1' | 'p2';
@@ -9,185 +15,6 @@ const MARK_ICONS: Record<1 | 2 | 3, string> = {
   2: '/assets/CR2Mark.svg',
   3: '/assets/CR3Mark.svg',
 };
-
-// Dart Simulator Panel for demo/preview mode
-function DartSimulator({ onThrow, disabled }: { onThrow: (segment: string, score: number, multiplier: number) => void; disabled: boolean }) {
-  const [multiplierMode, setMultiplierMode] = useState<'single' | 'double' | 'triple'>('single');
-  const [expanded, setExpanded] = useState(true);
-
-  const handleNumberClick = (num: number) => {
-    if (disabled) return;
-    const mult = multiplierMode === 'triple' ? 3 : multiplierMode === 'double' ? 2 : 1;
-    const prefix = multiplierMode === 'triple' ? 'T' : multiplierMode === 'double' ? 'D' : 'S';
-    onThrow(`${prefix}${num}`, num * mult, mult);
-  };
-
-  const handleBullClick = (isDouble: boolean) => {
-    if (disabled) return;
-    if (isDouble) {
-      onThrow('D25', 50, 2);
-    } else {
-      onThrow('S25', 25, 1);
-    }
-  };
-
-  const handleMissClick = () => {
-    if (disabled) return;
-    onThrow('MISS', 0, 0);
-  };
-
-  // Cricket numbers only
-  const cricketNumbers = [20, 19, 18, 17, 16, 15];
-
-  return (
-    <div style={{
-      position: 'fixed',
-      top: '50%',
-      right: expanded ? 0 : '-280px',
-      transform: 'translateY(-50%)',
-      width: '260px',
-      background: 'rgba(0, 0, 0, 0.9)',
-      backdropFilter: 'blur(12px)',
-      borderTopLeftRadius: '16px',
-      borderBottomLeftRadius: '16px',
-      border: '1px solid rgba(255, 255, 255, 0.2)',
-      borderRight: 'none',
-      padding: '12px 16px 16px',
-      zIndex: 500,
-      transition: 'right 0.3s ease-out',
-    }}>
-      <button
-        onClick={() => setExpanded(!expanded)}
-        style={{
-          position: 'absolute',
-          top: '50%',
-          left: '-28px',
-          transform: 'translateY(-50%) rotate(-90deg)',
-          background: 'rgba(0, 0, 0, 0.9)',
-          border: '1px solid rgba(255, 255, 255, 0.2)',
-          borderBottom: 'none',
-          borderTopLeftRadius: '8px',
-          borderTopRightRadius: '8px',
-          padding: '4px 12px',
-          color: '#fff',
-          fontSize: '11px',
-          cursor: 'pointer',
-          fontFamily: "'Helvetica Condensed', sans-serif",
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {expanded ? 'Hide' : 'Sim'}
-      </button>
-
-      <div style={{ display: 'flex', gap: '4px', marginBottom: '10px', justifyContent: 'center' }}>
-        {(['single', 'double', 'triple'] as const).map((mode) => (
-          <button
-            key={mode}
-            onClick={() => setMultiplierMode(mode)}
-            disabled={disabled}
-            style={{
-              padding: '5px 10px',
-              background: multiplierMode === mode ? (mode === 'triple' ? '#FF4444' : mode === 'double' ? '#44FF44' : '#6600FF') : 'rgba(255, 255, 255, 0.1)',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: disabled ? 'not-allowed' : 'pointer',
-              fontFamily: "'Helvetica Condensed', sans-serif",
-              fontSize: '12px',
-              fontWeight: 600,
-              opacity: disabled ? 0.5 : 1,
-              textTransform: 'uppercase',
-            }}
-          >
-            {mode === 'single' ? 'S' : mode === 'double' ? 'D' : 'T'}
-          </button>
-        ))}
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px', marginBottom: '10px' }}>
-        {cricketNumbers.map((num) => (
-          <button
-            key={num}
-            onClick={() => handleNumberClick(num)}
-            disabled={disabled}
-            style={{
-              height: '32px',
-              background: 'rgba(255, 255, 255, 0.1)',
-              color: '#fff',
-              border: '1px solid rgba(255, 255, 255, 0.2)',
-              borderRadius: '4px',
-              cursor: disabled ? 'not-allowed' : 'pointer',
-              fontFamily: "'Helvetica Condensed', sans-serif",
-              fontSize: '14px',
-              fontWeight: 600,
-              opacity: disabled ? 0.5 : 1,
-            }}
-          >
-            {num}
-          </button>
-        ))}
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginBottom: '6px' }}>
-        <button
-          onClick={() => handleBullClick(false)}
-          disabled={disabled}
-          style={{
-            padding: '6px',
-            background: '#228B22',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: disabled ? 'not-allowed' : 'pointer',
-            fontFamily: "'Helvetica Condensed', sans-serif",
-            fontSize: '11px',
-            fontWeight: 600,
-            opacity: disabled ? 0.5 : 1,
-          }}
-        >
-          BULL
-        </button>
-        <button
-          onClick={() => handleBullClick(true)}
-          disabled={disabled}
-          style={{
-            padding: '6px',
-            background: '#FF4444',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: disabled ? 'not-allowed' : 'pointer',
-            fontFamily: "'Helvetica Condensed', sans-serif",
-            fontSize: '11px',
-            fontWeight: 600,
-            opacity: disabled ? 0.5 : 1,
-          }}
-        >
-          D-BULL
-        </button>
-      </div>
-      <button
-        onClick={handleMissClick}
-        disabled={disabled}
-        style={{
-          width: '100%',
-          padding: '6px',
-          background: 'rgba(100, 100, 100, 0.5)',
-          color: '#fff',
-          border: 'none',
-          borderRadius: '6px',
-          cursor: disabled ? 'not-allowed' : 'pointer',
-          fontFamily: "'Helvetica Condensed', sans-serif",
-          fontSize: '11px',
-          fontWeight: 600,
-          opacity: disabled ? 0.5 : 1,
-        }}
-      >
-        MISS
-      </button>
-    </div>
-  );
-}
 
 interface DartThrow {
   segment: string;
@@ -203,6 +30,24 @@ type AchievementType =
   | 'threeInBed'
   | 'whiteHorse'
   | null;
+
+interface CROnlineGameScreenProps {
+  gameId: string;
+  localPlayer: {
+    id: string;
+    name: string;
+    profilePic?: string;
+    accentColor: string;
+  };
+  remotePlayer: {
+    id: string;
+    name: string;
+    profilePic?: string;
+    accentColor: string;
+  };
+  isInitiator: boolean; // true = local is p1, false = local is p2
+  onLeaveMatch: () => void;
+}
 
 const P1_ACTIVE = '#6600FF';
 const P2_ACTIVE = '#FB00FF';
@@ -220,11 +65,6 @@ const FIGMA = {
   nameSize: 32,
   scoreLeft: 320,
   scoreSize: 72,
-};
-
-const PLAYERS = {
-  p1: { id: 'p1', name: 'PLAYER1', profilecolor: '#6600FF' },
-  p2: { id: 'p2', name: 'PLAYER2', profilecolor: '#FB00FF' },
 };
 
 const ROUND_WORDS = ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE', 'TEN',
@@ -296,57 +136,63 @@ const goodLuckKeyframes = `
   50% { transform: scale(1.3); opacity: 1; }
   100% { transform: scale(1); opacity: 1; }
 }
-@keyframes circleAround {
-  0% { clip-path: polygon(50% 50%, 50% 0%, 50% 0%, 50% 0%, 50% 0%, 50% 0%, 50% 0%, 50% 0%, 50% 0%); }
-  12.5% { clip-path: polygon(50% 50%, 50% 0%, 100% 0%, 100% 0%, 100% 0%, 100% 0%, 100% 0%, 100% 0%, 100% 0%); }
-  25% { clip-path: polygon(50% 50%, 50% 0%, 100% 0%, 100% 50%, 100% 50%, 100% 50%, 100% 50%, 100% 50%, 100% 50%); }
-  37.5% { clip-path: polygon(50% 50%, 50% 0%, 100% 0%, 100% 50%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%); }
-  50% { clip-path: polygon(50% 50%, 50% 0%, 100% 0%, 100% 50%, 100% 100%, 50% 100%, 50% 100%, 50% 100%, 50% 100%); }
-  62.5% { clip-path: polygon(50% 50%, 50% 0%, 100% 0%, 100% 50%, 100% 100%, 50% 100%, 0% 100%, 0% 100%, 0% 100%); }
-  75% { clip-path: polygon(50% 50%, 50% 0%, 100% 0%, 100% 50%, 100% 100%, 50% 100%, 0% 100%, 0% 50%, 0% 50%); }
-  87.5% { clip-path: polygon(50% 50%, 50% 0%, 100% 0%, 100% 50%, 100% 100%, 50% 100%, 0% 100%, 0% 50%, 0% 0%); }
-  100% { clip-path: polygon(50% 50%, 50% 0%, 100% 0%, 100% 50%, 100% 100%, 50% 100%, 0% 100%, 0% 50%, 0% 0%); }
-}
 @keyframes circleDraw {
-  0% { 
-    clip-path: polygon(50% 0%, 50% 0%, 50% 0%, 50% 0%, 50% 0%, 50% 0%, 50% 0%, 50% 0%);
-  }
-  12.5% { 
-    clip-path: polygon(50% 0%, 100% 0%, 100% 0%, 100% 0%, 100% 0%, 100% 0%, 100% 0%, 50% 0%);
-  }
-  25% { 
-    clip-path: polygon(50% 0%, 100% 0%, 100% 50%, 100% 50%, 100% 50%, 100% 50%, 100% 50%, 50% 0%);
-  }
-  37.5% { 
-    clip-path: polygon(50% 0%, 100% 0%, 100% 50%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 50% 0%);
-  }
-  50% { 
-    clip-path: polygon(50% 0%, 100% 0%, 100% 50%, 100% 100%, 50% 100%, 50% 100%, 50% 100%, 50% 0%);
-  }
-  62.5% { 
-    clip-path: polygon(50% 0%, 100% 0%, 100% 50%, 100% 100%, 50% 100%, 0% 100%, 0% 100%, 50% 0%);
-  }
-  75% { 
-    clip-path: polygon(50% 0%, 100% 0%, 100% 50%, 100% 100%, 50% 100%, 0% 100%, 0% 50%, 50% 0%);
-  }
-  87.5% { 
-    clip-path: polygon(50% 0%, 100% 0%, 100% 50%, 100% 100%, 50% 100%, 0% 100%, 0% 50%, 0% 0%);
-  }
-  100% { 
-    clip-path: polygon(50% 0%, 100% 0%, 100% 50%, 100% 100%, 50% 100%, 0% 100%, 0% 50%, 0% 0%);
-  }
-}
-@keyframes rowFadeOut {
-  0% { opacity: 1; filter: none; }
-  100% { opacity: 0.35; filter: grayscale(100%); }
+  0% { clip-path: polygon(50% 0%, 50% 0%, 50% 0%, 50% 0%, 50% 0%, 50% 0%, 50% 0%, 50% 0%); }
+  12.5% { clip-path: polygon(50% 0%, 100% 0%, 100% 0%, 100% 0%, 100% 0%, 100% 0%, 100% 0%, 50% 0%); }
+  25% { clip-path: polygon(50% 0%, 100% 0%, 100% 50%, 100% 50%, 100% 50%, 100% 50%, 100% 50%, 50% 0%); }
+  37.5% { clip-path: polygon(50% 0%, 100% 0%, 100% 50%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 50% 0%); }
+  50% { clip-path: polygon(50% 0%, 100% 0%, 100% 50%, 100% 100%, 50% 100%, 50% 100%, 50% 100%, 50% 0%); }
+  62.5% { clip-path: polygon(50% 0%, 100% 0%, 100% 50%, 100% 100%, 50% 100%, 0% 100%, 0% 100%, 50% 0%); }
+  75% { clip-path: polygon(50% 0%, 100% 0%, 100% 50%, 100% 100%, 50% 100%, 0% 100%, 0% 50%, 50% 0%); }
+  87.5% { clip-path: polygon(50% 0%, 100% 0%, 100% 50%, 100% 100%, 50% 100%, 0% 100%, 0% 50%, 0% 0%); }
+  100% { clip-path: polygon(50% 0%, 100% 0%, 100% 50%, 100% 100%, 50% 100%, 0% 100%, 0% 50%, 0% 0%); }
 }
 `;
 
-interface CRGSPreviewProps {
-  onLeaveMatch?: () => void;
-}
+export function CROnlineGameScreen({ gameId, localPlayer, remotePlayer, isInitiator, onLeaveMatch }: CROnlineGameScreenProps) {
+  const supabase = createClient();
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
 
-export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
+  // Determine which player is p1/p2
+  const p1 = isInitiator ? localPlayer : remotePlayer;
+  const p2 = isInitiator ? remotePlayer : localPlayer;
+  const localIsP1 = isInitiator;
+
+  // BLE for throw detection
+  const { lastThrow, isConnected: bleConnected } = useBLE();
+  const lastProcessedThrowRef = useRef<string | null>(null);
+
+  // WebRTC for video
+  const { localStream, remoteStream, connectionState } = useWebRTC({
+    gameId,
+    localPlayerId: localPlayer.id,
+    remotePlayerId: remotePlayer.id,
+    isInitiator,
+  });
+
+  // Game status for presence/disconnect detection
+  const { isOpponentOnline, disconnectCountdown, leaveMatch, opponentLeftMessage } = useGameStatus({
+    gameId,
+    localPlayerId: localPlayer.id,
+    remotePlayerId: remotePlayer.id,
+    remotePlayerName: remotePlayer.name,
+    onOpponentLeft: onLeaveMatch,
+  });
+
+  // Attach video streams to elements
+  useEffect(() => {
+    if (localVideoRef.current && localStream) {
+      localVideoRef.current.srcObject = localStream;
+    }
+  }, [localStream]);
+
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStream) {
+      remoteVideoRef.current.srcObject = remoteStream;
+    }
+  }, [remoteStream]);
+
   // Cricket state
   const [marks, setMarks] = useState<Record<PlayerId, Record<Target, number>>>({
     p1: { '20': 0, '19': 0, '18': 0, '17': 0, '16': 0, '15': 0, B: 0 },
@@ -355,7 +201,7 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
   const [p1Score, setP1Score] = useState(0);
   const [p2Score, setP2Score] = useState(0);
 
-  // Game flow state (copied from 01)
+  // Game flow state
   const [currentThrower, setCurrentThrower] = useState<'p1' | 'p2'>('p1');
   const [currentDarts, setCurrentDarts] = useState<DartThrow[]>([]);
   const [showPlayerChange, setShowPlayerChange] = useState(false);
@@ -371,25 +217,11 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
   const [gameWinner, setGameWinner] = useState<'p1' | 'p2' | null>(null);
   const [showWinnerScreen, setShowWinnerScreen] = useState(false);
 
-  // MPR tracking - use darts thrown for immediate updates
+  // MPR tracking
   const [p1DartsThrown, setP1DartsThrown] = useState(0);
   const [p2DartsThrown, setP2DartsThrown] = useState(0);
   const [p1TotalMarks, setP1TotalMarks] = useState(0);
   const [p2TotalMarks, setP2TotalMarks] = useState(0);
-  const [lastScoreChange, setLastScoreChange] = useState<{ player: 'p1' | 'p2'; amount: number } | null>(null);
-
-  // Use ref to track marks in real-time (avoids React state batching issues)
-  const marksRef = useRef(marks);
-  marksRef.current = marks;
-
-  // Check if a target is dead (both players closed it)
-  const isTargetDead = (target: Target): boolean => {
-    return marks.p1[target] >= 3 && marks.p2[target] >= 3;
-  };
-
-  // MPR = marks per round, where a round = 3 darts
-  const p1MPR = p1DartsThrown >= 3 ? (p1TotalMarks / (p1DartsThrown / 3)).toFixed(2) : '0.00';
-  const p2MPR = p2DartsThrown >= 3 ? (p2TotalMarks / (p2DartsThrown / 3)).toFixed(2) : '0.00';
 
   // Turn tracking for animations
   const [prevThrower, setPrevThrower] = useState<'p1' | 'p2' | null>(null);
@@ -401,8 +233,20 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
   const p1Exiting = hasHadTurnSwitch && prevThrower === 'p1' && !p1Active;
   const p2Exiting = hasHadTurnSwitch && prevThrower === 'p2' && !p2Active;
 
+  // Is it local player's turn?
+  const isLocalTurn = (localIsP1 && p1Active) || (!localIsP1 && p2Active);
+
   const greyGradient = 'linear-gradient(179.4deg, rgba(126, 126, 126, 0.2) 0.52%, rgba(0, 0, 0, 0.2) 95.46%)';
   const scale = `calc(100vw / ${FIGMA.frame.w})`;
+
+  // Check if a target is dead (both players closed it)
+  const isTargetDead = (target: Target): boolean => {
+    return marks.p1[target] >= 3 && marks.p2[target] >= 3;
+  };
+
+  // MPR = marks per round, where a round = 3 darts
+  const p1MPR = p1DartsThrown >= 3 ? (p1TotalMarks / (p1DartsThrown / 3)).toFixed(2) : '0.00';
+  const p2MPR = p2DartsThrown >= 3 ? (p2TotalMarks / (p2DartsThrown / 3)).toFixed(2) : '0.00';
 
   // Intro animation
   useEffect(() => {
@@ -456,20 +300,51 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
     return null;
   };
 
-  // Throw dart handler
-  const throwDart = useCallback((segment: string, _score: number, multiplier: number) => {
+  // Realtime channel for syncing throws
+  const throwChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  useEffect(() => {
+    throwChannelRef.current = supabase.channel(`cricket:${gameId}`, {
+      config: { broadcast: { self: false } },
+    });
+
+    throwChannelRef.current
+      .on('broadcast', { event: 'dart_throw' }, ({ payload }) => {
+        // Opponent threw - apply the throw locally
+        if (payload.playerId !== localPlayer.id) {
+          applyThrow(payload.segment, payload.multiplier, false);
+        }
+      })
+      .on('broadcast', { event: 'turn_end' }, ({ payload }) => {
+        // Sync turn state from opponent
+        if (payload.playerId !== localPlayer.id) {
+          setShowPlayerChange(true);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      throwChannelRef.current?.unsubscribe();
+    };
+  }, [gameId, localPlayer.id]);
+
+  // Apply a throw (from BLE or remote)
+  const applyThrow = useCallback((segment: string, multiplier: number, isLocal: boolean) => {
     if (currentDarts.length >= 3 || showPlayerChange || !introComplete || showWinnerScreen) return;
+
+    // Only allow throws from the current thrower
+    const expectedLocal = (localIsP1 && currentThrower === 'p1') || (!localIsP1 && currentThrower === 'p2');
+    if (isLocal !== expectedLocal) return;
 
     const { target, hitMarks } = mapSegmentToTarget(segment, multiplier);
     const newDart: DartThrow = { segment, score: 0, multiplier };
     const newDarts = [...currentDarts, newDart];
     setCurrentDarts(newDarts);
 
-    // Only count marks for MPR if target is NOT dead (both closed)
+    // Count marks for MPR if target is NOT dead
     if (target) {
       const targetIsDead = marks.p1[target] >= 3 && marks.p2[target] >= 3;
       if (!targetIsDead) {
-        // Track marks for MPR only if target is still live
         if (currentThrower === 'p1') {
           setP1TotalMarks(prev => prev + hitMarks);
         } else {
@@ -478,73 +353,64 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
       }
     }
 
-    // Always increment darts thrown for MPR calculation
+    // Increment darts thrown
     if (currentThrower === 'p1') {
       setP1DartsThrown(prev => prev + 1);
     } else {
       setP2DartsThrown(prev => prev + 1);
     }
 
-    // Apply marks and calculate scoring if valid target
+    // Apply marks if valid target
     if (target) {
-      const opp: PlayerId = currentThrower === 'p1' ? 'p2' : 'p1';
-      // Use ref for current marks to avoid React batching issues between throws
-      const currentMarks = marksRef.current[currentThrower][target];
-      const oppMarks = marksRef.current[opp][target];
+      setMarks(prev => {
+        const next = JSON.parse(JSON.stringify(prev));
+        const opp: PlayerId = currentThrower === 'p1' ? 'p2' : 'p1';
+        const currentMarks = next[currentThrower][target];
+        const oppMarks = next[opp][target];
 
-      // Calculate new marks and overflow
-      const newMarks = Math.min(3, currentMarks + hitMarks);
-      const overflow = Math.max(0, (currentMarks + hitMarks) - 3);
+        const newMarks = Math.min(3, currentMarks + hitMarks);
+        const overflow = Math.max(0, (currentMarks + hitMarks) - 3);
+        next[currentThrower][target] = newMarks;
 
-      console.log(`[Cricket] ${target}: currentMarks=${currentMarks}, hitMarks=${hitMarks}, newMarks=${newMarks}, overflow=${overflow}, oppMarks=${oppMarks}`);
-
-      // Update ref immediately so next throw in same turn sees updated value
-      marksRef.current = {
-        ...marksRef.current,
-        [currentThrower]: {
-          ...marksRef.current[currentThrower],
-          [target]: newMarks,
-        },
-      };
-
-      // Update React state (for rendering)
-      setMarks(marksRef.current);
-
-      // Calculate and apply scoring
-      let pointsScored = 0;
-      if (newMarks === 3 && oppMarks < 3 && overflow > 0) {
-        // Just closed with overflow - score the overflow
-        const value = target === 'B' ? 25 : parseInt(target, 10);
-        pointsScored = overflow * value;
-        console.log(`[Cricket] Closing with overflow: ${overflow} * ${value} = ${pointsScored}`);
-      } else if (currentMarks >= 3 && oppMarks < 3) {
-        // Already closed, score all marks
-        const value = target === 'B' ? 25 : parseInt(target, 10);
-        pointsScored = hitMarks * value;
-        console.log(`[Cricket] Already closed, scoring: ${hitMarks} * ${value} = ${pointsScored}`);
-      }
-
-      if (pointsScored > 0) {
-        console.log(`[Cricket] Adding ${pointsScored} points to ${currentThrower}`);
-        if (currentThrower === 'p1') {
-          setP1Score(s => s + pointsScored);
-        } else {
-          setP2Score(s => s + pointsScored);
+        // Score points if closed and opponent hasn't closed
+        if (newMarks === 3 && oppMarks < 3 && overflow > 0) {
+          const value = target === 'B' ? 25 : parseInt(target, 10);
+          if (currentThrower === 'p1') {
+            setP1Score(s => s + overflow * value);
+          } else {
+            setP2Score(s => s + overflow * value);
+          }
+        } else if (currentMarks >= 3 && oppMarks < 3) {
+          const value = target === 'B' ? 25 : parseInt(target, 10);
+          if (currentThrower === 'p1') {
+            setP1Score(s => s + hitMarks * value);
+          } else {
+            setP2Score(s => s + hitMarks * value);
+          }
         }
-        setLastScoreChange({ player: currentThrower, amount: pointsScored });
-        setTimeout(() => setLastScoreChange(null), 1500);
-      }
 
-      // Check win: all closed + higher or equal score
-      const allClosed = TARGETS.every(t => marksRef.current[currentThrower][t] >= 3);
-      if (allClosed) {
-        const myScore = (currentThrower === 'p1' ? p1Score : p2Score) + pointsScored;
-        const theirScore = currentThrower === 'p1' ? p2Score : p1Score;
-        if (myScore >= theirScore) {
-          setGameWinner(currentThrower);
-          setTimeout(() => setShowWinnerScreen(true), 500);
+        // Check win
+        const allClosed = TARGETS.every(t => next[currentThrower][t] >= 3);
+        if (allClosed) {
+          const myScore = currentThrower === 'p1' ? p1Score : p2Score;
+          const theirScore = currentThrower === 'p1' ? p2Score : p1Score;
+          if (myScore >= theirScore) {
+            setGameWinner(currentThrower);
+            setTimeout(() => setShowWinnerScreen(true), 500);
+          }
         }
-      }
+
+        return next;
+      });
+    }
+
+    // Broadcast throw to opponent if local
+    if (isLocal && throwChannelRef.current) {
+      throwChannelRef.current.send({
+        type: 'broadcast',
+        event: 'dart_throw',
+        payload: { playerId: localPlayer.id, segment, multiplier },
+      });
     }
 
     // Check achievements & end turn on 3rd dart
@@ -555,21 +421,43 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
         setTimeout(() => setActiveAnimation(null), 2000);
       }
       setShowPlayerChange(true);
+
+      // Broadcast turn end if local
+      if (isLocal && throwChannelRef.current) {
+        throwChannelRef.current.send({
+          type: 'broadcast',
+          event: 'turn_end',
+          payload: { playerId: localPlayer.id },
+        });
+      }
     }
-  }, [currentDarts, currentThrower, introComplete, showPlayerChange, showWinnerScreen, p1Score, p2Score]);
+  }, [currentDarts, currentThrower, introComplete, showPlayerChange, showWinnerScreen, p1Score, p2Score, marks, localIsP1, localPlayer.id]);
+
+  // Handle BLE throws
+  useEffect(() => {
+    if (!lastThrow || !isLocalTurn) return;
+
+    const throwKey = `${lastThrow.segment}-${lastThrow.timestamp}`;
+    if (throwKey === lastProcessedThrowRef.current) return;
+    lastProcessedThrowRef.current = throwKey;
+
+    // Convert BLE throw to segment string
+    const segment = lastThrow.segment;
+    const multiplier = lastThrow.multiplier;
+
+    applyThrow(segment, multiplier, true);
+  }, [lastThrow, isLocalTurn, applyThrow]);
 
   // Handle player change
   useEffect(() => {
     if (showPlayerChange) {
       const timer = setTimeout(() => {
-        // Track which player threw for round counting
         if (currentThrower === 'p1') {
           setP1ThrewThisRound(true);
         } else {
           setP2ThrewThisRound(true);
         }
 
-        // Check if round complete
         const willCompleteRound = (currentThrower === 'p1' && p2ThrewThisRound) ||
                                    (currentThrower === 'p2' && p1ThrewThisRound);
 
@@ -599,17 +487,17 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
     return segment;
   };
 
-  // Render mark icon for a player/target
+  // Render mark icon
   const renderMarkIcon = (player: PlayerId, target: Target) => {
     const count = marks[player][target];
     if (count === 0) return null;
     const cappedCount = Math.min(3, count) as 1 | 2 | 3;
     const markHeight = `calc(34 * ${scale})`;
-    
+
     return (
-      <div 
+      <div
         key={`${player}-${target}-${cappedCount}`}
-        style={{ 
+        style={{
           position: 'relative',
           display: 'flex',
           justifyContent: 'center',
@@ -618,33 +506,28 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
           height: markHeight,
         }}
       >
-        {/* First slash / */}
         <img
           src={MARK_ICONS[1]}
           alt="mark"
-          style={{ 
+          style={{
             position: 'absolute',
-            height: markHeight, 
+            height: markHeight,
             width: 'auto',
             animation: cappedCount === 1 ? 'markPop 0.3s ease-out forwards' : 'none',
           }}
         />
-        
-        {/* Second slash \ */}
         {cappedCount >= 2 && (
           <img
             src={MARK_ICONS[2]}
             alt="mark"
-            style={{ 
+            style={{
               position: 'absolute',
-              height: markHeight, 
+              height: markHeight,
               width: 'auto',
               animation: 'markPop 0.3s ease-out forwards',
             }}
           />
         )}
-        
-        {/* Circle around the X */}
         {cappedCount === 3 && (
           <div
             style={{
@@ -671,26 +554,123 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
     }}>
       <style>{goodLuckKeyframes}</style>
 
-      {/* Background */}
+      {/* SPLIT SCREEN VIDEO BACKGROUND */}
       <div style={{
         position: 'absolute',
         inset: 0,
-        backgroundImage: 'url(/assets/gamescreenbackground.png)',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-      }} />
+        display: 'flex',
+      }}>
+        {/* Left half - Local player camera */}
+        <div style={{
+          flex: 1,
+          position: 'relative',
+          background: '#111',
+          borderRight: '2px solid #333',
+        }}>
+          <video
+            ref={localVideoRef}
+            autoPlay
+            playsInline
+            muted
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              transform: 'scaleX(-1)', // Mirror local video
+            }}
+          />
+          {/* Local player label */}
+          <div style={{
+            position: 'absolute',
+            bottom: `calc(100 * ${scale})`,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: 'rgba(0, 0, 0, 0.7)',
+            padding: `calc(8 * ${scale}) calc(16 * ${scale})`,
+            borderRadius: `calc(8 * ${scale})`,
+            border: `2px solid ${localPlayer.accentColor}`,
+          }}>
+            <span style={{
+              fontFamily: FONT_NAME,
+              fontSize: `calc(20 * ${scale})`,
+              color: '#fff',
+            }}>
+              {localPlayer.name} (YOU)
+            </span>
+          </div>
+        </div>
 
-      {/* Game Type Header - Top Center */}
+        {/* Right half - Remote player camera */}
+        <div style={{
+          flex: 1,
+          position: 'relative',
+          background: '#111',
+        }}>
+          <video
+            ref={remoteVideoRef}
+            autoPlay
+            playsInline
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+            }}
+          />
+          {/* Remote player label */}
+          <div style={{
+            position: 'absolute',
+            bottom: `calc(100 * ${scale})`,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: 'rgba(0, 0, 0, 0.7)',
+            padding: `calc(8 * ${scale}) calc(16 * ${scale})`,
+            borderRadius: `calc(8 * ${scale})`,
+            border: `2px solid ${remotePlayer.accentColor}`,
+          }}>
+            <span style={{
+              fontFamily: FONT_NAME,
+              fontSize: `calc(20 * ${scale})`,
+              color: '#fff',
+            }}>
+              {remotePlayer.name}
+            </span>
+          </div>
+          {/* Connection status indicator */}
+          {!isOpponentOnline && (
+            <div style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              background: 'rgba(0, 0, 0, 0.8)',
+              padding: `calc(20 * ${scale})`,
+              borderRadius: `calc(12 * ${scale})`,
+              textAlign: 'center',
+            }}>
+              <div style={{ color: '#ff4444', fontFamily: FONT_NAME, fontSize: `calc(24 * ${scale})` }}>
+                Opponent Disconnected
+              </div>
+              {disconnectCountdown && (
+                <div style={{ color: '#fff', fontFamily: FONT_NAME, fontSize: `calc(48 * ${scale})`, marginTop: `calc(10 * ${scale})` }}>
+                  {disconnectCountdown}s
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Game Type Header */}
       <div style={{
         position: 'absolute',
         top: `calc(20 * ${scale})`,
         left: '50%',
         transform: 'translateX(-50%)',
         padding: `calc(8 * ${scale}) calc(24 * ${scale})`,
-        background: 'rgba(0, 0, 0, 0.5)',
+        background: 'rgba(0, 0, 0, 0.7)',
         backdropFilter: 'blur(12px)',
         borderRadius: `calc(8 * ${scale})`,
-        border: '1px solid rgba(255, 255, 255, 0.1)',
+        border: '1px solid rgba(255, 255, 255, 0.2)',
         zIndex: 50,
       }}>
         <span style={{
@@ -713,26 +693,21 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
         width: `calc(400 * ${scale})`,
         zIndex: 10,
       }}>
-        {/* Background - glassmorphic with grid lines */}
         <div style={{
           position: 'absolute',
           inset: 0,
-          background: 'rgba(0, 0, 0, 0.6)',
+          background: 'rgba(0, 0, 0, 0.75)',
           backdropFilter: 'blur(12px)',
           borderRadius: `calc(12 * ${scale})`,
-          border: '1px solid rgba(255, 255, 255, 0.15)',
+          border: '1px solid rgba(255, 255, 255, 0.2)',
           display: 'grid',
           gridTemplateColumns: '1fr 1fr 1fr',
         }}>
-          {/* Left column divider */}
           <div style={{ borderRight: '1px solid rgba(255, 255, 255, 0.15)' }} />
-          {/* Center column */}
           <div style={{ borderRight: '1px solid rgba(255, 255, 255, 0.15)' }} />
-          {/* Right column */}
           <div />
         </div>
 
-        {/* Score grid overlay */}
         <div style={{
           position: 'absolute',
           inset: 0,
@@ -757,38 +732,25 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
                   transition: 'opacity 0.5s ease-out, filter 0.5s ease-out',
                 }}
               >
-              {/* P1 marks - left column */}
-              <div style={{
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-              }}>
-                {renderMarkIcon('p1', target)}
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                  {renderMarkIcon('p1', target)}
+                </div>
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  fontFamily: FONT_SCORE,
+                  fontSize: `calc(38 * ${scale})`,
+                  fontWeight: 700,
+                  color: dead ? 'rgba(255, 255, 255, 0.4)' : '#FFFFFF',
+                  textShadow: dead ? 'none' : '-2px 2px 4px rgba(0, 0, 0, 0.5)',
+                }}>
+                  {target === 'B' ? 'B' : target}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                  {renderMarkIcon('p2', target)}
+                </div>
               </div>
-
-              {/* Number - center column */}
-              <div style={{
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                fontFamily: FONT_SCORE,
-                fontSize: `calc(38 * ${scale})`,
-                fontWeight: 700,
-                color: dead ? 'rgba(255, 255, 255, 0.4)' : '#FFFFFF',
-                textShadow: dead ? 'none' : '-2px 2px 4px rgba(0, 0, 0, 0.5)',
-              }}>
-                {target === 'B' ? 'B' : target}
-              </div>
-
-              {/* P2 marks - right column */}
-              <div style={{
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-              }}>
-                {renderMarkIcon('p2', target)}
-              </div>
-            </div>
             );
           })}
         </div>
@@ -804,7 +766,7 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
             transform: 'translateY(-50%)',
             height: `calc(260 * ${scale})`,
             width: '40%',
-            background: 'rgba(0, 0, 0, 0.5)',
+            background: 'rgba(0, 0, 0, 0.7)',
             backdropFilter: 'blur(12px)',
             borderTop: '1px solid rgba(255, 255, 255, 0.1)',
             borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
@@ -851,7 +813,7 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
         >
           <div style={{
             padding: `calc(12 * ${scale}) calc(24 * ${scale})`,
-            background: 'rgba(0, 0, 0, 0.5)',
+            background: 'rgba(0, 0, 0, 0.7)',
             backdropFilter: 'blur(12px)',
             borderTop: '1px solid rgba(255, 255, 255, 0.1)',
             borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
@@ -873,7 +835,7 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
         </div>
       )}
 
-      {/* Darts display above active player bar */}
+      {/* Darts display */}
       {currentDarts.length > 0 && introComplete && (
         <>
           {currentDarts.map((dart, i) => {
@@ -933,11 +895,10 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
         {introComplete && (p1Active || p1Exiting) && (
           <div key={`p1-bar-${turnKey}`} style={{
             position: 'absolute', inset: 0,
-            background: 'linear-gradient(179.4deg, rgba(102, 0, 255, 0.2) 0.52%, rgba(0, 0, 0, 0.2) 95.46%)',
+            background: `linear-gradient(179.4deg, ${p1.accentColor}33 0.52%, rgba(0, 0, 0, 0.2) 95.46%)`,
             animation: p1Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
           }} />
         )}
-        {/* Avatar grey */}
         <div style={{
           position: 'absolute',
           width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
@@ -949,11 +910,10 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
             position: 'absolute',
             width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
             left: `calc(${FIGMA.avatarLeft} * ${scale})`, top: '50%', transform: 'translateY(-50%)',
-            background: '#000', border: `3px solid ${P1_ACTIVE}`, borderRadius: '50%', zIndex: 2,
+            background: '#000', border: `3px solid ${p1.accentColor}`, borderRadius: '50%', zIndex: 2,
             animation: p1Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
           }} />
         )}
-        {/* Name + MPR */}
         <div style={{
           position: 'absolute', left: `calc(${FIGMA.nameLeft} * ${scale})`,
           top: '50%', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', zIndex: 3,
@@ -962,7 +922,7 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
             fontFamily: FONT_NAME, fontWeight: 400, fontSize: `calc(${FIGMA.nameSize} * ${scale})`,
             color: p1Active ? '#FFFFFF' : INACTIVE,
           }}>
-            {PLAYERS.p1.name}
+            {p1.name}
           </span>
           {introComplete && (
             <span style={{
@@ -974,7 +934,6 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
             </span>
           )}
         </div>
-        {/* Cricket score (points) */}
         <span style={{
           position: 'absolute', left: `calc(${FIGMA.scoreLeft} * ${scale})`,
           top: '50%', transform: 'translateY(-50%)',
@@ -1013,11 +972,10 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
         {introComplete && (p2Active || p2Exiting) && (
           <div key={`p2-bar-${turnKey}`} style={{
             position: 'absolute', inset: 0,
-            background: 'linear-gradient(179.4deg, rgba(251, 0, 255, 0.2) 0.52%, rgba(0, 0, 0, 0.2) 95.46%)',
+            background: `linear-gradient(179.4deg, ${p2.accentColor}33 0.52%, rgba(0, 0, 0, 0.2) 95.46%)`,
             animation: p2Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
           }} />
         )}
-        {/* Score left for P2 */}
         <span style={{
           position: 'absolute', left: `calc(20 * ${scale})`,
           top: '50%', transform: 'translateY(-50%)',
@@ -1027,7 +985,6 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
         }}>
           {p2Score}
         </span>
-        {/* Name + MPR right-aligned */}
         <div style={{
           position: 'absolute', right: `calc(${FIGMA.nameLeft} * ${scale})`,
           top: '50%', transform: 'translateY(-50%)',
@@ -1037,7 +994,7 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
             fontFamily: FONT_NAME, fontWeight: 400, fontSize: `calc(${FIGMA.nameSize} * ${scale})`,
             color: p2Active ? '#FFFFFF' : INACTIVE,
           }}>
-            {PLAYERS.p2.name}
+            {p2.name}
           </span>
           {introComplete && (
             <span style={{
@@ -1049,7 +1006,6 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
             </span>
           )}
         </div>
-        {/* Avatar grey */}
         <div style={{
           position: 'absolute',
           width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
@@ -1061,7 +1017,7 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
             position: 'absolute',
             width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
             right: `calc(${FIGMA.avatarLeft} * ${scale})`, top: '50%', transform: 'translateY(-50%)',
-            background: '#000', border: `3px solid ${P2_ACTIVE}`, borderRadius: '50%', zIndex: 2,
+            background: '#000', border: `3px solid ${p2.accentColor}`, borderRadius: '50%', zIndex: 2,
             animation: p2Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
           }} />
         )}
@@ -1073,9 +1029,9 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
           onClick={() => setMenuOpen(!menuOpen)}
           style={{
             width: `calc(44 * ${scale})`, height: `calc(44 * ${scale})`,
-            background: 'transparent', border: 'none', cursor: 'pointer',
+            background: 'rgba(0, 0, 0, 0.5)', border: 'none', cursor: 'pointer',
             display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
-            gap: `calc(6 * ${scale})`, padding: `calc(8 * ${scale})`,
+            gap: `calc(6 * ${scale})`, padding: `calc(8 * ${scale})`, borderRadius: `calc(8 * ${scale})`,
           }}
         >
           <span style={{ width: `calc(28 * ${scale})`, height: '3px', background: '#FFF', borderRadius: '2px' }} />
@@ -1085,12 +1041,12 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
         {menuOpen && (
           <div style={{
             position: 'absolute', top: `calc(50 * ${scale})`, right: 0,
-            background: 'rgba(0, 0, 0, 0.8)', backdropFilter: 'blur(12px)',
+            background: 'rgba(0, 0, 0, 0.9)', backdropFilter: 'blur(12px)',
             borderRadius: `calc(8 * ${scale})`, border: '1px solid rgba(255, 255, 255, 0.1)',
             overflow: 'hidden', minWidth: `calc(160 * ${scale})`,
           }}>
             <button
-              onClick={() => { setMenuOpen(false); onLeaveMatch?.(); }}
+              onClick={async () => { setMenuOpen(false); await leaveMatch(); onLeaveMatch(); }}
               style={{
                 width: '100%', padding: `calc(14 * ${scale}) calc(20 * ${scale})`,
                 background: 'transparent', border: 'none', color: '#FF4444',
@@ -1112,14 +1068,14 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
         }}>
           <div style={{
             position: 'absolute', inset: 0,
-            background: `radial-gradient(circle, ${PLAYERS[currentThrower].profilecolor}33 0%, transparent 70%)`,
+            background: `radial-gradient(circle, ${currentThrower === 'p1' ? p1.accentColor : p2.accentColor}33 0%, transparent 70%)`,
             animation: 'achievementPulse 2s ease-out forwards',
           }} />
           <div style={{
             position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
             fontFamily: FONT_SCORE, fontWeight: 300, fontSize: `calc(120 * ${scale})`, lineHeight: 1,
-            color: PLAYERS[currentThrower].profilecolor,
-            textShadow: `0 0 30px ${PLAYERS[currentThrower].profilecolor}, 0 0 60px ${PLAYERS[currentThrower].profilecolor}, -4px 4px 8px rgba(0, 0, 0, 0.8)`,
+            color: currentThrower === 'p1' ? p1.accentColor : p2.accentColor,
+            textShadow: `0 0 30px ${currentThrower === 'p1' ? p1.accentColor : p2.accentColor}, 0 0 60px ${currentThrower === 'p1' ? p1.accentColor : p2.accentColor}, -4px 4px 8px rgba(0, 0, 0, 0.8)`,
             whiteSpace: 'nowrap',
             animation: 'achievementPulse 2s ease-out forwards, achievementGlow 0.5s ease-in-out infinite',
           }}>
@@ -1137,7 +1093,7 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
         }}>
           <div style={{
             position: 'absolute', inset: 0,
-            background: `radial-gradient(circle at center, ${PLAYERS[gameWinner].profilecolor}40 0%, transparent 60%)`,
+            background: `radial-gradient(circle at center, ${gameWinner === 'p1' ? p1.accentColor : p2.accentColor}40 0%, transparent 60%)`,
           }} />
           <div style={{
             fontFamily: FONT_SCORE, fontWeight: 300, fontSize: `calc(60 * ${scale})`, lineHeight: 1,
@@ -1149,11 +1105,11 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
           </div>
           <div style={{
             fontFamily: FONT_SCORE, fontWeight: 300, fontSize: `calc(160 * ${scale})`, lineHeight: 1,
-            color: PLAYERS[gameWinner].profilecolor,
-            textShadow: `0 0 40px ${PLAYERS[gameWinner].profilecolor}, 0 0 80px ${PLAYERS[gameWinner].profilecolor}, -6px 6px 12px rgba(0, 0, 0, 0.8)`,
+            color: gameWinner === 'p1' ? p1.accentColor : p2.accentColor,
+            textShadow: `0 0 40px ${gameWinner === 'p1' ? p1.accentColor : p2.accentColor}, 0 0 80px ${gameWinner === 'p1' ? p1.accentColor : p2.accentColor}, -6px 6px 12px rgba(0, 0, 0, 0.8)`,
             animation: 'winnerNameSlide 0.8s ease-out forwards', animationDelay: '0.4s', opacity: 0,
           }}>
-            {PLAYERS[gameWinner].name}
+            {gameWinner === 'p1' ? p1.name : p2.name}
           </div>
           <div style={{
             fontFamily: FONT_NAME, fontSize: `calc(28 * ${scale})`, color: 'rgba(255, 255, 255, 0.5)',
@@ -1167,30 +1123,7 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
             animation: 'winnerNameSlide 0.6s ease-out forwards', animationDelay: '0.8s', opacity: 0,
           }}>
             <button
-              onClick={() => {
-                setShowWinnerScreen(false);
-                setGameWinner(null);
-                const resetMarks = { p1: { '20': 0, '19': 0, '18': 0, '17': 0, '16': 0, '15': 0, B: 0 }, p2: { '20': 0, '19': 0, '18': 0, '17': 0, '16': 0, '15': 0, B: 0 } };
-                setMarks(resetMarks);
-                marksRef.current = resetMarks;
-                setP1Score(0); setP2Score(0);
-                setCurrentRound(1); setCurrentThrower('p1'); setCurrentDarts([]);
-                setP1DartsThrown(0); setP2DartsThrown(0); setP1TotalMarks(0); setP2TotalMarks(0);
-                setP1ThrewThisRound(false); setP2ThrewThisRound(false);
-                setShowGoodLuck(true); setIntroComplete(false);
-              }}
-              style={{
-                padding: `calc(16 * ${scale}) calc(48 * ${scale})`,
-                fontFamily: FONT_NAME, fontSize: `calc(24 * ${scale})`, fontWeight: 500,
-                color: '#FFF', background: PLAYERS[gameWinner].profilecolor,
-                border: 'none', borderRadius: `calc(12 * ${scale})`, cursor: 'pointer',
-                boxShadow: `0 0 30px ${PLAYERS[gameWinner].profilecolor}80`,
-              }}
-            >
-              Rematch
-            </button>
-            <button
-              onClick={() => { setShowWinnerScreen(false); setGameWinner(null); onLeaveMatch?.(); }}
+              onClick={async () => { await leaveMatch(); onLeaveMatch(); }}
               style={{
                 padding: `calc(16 * ${scale}) calc(48 * ${scale})`,
                 fontFamily: FONT_NAME, fontSize: `calc(24 * ${scale})`, fontWeight: 500,
@@ -1204,13 +1137,208 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
         </div>
       )}
 
-      {/* Dart Simulator */}
-      <DartSimulator
-        onThrow={throwDart}
-        disabled={showPlayerChange || !introComplete || showWinnerScreen || !!activeAnimation}
-      />
+      {/* Opponent Left Message */}
+      {opponentLeftMessage && (
+        <div style={{
+          position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 400, background: 'rgba(0, 0, 0, 0.9)',
+        }}>
+          <div style={{
+            fontFamily: FONT_NAME, fontSize: `calc(32 * ${scale})`, color: '#ff4444',
+            textAlign: 'center',
+          }}>
+            {opponentLeftMessage}
+          </div>
+        </div>
+      )}
+
+      {/* DEV MODE: Dart Simulator */}
+      {isDevMode() && (
+        <DartSimulator
+          onThrow={(segment, _score, multiplier) => applyThrow(segment, multiplier, true)}
+          disabled={showPlayerChange || !introComplete || showWinnerScreen || !!activeAnimation || !isLocalTurn}
+        />
+      )}
     </div>
   );
 }
 
-export default CRGSPreview;
+// Dev mode dart simulator (only shown in dev mode)
+function DartSimulator({ onThrow, disabled }: { onThrow: (segment: string, score: number, multiplier: number) => void; disabled: boolean }) {
+  const [multiplierMode, setMultiplierMode] = useState<'single' | 'double' | 'triple'>('single');
+  const [expanded, setExpanded] = useState(true);
+
+  const handleNumberClick = (num: number) => {
+    if (disabled) return;
+    const mult = multiplierMode === 'triple' ? 3 : multiplierMode === 'double' ? 2 : 1;
+    const prefix = multiplierMode === 'triple' ? 'T' : multiplierMode === 'double' ? 'D' : 'S';
+    onThrow(`${prefix}${num}`, num * mult, mult);
+  };
+
+  const handleBullClick = (isDouble: boolean) => {
+    if (disabled) return;
+    if (isDouble) {
+      onThrow('D25', 50, 2);
+    } else {
+      onThrow('S25', 25, 1);
+    }
+  };
+
+  const handleMissClick = () => {
+    if (disabled) return;
+    onThrow('MISS', 0, 0);
+  };
+
+  const cricketNumbers = [20, 19, 18, 17, 16, 15];
+
+  return (
+    <div style={{
+      position: 'fixed',
+      bottom: expanded ? 0 : '-220px',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      width: '600px',
+      maxWidth: '90vw',
+      background: 'rgba(0, 0, 0, 0.9)',
+      backdropFilter: 'blur(12px)',
+      borderTopLeftRadius: '16px',
+      borderTopRightRadius: '16px',
+      border: '1px solid rgba(255, 255, 255, 0.2)',
+      borderBottom: 'none',
+      padding: '12px 16px 16px',
+      zIndex: 500,
+      transition: 'bottom 0.3s ease-out',
+    }}>
+      <button
+        onClick={() => setExpanded(!expanded)}
+        style={{
+          position: 'absolute',
+          top: '-32px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'rgba(0, 0, 0, 0.9)',
+          border: '1px solid rgba(255, 255, 255, 0.2)',
+          borderBottom: 'none',
+          borderTopLeftRadius: '8px',
+          borderTopRightRadius: '8px',
+          padding: '6px 20px',
+          color: '#fff',
+          fontSize: '12px',
+          cursor: 'pointer',
+          fontFamily: "'Helvetica Condensed', sans-serif",
+        }}
+      >
+        {expanded ? 'Hide Simulator' : 'Show Simulator'}
+      </button>
+
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', justifyContent: 'center' }}>
+        {(['single', 'double', 'triple'] as const).map((mode) => (
+          <button
+            key={mode}
+            onClick={() => setMultiplierMode(mode)}
+            disabled={disabled}
+            style={{
+              padding: '6px 16px',
+              background: multiplierMode === mode ? (mode === 'triple' ? '#FF4444' : mode === 'double' ? '#44FF44' : '#6600FF') : 'rgba(255, 255, 255, 0.1)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: disabled ? 'not-allowed' : 'pointer',
+              fontFamily: "'Helvetica Condensed', sans-serif",
+              fontSize: '14px',
+              fontWeight: 600,
+              opacity: disabled ? 0.5 : 1,
+              textTransform: 'uppercase',
+            }}
+          >
+            {mode === 'single' ? 'Single (S)' : mode === 'double' ? 'Double (D)' : 'Triple (T)'}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', justifyContent: 'center', marginBottom: '12px' }}>
+        {cricketNumbers.map((num) => (
+          <button
+            key={num}
+            onClick={() => handleNumberClick(num)}
+            disabled={disabled}
+            style={{
+              width: '44px',
+              height: '36px',
+              background: 'rgba(255, 255, 255, 0.1)',
+              color: '#fff',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              borderRadius: '4px',
+              cursor: disabled ? 'not-allowed' : 'pointer',
+              fontFamily: "'Helvetica Condensed', sans-serif",
+              fontSize: '16px',
+              fontWeight: 600,
+              opacity: disabled ? 0.5 : 1,
+            }}
+          >
+            {num}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+        <button
+          onClick={() => handleBullClick(false)}
+          disabled={disabled}
+          style={{
+            padding: '8px 20px',
+            background: '#228B22',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: disabled ? 'not-allowed' : 'pointer',
+            fontFamily: "'Helvetica Condensed', sans-serif",
+            fontSize: '14px',
+            fontWeight: 600,
+            opacity: disabled ? 0.5 : 1,
+          }}
+        >
+          BULL (25)
+        </button>
+        <button
+          onClick={() => handleBullClick(true)}
+          disabled={disabled}
+          style={{
+            padding: '8px 20px',
+            background: '#FF4444',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: disabled ? 'not-allowed' : 'pointer',
+            fontFamily: "'Helvetica Condensed', sans-serif",
+            fontSize: '14px',
+            fontWeight: 600,
+            opacity: disabled ? 0.5 : 1,
+          }}
+        >
+          D-BULL (50)
+        </button>
+        <button
+          onClick={handleMissClick}
+          disabled={disabled}
+          style={{
+            padding: '8px 20px',
+            background: 'rgba(100, 100, 100, 0.5)',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: disabled ? 'not-allowed' : 'pointer',
+            fontFamily: "'Helvetica Condensed', sans-serif",
+            fontSize: '14px',
+            fontWeight: 600,
+            opacity: disabled ? 0.5 : 1,
+          }}
+        >
+          MISS
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default CROnlineGameScreen;
