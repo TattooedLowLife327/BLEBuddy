@@ -41,3 +41,9 @@ Thumbs.db
 
 # Figma frame references (design only)
 public/figmaframereferences/
+
+# Preview-only files (keep local)
+src/pages/preview/
+
+# Markdown files (keep local)
+*.md
