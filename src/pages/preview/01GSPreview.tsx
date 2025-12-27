@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { getCheckoutSuggestion } from '../../utils/checkoutSolver';
 
 // Dart Simulator Panel for demo/preview mode
@@ -191,6 +191,19 @@ function DartSimulator({
     </div>
   );
 }
+
+const AUTO_THROW_POOL = [
+  { segment: 'T20', score: 60, multiplier: 3 },
+  { segment: 'T19', score: 57, multiplier: 3 },
+  { segment: 'T18', score: 54, multiplier: 3 },
+  { segment: 'D20', score: 40, multiplier: 2 },
+  { segment: 'D16', score: 32, multiplier: 2 },
+  { segment: 'S20', score: 20, multiplier: 1 },
+  { segment: 'S19', score: 19, multiplier: 1 },
+  { segment: 'S17', score: 17, multiplier: 1 },
+  { segment: 'D25', score: 50, multiplier: 2 },
+  { segment: 'S25', score: 25, multiplier: 1 },
+] as const;
 
 interface DartThrow {
   segment: string;
@@ -470,6 +483,7 @@ export function O1GSPreview({ onLeaveMatch }: O1GSPreviewProps) {
   const [activeAnimation, setActiveAnimation] = useState<AchievementType>(null);
   const [gameWinner, setGameWinner] = useState<'p1' | 'p2' | null>(null);
   const [showWinnerScreen, setShowWinnerScreen] = useState(false);
+  const autoThrowingRef = useRef(false);
 
   // Request fullscreen on mobile/tablet
   useEffect(() => {
@@ -905,6 +919,52 @@ export function O1GSPreview({ onLeaveMatch }: O1GSPreviewProps) {
 
     if (newDarts.length === 3) setShowPlayerChange(true);
   }, [currentDarts, currentScore, currentThrower, roundScore, showPlayerChange, introComplete, p1Score, p2Score, p1HasStarted, p2HasStarted, inMode, outMode, detectAchievement, triggerAchievement]);
+
+  useEffect(() => {
+    if (
+      currentThrower !== 'p2' ||
+      showPlayerChange ||
+      !introComplete ||
+      showWinnerScreen ||
+      !!activeAnimation
+    ) {
+      autoThrowingRef.current = false;
+      return;
+    }
+    if (autoThrowingRef.current) return;
+    autoThrowingRef.current = true;
+
+    let canceled = false;
+    let dartCount = 0;
+    const pool = splitBull ? AUTO_THROW_POOL : AUTO_THROW_POOL.filter(pick => pick.segment !== 'S25');
+
+    const throwNext = () => {
+      if (canceled) return;
+      if (
+        currentThrower !== 'p2' ||
+        showPlayerChange ||
+        showWinnerScreen ||
+        !!activeAnimation
+      ) {
+        autoThrowingRef.current = false;
+        return;
+      }
+      if (dartCount >= 3) {
+        autoThrowingRef.current = false;
+        return;
+      }
+      const pick = pool[Math.floor(Math.random() * pool.length)];
+      throwDart(pick.segment, pick.score, pick.multiplier);
+      dartCount += 1;
+      setTimeout(throwNext, 650);
+    };
+
+    const timer = setTimeout(throwNext, 500);
+    return () => {
+      canceled = true;
+      clearTimeout(timer);
+    };
+  }, [activeAnimation, currentThrower, introComplete, showPlayerChange, showWinnerScreen, splitBull, throwDart]);
 
   const formatDart = (segment: string) => {
     if (segment === 'MISS') return 'MISS';
@@ -1798,11 +1858,13 @@ export function O1GSPreview({ onLeaveMatch }: O1GSPreviewProps) {
       )}
 
       {/* Dart Simulator Panel - for demo/preview mode */}
-      <DartSimulator
-        onThrow={throwDart}
-        disabled={showPlayerChange || !introComplete || showWinnerScreen || !!activeAnimation}
-        splitBull={splitBull}
-      />
+      {currentThrower === 'p1' && (
+        <DartSimulator
+          onThrow={throwDart}
+          disabled={showPlayerChange || !introComplete || showWinnerScreen || !!activeAnimation}
+          splitBull={splitBull}
+        />
+      )}
     </div>
   );
 }

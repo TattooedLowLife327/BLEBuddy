@@ -10,6 +10,19 @@ const MARK_ICONS: Record<1 | 2 | 3, string> = {
   3: '/assets/CR3Mark.svg',
 };
 
+const AUTO_THROW_POOL = [
+  { segment: 'T20', score: 60, multiplier: 3 },
+  { segment: 'T19', score: 57, multiplier: 3 },
+  { segment: 'T18', score: 54, multiplier: 3 },
+  { segment: 'T17', score: 51, multiplier: 3 },
+  { segment: 'T16', score: 48, multiplier: 3 },
+  { segment: 'T15', score: 45, multiplier: 3 },
+  { segment: 'D20', score: 40, multiplier: 2 },
+  { segment: 'S20', score: 20, multiplier: 1 },
+  { segment: 'D25', score: 50, multiplier: 2 },
+  { segment: 'S25', score: 25, multiplier: 1 },
+] as const;
+
 // Dart Simulator Panel for demo/preview mode
 function DartSimulator({ onThrow, disabled }: { onThrow: (segment: string, score: number, multiplier: number) => void; disabled: boolean }) {
   const [multiplierMode, setMultiplierMode] = useState<'single' | 'double' | 'triple'>('single');
@@ -392,6 +405,7 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
   const [activeAnimation, setActiveAnimation] = useState<AchievementType>(null);
   const [gameWinner, setGameWinner] = useState<'p1' | 'p2' | null>(null);
   const [showWinnerScreen, setShowWinnerScreen] = useState(false);
+  const autoThrowingRef = useRef(false);
 
   // MPR tracking - use darts thrown for immediate updates
   const [p1DartsThrown, setP1DartsThrown] = useState(0);
@@ -581,6 +595,51 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
       setShowPlayerChange(true);
     }
   }, [currentDarts, currentThrower, introComplete, showPlayerChange, showWinnerScreen, p1Score, p2Score]);
+
+  useEffect(() => {
+    if (
+      currentThrower !== 'p2' ||
+      showPlayerChange ||
+      !introComplete ||
+      showWinnerScreen ||
+      !!activeAnimation
+    ) {
+      autoThrowingRef.current = false;
+      return;
+    }
+    if (autoThrowingRef.current) return;
+    autoThrowingRef.current = true;
+
+    let canceled = false;
+    let dartCount = 0;
+
+    const throwNext = () => {
+      if (canceled) return;
+      if (
+        currentThrower !== 'p2' ||
+        showPlayerChange ||
+        showWinnerScreen ||
+        !!activeAnimation
+      ) {
+        autoThrowingRef.current = false;
+        return;
+      }
+      if (dartCount >= 3) {
+        autoThrowingRef.current = false;
+        return;
+      }
+      const pick = AUTO_THROW_POOL[Math.floor(Math.random() * AUTO_THROW_POOL.length)];
+      throwDart(pick.segment, pick.score, pick.multiplier);
+      dartCount += 1;
+      setTimeout(throwNext, 650);
+    };
+
+    const timer = setTimeout(throwNext, 500);
+    return () => {
+      canceled = true;
+      clearTimeout(timer);
+    };
+  }, [activeAnimation, currentThrower, introComplete, showPlayerChange, showWinnerScreen, throwDart]);
 
   // Handle player change
   useEffect(() => {
@@ -1229,10 +1288,12 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
       )}
 
       {/* Dart Simulator */}
-      <DartSimulator
-        onThrow={throwDart}
-        disabled={showPlayerChange || !introComplete || showWinnerScreen || !!activeAnimation}
-      />
+      {currentThrower === 'p1' && (
+        <DartSimulator
+          onThrow={throwDart}
+          disabled={showPlayerChange || !introComplete || showWinnerScreen || !!activeAnimation}
+        />
+      )}
     </div>
   );
 }
