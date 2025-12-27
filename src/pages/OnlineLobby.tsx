@@ -5,6 +5,7 @@ import { createClient } from '../utils/supabase/client';
 import { PlayerGameSetup } from '../components/PlayerGameSetup';
 import { AppHeader } from '../components/AppHeader';
 import { type GameData } from '../contexts/GameContext';
+import type { GameConfiguration } from '../types/game';
 
 // Resolve profile pic URL from various formats
 const resolveProfilePicUrl = (profilepic: string | undefined): string | undefined => {
@@ -21,6 +22,24 @@ const resolveProfilePicUrl = (profilepic: string | undefined): string | undefine
   // Storage path - construct Supabase public URL
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://sndsyxxcnuwjmjgikzgg.supabase.co';
   return `${supabaseUrl}/storage/v1/object/public/profilepic/${profilepic}`;
+};
+
+const normalizeGameType = (value: string | null | undefined): string | null => {
+  if (!value) return null;
+  return value.toLowerCase();
+};
+
+const derivePrimaryGameType = (config: GameConfiguration): string => {
+  const first = config.games.find(game => game) || '501';
+  return config.legs > 1 ? 'medley' : first;
+};
+
+const deriveLegsToWin = (legs: number): number => {
+  return Math.max(1, Math.ceil(legs / 2));
+};
+
+const deriveDoubleOut = (config: GameConfiguration): boolean => {
+  return config.format.inOut === 'do' || config.format.inOut === 'dido';
 };
 
 interface MissedRequest {
@@ -591,6 +610,8 @@ export function OnlineLobby({
                 opponentProfilePic: undefined, // Will be fetched
                 opponentAccentColor: '#a855f7', // Default, will be fetched
                 isInitiator: true,
+                gameType: normalizeGameType(pendingOutgoingRequest.game_type),
+                gameConfig: pendingOutgoingRequest.game_config || null,
               });
             }
             setPendingOutgoingRequest(null);
@@ -638,6 +659,18 @@ export function OnlineLobby({
         console.error('Error accepting game:', error);
       } else {
         console.log('Game accepted!');
+        let gameMeta: { game_type?: string | null; game_config?: GameConfiguration | null } | null = null;
+        try {
+          const { data } = await (supabase as any)
+            .schema('companion')
+            .from('active_games')
+            .select('game_type, game_config')
+            .eq('id', incomingRequest.id)
+            .single();
+          gameMeta = data || null;
+        } catch (metaErr) {
+          console.error('Error loading game metadata:', metaErr);
+        }
         // Navigate to cork screen - we are NOT the initiator (we accepted)
         if (onGameAccepted) {
           onGameAccepted({
@@ -647,6 +680,8 @@ export function OnlineLobby({
             opponentProfilePic: undefined,
             opponentAccentColor: '#a855f7',
             isInitiator: false,
+            gameType: normalizeGameType(gameMeta?.game_type),
+            gameConfig: gameMeta?.game_config || null,
           });
         }
       }
@@ -683,7 +718,7 @@ export function OnlineLobby({
     setIncomingRequest(null);
   };
 
-  const handleStartGame = async (gameConfig: any) => {
+  const handleStartGame = async (gameConfig: GameConfiguration) => {
     console.log('Starting game with config:', gameConfig);
     console.log('Against player:', selectedPlayer);
 
@@ -694,6 +729,10 @@ export function OnlineLobby({
       setSelectedPlayer(null);
       return;
     }
+
+    const gameType = derivePrimaryGameType(gameConfig);
+    const legsToWin = deriveLegsToWin(gameConfig.legs);
+    const doubleOut = deriveDoubleOut(gameConfig);
 
     // Create game in active_games table
     try {
@@ -708,6 +747,10 @@ export function OnlineLobby({
           is_doubles: isDoublesTeam || selectedPlayer!.isDoublesTeam,
           player1_partner_id: partnerId || null,
           player2_partner_id: selectedPlayer!.partnerId || null,
+          game_type: gameType,
+          legs_to_win: legsToWin,
+          double_out: doubleOut,
+          game_config: gameConfig,
           status: 'pending',
         })
         .select()

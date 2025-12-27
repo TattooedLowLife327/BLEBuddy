@@ -4,6 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Label } from './ui/label';
 import { Separator } from './ui/separator';
 import { createClient } from '../utils/supabase/client';
+import type { GameConfiguration } from '../types/game';
 
 // Convert hex color to hue value (0-360)
 function hexToHue(hex: string): number {
@@ -46,16 +47,6 @@ interface PlayerGameSetupProps {
   partnerName?: string;
   userId: string;
   isYouthPlayer: boolean;
-}
-
-interface GameConfiguration {
-  legs: number;
-  games: string[];
-  handicap: boolean;
-  format: {
-    inOut: 'do' | 'mo' | 'mimo' | 'dido' | null;
-    bull: 'full' | 'split' | null;
-  };
 }
 
 interface PlayerStats {

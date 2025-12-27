@@ -2,6 +2,7 @@
 // Game Context Provider for app-wide game state management
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import type { GameConfiguration } from '../types/game';
 
 // Types
 export type GameMode = 'solo' | 'localDubs' | 'remoteDubs' | null;
@@ -19,6 +20,8 @@ export interface GameData {
   opponentProfilePic?: string;
   opponentAccentColor: string;
   isInitiator: boolean;
+  gameType?: string | null;
+  gameConfig?: GameConfiguration | null;
 }
 
 export interface PendingRejoinGame {
@@ -26,6 +29,8 @@ export interface PendingRejoinGame {
   opponentId: string;
   opponentName: string;
   isInitiator: boolean;
+  gameType?: string | null;
+  gameConfig?: GameConfiguration | null;
 }
 
 interface GameContextType {

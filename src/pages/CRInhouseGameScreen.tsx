@@ -1,12 +1,6 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useBLE } from '../contexts/BLEContext';
-import { useWebRTC } from '../hooks/useWebRTC';
-import { useGameStatus } from '../hooks/useGameStatus';
-import { AppHeader } from '../components/AppHeader';
-import { createClient } from '../utils/supabase/client';
 import { isDevMode } from '../utils/devMode';
-import type { DartThrowData } from '../utils/ble/bleConnection';
-import { RefreshCw, DoorOpen } from 'lucide-react';
 
 type Target = '20' | '19' | '18' | '17' | '16' | '15' | 'B';
 type PlayerId = 'p1' | 'p2';
@@ -33,23 +27,15 @@ type AchievementType =
   | 'whiteHorse'
   | null;
 
-interface CROnlineGameScreenProps {
-  gameId: string;
-  localPlayer: {
-    id: string;
-    name: string;
-    profilePic?: string;
-    accentColor: string;
-  };
-  remotePlayer: {
-    id: string;
-    name: string;
-    profilePic?: string;
-    accentColor: string;
-  };
-  isInitiator: boolean; // true = local is p1, false = local is p2
+interface CRInhouseGameScreenProps {
   onLeaveMatch: () => void;
+  backgroundImage?: string;
 }
+
+const PLAYERS = {
+  p1: { id: 'p1', name: 'PLAYER1', profilecolor: '#6600FF' },
+  p2: { id: 'p2', name: 'PLAYER2', profilecolor: '#FB00FF' },
+};
 
 const P1_ACTIVE = '#6600FF';
 const P2_ACTIVE = '#FB00FF';
@@ -151,90 +137,10 @@ const goodLuckKeyframes = `
 }
 `;
 
-export function CROnlineGameScreen({ gameId, localPlayer, remotePlayer, isInitiator, onLeaveMatch }: CROnlineGameScreenProps) {
-  const supabase = createClient();
-  const localVideoRef = useRef<HTMLVideoElement>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement>(null);
-
-  // Determine which player is p1/p2
-  const p1 = isInitiator ? localPlayer : remotePlayer;
-  const p2 = isInitiator ? remotePlayer : localPlayer;
-  const localIsP1 = isInitiator;
-
-  // BLE for throw detection and status
+export function CRInhouseGameScreen({ onLeaveMatch, backgroundImage = '/assets/gamescreenbackground.png' }: CRInhouseGameScreenProps) {
+  // BLE for throw detection
   const { lastThrow, isConnected: bleConnected, connect: bleConnect, disconnect: bleDisconnect, status: bleStatus } = useBLE();
   const lastProcessedThrowRef = useRef<string | null>(null);
-  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
-
-  // WebRTC for video - memoize options to prevent infinite re-initialization
-  const webRTCOptions = useMemo(() => ({
-    gameId,
-    localPlayerId: localPlayer.id,
-    remotePlayerId: remotePlayer.id,
-    isInitiator,
-  }), [gameId, localPlayer.id, remotePlayer.id, isInitiator]);
-
-  const { localStream, remoteStream, connectionState, initialize: webrtcInit, disconnect: webrtcDisconnect } = useWebRTC(webRTCOptions);
-
-  // Game status for presence/disconnect detection
-  const { isOpponentOnline, disconnectCountdown, leaveMatch, opponentLeftMessage } = useGameStatus({
-    gameId,
-    localPlayerId: localPlayer.id,
-    remotePlayerId: remotePlayer.id,
-    remotePlayerName: remotePlayer.name,
-    onOpponentLeft: onLeaveMatch,
-  });
-
-  // Attach video streams to elements
-  useEffect(() => {
-    if (localVideoRef.current && localStream) {
-      localVideoRef.current.srcObject = localStream;
-    }
-  }, [localStream]);
-
-  useEffect(() => {
-    if (remoteVideoRef.current && remoteStream) {
-      remoteVideoRef.current.srcObject = remoteStream;
-    }
-  }, [remoteStream]);
-
-  // Refresh video handler
-  const handleRefreshVideo = useCallback(async () => {
-    await webrtcDisconnect();
-    await webrtcInit();
-  }, [webrtcDisconnect, webrtcInit]);
-
-  useEffect(() => {
-    webrtcInit();
-    return () => {
-      webrtcDisconnect();
-    };
-  }, [webrtcInit, webrtcDisconnect]);
-
-  // Custom menu items for AppHeader
-  const customMenuItems = useMemo(() => [
-    {
-      label: 'Refresh Video',
-      icon: RefreshCw,
-      onClick: handleRefreshVideo,
-    },
-    {
-      label: 'Leave Match',
-      icon: DoorOpen,
-      onClick: () => setShowLeaveConfirm(true),
-      className: 'focus:bg-red-500/20 focus:text-white text-red-400 cursor-pointer',
-    },
-  ], [handleRefreshVideo]);
-
-  // For logout action in AppHeader, show leave confirmation
-  const handleLogoutAction = () => setShowLeaveConfirm(true);
-
-  // Handle confirm leave
-  const handleConfirmLeave = async () => {
-    setShowLeaveConfirm(false);
-    await leaveMatch();
-    onLeaveMatch();
-  };
 
   // Cricket state
   const [marks, setMarks] = useState<Record<PlayerId, Record<Target, number>>>({
@@ -275,9 +181,6 @@ export function CROnlineGameScreen({ gameId, localPlayer, remotePlayer, isInitia
   const p2Active = currentThrower === 'p2';
   const p1Exiting = hasHadTurnSwitch && prevThrower === 'p1' && !p1Active;
   const p2Exiting = hasHadTurnSwitch && prevThrower === 'p2' && !p2Active;
-
-  // Is it local player's turn?
-  const isLocalTurn = (localIsP1 && p1Active) || (!localIsP1 && p2Active);
 
   const greyGradient = 'linear-gradient(179.4deg, rgba(126, 126, 126, 0.2) 0.52%, rgba(0, 0, 0, 0.2) 95.46%)';
   const scale = `calc(100vw / ${FIGMA.frame.w})`;
@@ -343,41 +246,9 @@ export function CROnlineGameScreen({ gameId, localPlayer, remotePlayer, isInitia
     return null;
   };
 
-  // Realtime channel for syncing throws
-  const throwChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-
-  useEffect(() => {
-    throwChannelRef.current = supabase.channel(`cricket:${gameId}`, {
-      config: { broadcast: { self: false } },
-    });
-
-    throwChannelRef.current
-      .on('broadcast', { event: 'dart_throw' }, ({ payload }) => {
-        // Opponent threw - apply the throw locally
-        if (payload.playerId !== localPlayer.id) {
-          applyThrow(payload.segment, payload.multiplier, false);
-        }
-      })
-      .on('broadcast', { event: 'turn_end' }, ({ payload }) => {
-        // Sync turn state from opponent
-        if (payload.playerId !== localPlayer.id) {
-          setShowPlayerChange(true);
-        }
-      })
-      .subscribe();
-
-    return () => {
-      throwChannelRef.current?.unsubscribe();
-    };
-  }, [gameId, localPlayer.id]);
-
-  // Apply a throw (from BLE or remote)
-  const applyThrow = useCallback((segment: string, multiplier: number, isLocal: boolean) => {
+  // Apply a throw
+  const applyThrow = useCallback((segment: string, multiplier: number) => {
     if (currentDarts.length >= 3 || showPlayerChange || !introComplete || showWinnerScreen) return;
-
-    // Only allow throws from the current thrower
-    const expectedLocal = (localIsP1 && currentThrower === 'p1') || (!localIsP1 && currentThrower === 'p2');
-    if (isLocal !== expectedLocal) return;
 
     const { target, hitMarks } = mapSegmentToTarget(segment, multiplier);
     const newDart: DartThrow = { segment, score: 0, multiplier };
@@ -450,15 +321,6 @@ export function CROnlineGameScreen({ gameId, localPlayer, remotePlayer, isInitia
       });
     }
 
-    // Broadcast throw to opponent if local
-    if (isLocal && throwChannelRef.current) {
-      throwChannelRef.current.send({
-        type: 'broadcast',
-        event: 'dart_throw',
-        payload: { playerId: localPlayer.id, segment, multiplier },
-      });
-    }
-
     // Check achievements & end turn on 3rd dart
     if (newDarts.length === 3) {
       const achievement = detectAchievement(newDarts);
@@ -467,32 +329,22 @@ export function CROnlineGameScreen({ gameId, localPlayer, remotePlayer, isInitia
         setTimeout(() => setActiveAnimation(null), 2000);
       }
       setShowPlayerChange(true);
-
-      // Broadcast turn end if local
-      if (isLocal && throwChannelRef.current) {
-        throwChannelRef.current.send({
-          type: 'broadcast',
-          event: 'turn_end',
-          payload: { playerId: localPlayer.id },
-        });
-      }
     }
-  }, [currentDarts, currentThrower, introComplete, showPlayerChange, showWinnerScreen, p1Score, p2Score, marks, localIsP1, localPlayer.id]);
+  }, [currentDarts, currentThrower, introComplete, showPlayerChange, showWinnerScreen, p1Score, p2Score, marks]);
 
   // Handle BLE throws
   useEffect(() => {
-    if (!lastThrow || !isLocalTurn) return;
+    if (!lastThrow) return;
 
     const throwKey = `${lastThrow.segment}-${lastThrow.timestamp}`;
     if (throwKey === lastProcessedThrowRef.current) return;
     lastProcessedThrowRef.current = throwKey;
 
-    // Convert BLE throw to segment string
     const segment = lastThrow.segment;
     const multiplier = lastThrow.multiplier;
 
-    applyThrow(segment, multiplier, true);
-  }, [lastThrow, isLocalTurn, applyThrow]);
+    applyThrow(segment, multiplier);
+  }, [lastThrow, applyThrow]);
 
   // Handle player change
   useEffect(() => {
@@ -600,165 +452,14 @@ export function CROnlineGameScreen({ gameId, localPlayer, remotePlayer, isInitia
     }}>
       <style>{goodLuckKeyframes}</style>
 
-      {/* AppHeader with BLE status and profile menu */}
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100, padding: '8px 12px', borderBottom: '1px solid #333' }}>
-        <AppHeader
-          title="CRICKET"
-          bleConnected={bleConnected}
-          bleStatus={bleStatus}
-          onBLEConnect={bleConnect}
-          onBLEDisconnect={bleDisconnect}
-          onLogout={handleLogoutAction}
-          customMenuItems={customMenuItems}
-        />
-      </div>
-
-      {/* Leave Confirmation Dialog */}
-      {showLeaveConfirm && (
-        <div style={{
-          position: 'absolute', inset: 0, zIndex: 500,
-          background: 'rgba(0,0,0,0.8)', display: 'flex',
-          alignItems: 'center', justifyContent: 'center', padding: 16,
-        }}>
-          <div style={{
-            background: '#18181b', border: '1px solid #3f3f46',
-            borderRadius: 12, padding: 24, maxWidth: 320, width: '100%',
-          }}>
-            <h2 style={{ color: '#fff', fontSize: 18, fontWeight: 'bold', marginBottom: 8 }}>Leave Match?</h2>
-            <p style={{ color: '#a1a1aa', fontSize: 14, marginBottom: 16 }}>
-              Your opponent will be notified and the match will be cancelled.
-            </p>
-            <div style={{ display: 'flex', gap: 12 }}>
-              <button
-                onClick={() => setShowLeaveConfirm(false)}
-                style={{
-                  flex: 1, padding: '8px 16px', background: '#3f3f46',
-                  color: '#fff', border: 'none', borderRadius: 8,
-                  fontSize: 14, fontWeight: 600, cursor: 'pointer',
-                }}
-              >
-                Stay
-              </button>
-              <button
-                onClick={handleConfirmLeave}
-                style={{
-                  flex: 1, padding: '8px 16px', background: '#dc2626',
-                  color: '#fff', border: 'none', borderRadius: 8,
-                  fontSize: 14, fontWeight: 600, cursor: 'pointer',
-                }}
-              >
-                Leave
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* SPLIT SCREEN VIDEO BACKGROUND */}
+      {/* BACKGROUND IMAGE (instead of split-screen video) */}
       <div style={{
         position: 'absolute',
         inset: 0,
-        display: 'flex',
-      }}>
-        {/* Left half - Local player camera */}
-        <div style={{
-          flex: 1,
-          position: 'relative',
-          background: '#111',
-          borderRight: '2px solid #333',
-        }}>
-          <video
-            ref={localVideoRef}
-            autoPlay
-            playsInline
-            muted
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              transform: 'scaleX(-1)', // Mirror local video
-            }}
-          />
-          {/* Local player label */}
-          <div style={{
-            position: 'absolute',
-            bottom: `calc(100 * ${scale})`,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            background: 'rgba(0, 0, 0, 0.7)',
-            padding: `calc(8 * ${scale}) calc(16 * ${scale})`,
-            borderRadius: `calc(8 * ${scale})`,
-            border: `2px solid ${localPlayer.accentColor}`,
-          }}>
-            <span style={{
-              fontFamily: FONT_NAME,
-              fontSize: `calc(20 * ${scale})`,
-              color: '#fff',
-            }}>
-              {localPlayer.name} (YOU)
-            </span>
-          </div>
-        </div>
-
-        {/* Right half - Remote player camera */}
-        <div style={{
-          flex: 1,
-          position: 'relative',
-          background: '#111',
-        }}>
-          <video
-            ref={remoteVideoRef}
-            autoPlay
-            playsInline
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-            }}
-          />
-          {/* Remote player label */}
-          <div style={{
-            position: 'absolute',
-            bottom: `calc(100 * ${scale})`,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            background: 'rgba(0, 0, 0, 0.7)',
-            padding: `calc(8 * ${scale}) calc(16 * ${scale})`,
-            borderRadius: `calc(8 * ${scale})`,
-            border: `2px solid ${remotePlayer.accentColor}`,
-          }}>
-            <span style={{
-              fontFamily: FONT_NAME,
-              fontSize: `calc(20 * ${scale})`,
-              color: '#fff',
-            }}>
-              {remotePlayer.name}
-            </span>
-          </div>
-          {/* Connection status indicator */}
-          {!isOpponentOnline && (
-            <div style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              background: 'rgba(0, 0, 0, 0.8)',
-              padding: `calc(20 * ${scale})`,
-              borderRadius: `calc(12 * ${scale})`,
-              textAlign: 'center',
-            }}>
-              <div style={{ color: '#ff4444', fontFamily: FONT_NAME, fontSize: `calc(24 * ${scale})` }}>
-                Opponent Disconnected
-              </div>
-              {disconnectCountdown && (
-                <div style={{ color: '#fff', fontFamily: FONT_NAME, fontSize: `calc(48 * ${scale})`, marginTop: `calc(10 * ${scale})` }}>
-                  {disconnectCountdown}s
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
+        backgroundImage: backgroundImage ? `url(${backgroundImage})` : 'none',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }} />
 
       {/* Game Type Header */}
       <div style={{
@@ -995,7 +696,7 @@ export function CROnlineGameScreen({ gameId, localPlayer, remotePlayer, isInitia
         {introComplete && (p1Active || p1Exiting) && (
           <div key={`p1-bar-${turnKey}`} style={{
             position: 'absolute', inset: 0,
-            background: `linear-gradient(179.4deg, ${p1.accentColor}33 0.52%, rgba(0, 0, 0, 0.2) 95.46%)`,
+            background: `linear-gradient(179.4deg, ${PLAYERS.p1.profilecolor}33 0.52%, rgba(0, 0, 0, 0.2) 95.46%)`,
             animation: p1Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
           }} />
         )}
@@ -1010,7 +711,7 @@ export function CROnlineGameScreen({ gameId, localPlayer, remotePlayer, isInitia
             position: 'absolute',
             width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
             left: `calc(${FIGMA.avatarLeft} * ${scale})`, top: '50%', transform: 'translateY(-50%)',
-            background: '#000', border: `3px solid ${p1.accentColor}`, borderRadius: '50%', zIndex: 2,
+            background: '#000', border: `3px solid ${PLAYERS.p1.profilecolor}`, borderRadius: '50%', zIndex: 2,
             animation: p1Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
           }} />
         )}
@@ -1022,7 +723,7 @@ export function CROnlineGameScreen({ gameId, localPlayer, remotePlayer, isInitia
             fontFamily: FONT_NAME, fontWeight: 400, fontSize: `calc(${FIGMA.nameSize} * ${scale})`,
             color: p1Active ? '#FFFFFF' : INACTIVE,
           }}>
-            {p1.name}
+            {PLAYERS.p1.name}
           </span>
           {introComplete && (
             <span style={{
@@ -1072,7 +773,7 @@ export function CROnlineGameScreen({ gameId, localPlayer, remotePlayer, isInitia
         {introComplete && (p2Active || p2Exiting) && (
           <div key={`p2-bar-${turnKey}`} style={{
             position: 'absolute', inset: 0,
-            background: `linear-gradient(179.4deg, ${p2.accentColor}33 0.52%, rgba(0, 0, 0, 0.2) 95.46%)`,
+            background: `linear-gradient(179.4deg, ${PLAYERS.p2.profilecolor}33 0.52%, rgba(0, 0, 0, 0.2) 95.46%)`,
             animation: p2Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
           }} />
         )}
@@ -1094,7 +795,7 @@ export function CROnlineGameScreen({ gameId, localPlayer, remotePlayer, isInitia
             fontFamily: FONT_NAME, fontWeight: 400, fontSize: `calc(${FIGMA.nameSize} * ${scale})`,
             color: p2Active ? '#FFFFFF' : INACTIVE,
           }}>
-            {p2.name}
+            {PLAYERS.p2.name}
           </span>
           {introComplete && (
             <span style={{
@@ -1117,7 +818,7 @@ export function CROnlineGameScreen({ gameId, localPlayer, remotePlayer, isInitia
             position: 'absolute',
             width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
             right: `calc(${FIGMA.avatarLeft} * ${scale})`, top: '50%', transform: 'translateY(-50%)',
-            background: '#000', border: `3px solid ${p2.accentColor}`, borderRadius: '50%', zIndex: 2,
+            background: '#000', border: `3px solid ${PLAYERS.p2.profilecolor}`, borderRadius: '50%', zIndex: 2,
             animation: p2Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
           }} />
         )}
@@ -1146,7 +847,7 @@ export function CROnlineGameScreen({ gameId, localPlayer, remotePlayer, isInitia
             overflow: 'hidden', minWidth: `calc(160 * ${scale})`,
           }}>
             <button
-              onClick={async () => { setMenuOpen(false); await leaveMatch(); onLeaveMatch(); }}
+              onClick={() => { setMenuOpen(false); onLeaveMatch(); }}
               style={{
                 width: '100%', padding: `calc(14 * ${scale}) calc(20 * ${scale})`,
                 background: 'transparent', border: 'none', color: '#FF4444',
@@ -1168,14 +869,14 @@ export function CROnlineGameScreen({ gameId, localPlayer, remotePlayer, isInitia
         }}>
           <div style={{
             position: 'absolute', inset: 0,
-            background: `radial-gradient(circle, ${currentThrower === 'p1' ? p1.accentColor : p2.accentColor}33 0%, transparent 70%)`,
+            background: `radial-gradient(circle, ${PLAYERS[currentThrower].profilecolor}33 0%, transparent 70%)`,
             animation: 'achievementPulse 2s ease-out forwards',
           }} />
           <div style={{
             position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
             fontFamily: FONT_SCORE, fontWeight: 300, fontSize: `calc(120 * ${scale})`, lineHeight: 1,
-            color: currentThrower === 'p1' ? p1.accentColor : p2.accentColor,
-            textShadow: `0 0 30px ${currentThrower === 'p1' ? p1.accentColor : p2.accentColor}, 0 0 60px ${currentThrower === 'p1' ? p1.accentColor : p2.accentColor}, -4px 4px 8px rgba(0, 0, 0, 0.8)`,
+            color: PLAYERS[currentThrower].profilecolor,
+            textShadow: `0 0 30px ${PLAYERS[currentThrower].profilecolor}, 0 0 60px ${PLAYERS[currentThrower].profilecolor}, -4px 4px 8px rgba(0, 0, 0, 0.8)`,
             whiteSpace: 'nowrap',
             animation: 'achievementPulse 2s ease-out forwards, achievementGlow 0.5s ease-in-out infinite',
           }}>
@@ -1193,7 +894,7 @@ export function CROnlineGameScreen({ gameId, localPlayer, remotePlayer, isInitia
         }}>
           <div style={{
             position: 'absolute', inset: 0,
-            background: `radial-gradient(circle at center, ${gameWinner === 'p1' ? p1.accentColor : p2.accentColor}40 0%, transparent 60%)`,
+            background: `radial-gradient(circle at center, ${PLAYERS[gameWinner].profilecolor}40 0%, transparent 60%)`,
           }} />
           <div style={{
             fontFamily: FONT_SCORE, fontWeight: 300, fontSize: `calc(60 * ${scale})`, lineHeight: 1,
@@ -1205,11 +906,11 @@ export function CROnlineGameScreen({ gameId, localPlayer, remotePlayer, isInitia
           </div>
           <div style={{
             fontFamily: FONT_SCORE, fontWeight: 300, fontSize: `calc(160 * ${scale})`, lineHeight: 1,
-            color: gameWinner === 'p1' ? p1.accentColor : p2.accentColor,
-            textShadow: `0 0 40px ${gameWinner === 'p1' ? p1.accentColor : p2.accentColor}, 0 0 80px ${gameWinner === 'p1' ? p1.accentColor : p2.accentColor}, -6px 6px 12px rgba(0, 0, 0, 0.8)`,
+            color: PLAYERS[gameWinner].profilecolor,
+            textShadow: `0 0 40px ${PLAYERS[gameWinner].profilecolor}, 0 0 80px ${PLAYERS[gameWinner].profilecolor}, -6px 6px 12px rgba(0, 0, 0, 0.8)`,
             animation: 'winnerNameSlide 0.8s ease-out forwards', animationDelay: '0.4s', opacity: 0,
           }}>
-            {gameWinner === 'p1' ? p1.name : p2.name}
+            {PLAYERS[gameWinner].name}
           </div>
           <div style={{
             fontFamily: FONT_NAME, fontSize: `calc(28 * ${scale})`, color: 'rgba(255, 255, 255, 0.5)',
@@ -1223,7 +924,7 @@ export function CROnlineGameScreen({ gameId, localPlayer, remotePlayer, isInitia
             animation: 'winnerNameSlide 0.6s ease-out forwards', animationDelay: '0.8s', opacity: 0,
           }}>
             <button
-              onClick={async () => { await leaveMatch(); onLeaveMatch(); }}
+              onClick={onLeaveMatch}
               style={{
                 padding: `calc(16 * ${scale}) calc(48 * ${scale})`,
                 fontFamily: FONT_NAME, fontSize: `calc(24 * ${scale})`, fontWeight: 500,
@@ -1237,33 +938,18 @@ export function CROnlineGameScreen({ gameId, localPlayer, remotePlayer, isInitia
         </div>
       )}
 
-      {/* Opponent Left Message */}
-      {opponentLeftMessage && (
-        <div style={{
-          position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 400, background: 'rgba(0, 0, 0, 0.9)',
-        }}>
-          <div style={{
-            fontFamily: FONT_NAME, fontSize: `calc(32 * ${scale})`, color: '#ff4444',
-            textAlign: 'center',
-          }}>
-            {opponentLeftMessage}
-          </div>
-        </div>
-      )}
-
       {/* DEV MODE: Dart Simulator */}
       {isDevMode() && (
         <DartSimulator
-          onThrow={(segment, _score, multiplier) => applyThrow(segment, multiplier, true)}
-          disabled={showPlayerChange || !introComplete || showWinnerScreen || !!activeAnimation || !isLocalTurn}
+          onThrow={(segment, _score, multiplier) => applyThrow(segment, multiplier)}
+          disabled={showPlayerChange || !introComplete || showWinnerScreen || !!activeAnimation}
         />
       )}
     </div>
   );
 }
 
-// Dev mode dart simulator (only shown in dev mode)
+// Dev mode dart simulator
 function DartSimulator({ onThrow, disabled }: { onThrow: (segment: string, score: number, multiplier: number) => void; disabled: boolean }) {
   const [multiplierMode, setMultiplierMode] = useState<'single' | 'double' | 'triple'>('single');
   const [expanded, setExpanded] = useState(true);
@@ -1441,4 +1127,4 @@ function DartSimulator({ onThrow, disabled }: { onThrow: (segment: string, score
   );
 }
 
-export default CROnlineGameScreen;
+export default CRInhouseGameScreen;

@@ -6,12 +6,14 @@ import { OnlineLobby } from './pages/OnlineLobby';
 import { LocalDubsSetup } from './pages/LocalDubsSetup';
 import { RemoteDubsSetup } from './pages/RemoteDubsSetup';
 import { CorkScreen } from './components/CorkScreen';
-import { GameScreen } from './pages/GameScreen';
+import { O1InhouseGameScreen } from './pages/01InhouseGameScreen';
 import { O1GSPreview } from './pages/preview/01GSPreview';
 import { CRGSPreview } from './pages/preview/CRGSPreview';
 import { MedleyPreview } from './pages/preview/MedleyPreview';
 import { CorkPreview } from './pages/preview/CorkPreview';
 import { CROnlineGameScreen } from './pages/CROnlineGameScreen';
+import { CRInhouseGameScreen } from './pages/CRInhouseGameScreen';
+import { O1OnlineGameScreen } from './pages/01OnlineGameScreen';
 import { SettingsModal } from './components/SettingsModal';
 import { createClient } from './utils/supabase/client';
 import { useBLE } from './contexts/BLEContext';
@@ -229,7 +231,7 @@ export default function App() {
             const { data: activeGames } = await (supabase as any)
               .schema('companion')
               .from('active_games')
-              .select('id, player1_id, player2_id, player1_granboard_name, player2_granboard_name, status, created_at, completed_at')
+              .select('id, player1_id, player2_id, player1_granboard_name, player2_granboard_name, status, created_at, completed_at, game_type, game_config')
               .or(`player1_id.eq.${session.user.id},player2_id.eq.${session.user.id}`)
               .in('status', ['accepted', 'playing'])
               .is('completed_at', null);
@@ -243,6 +245,8 @@ export default function App() {
                 opponentId: isPlayer1 ? validGame.player2_id : validGame.player1_id,
                 opponentName: (isPlayer1 ? validGame.player2_granboard_name : validGame.player1_granboard_name) || 'Opponent',
                 isInitiator: isPlayer1,
+                gameType: validGame.game_type || null,
+                gameConfig: validGame.game_config || null,
               });
             }
           }
@@ -357,6 +361,8 @@ export default function App() {
       opponentProfilePic: undefined,
       opponentAccentColor: '#a855f7',
       isInitiator: pendingRejoinGame.isInitiator,
+      gameType: pendingRejoinGame.gameType || null,
+      gameConfig: pendingRejoinGame.gameConfig || null,
     });
     setPendingRejoinGame(null);
     navigate('/cork');
@@ -394,8 +400,10 @@ export default function App() {
   };
 
   const handleCorkComplete = (_firstPlayerId: string) => {
-    // Navigate to cricket online game screen
-    navigate('/game/cricket');
+    const firstGame = activeGame?.gameConfig?.games?.find(game => game) || activeGame?.gameType || 'cricket';
+    const normalized = firstGame.toLowerCase();
+    const nextRoute = normalized === 'cricket' ? '/game/cricket' : '/game/01-online';
+    navigate(nextRoute);
   };
 
   const handleCorkCancel = async () => {
@@ -564,11 +572,35 @@ export default function App() {
       {/* Game screen (requires auth) */}
       <Route path="/game-preview" element={
         !isAuthenticated ? <Navigate to={`/login${queryString}`} /> :
-        <GameScreen onLeaveMatch={handleLeaveMatch} />
+        <O1InhouseGameScreen onLeaveMatch={handleLeaveMatch} />
       } />
 
       {/* Production games - no auth for testing */}
-      <Route path="/game/01" element={<GameScreen onLeaveMatch={() => window.location.href = '/dashboard'} />} />
+      <Route path="/game/01-inhouse" element={<O1InhouseGameScreen onLeaveMatch={() => window.location.href = '/dashboard'} />} />
+      <Route path="/game/01-online" element={
+        !isAuthenticated ? <Navigate to={`/login${queryString}`} /> :
+        !activeGame ? <Navigate to={`/dashboard${queryString}`} /> :
+        <O1OnlineGameScreen
+          gameId={activeGame.gameId}
+          localPlayer={{
+            id: userId,
+            name: userName,
+            profilePic: profilePic || undefined,
+            accentColor: accentColor,
+          }}
+          remotePlayer={{
+            id: activeGame.opponentId,
+            name: activeGame.opponentName,
+            profilePic: activeGame.opponentProfilePic,
+            accentColor: activeGame.opponentAccentColor,
+          }}
+          isInitiator={activeGame.isInitiator}
+          gameConfig={activeGame.gameConfig}
+          onLeaveMatch={handleLeaveMatch}
+          matchGames={activeGame.gameConfig?.games}
+        />
+      } />
+      <Route path="/game/cricket-inhouse" element={<CRInhouseGameScreen onLeaveMatch={() => window.location.href = '/dashboard'} />} />
 
       {/* Cricket online game */}
       <Route path="/game/cricket" element={
