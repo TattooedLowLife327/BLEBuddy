@@ -22,6 +22,7 @@ export interface GameData {
   isInitiator: boolean;
   gameType?: string | null;
   gameConfig?: GameConfiguration | null;
+  corkWinnerId?: string | null;
 }
 
 export interface PendingRejoinGame {
@@ -31,6 +32,7 @@ export interface PendingRejoinGame {
   isInitiator: boolean;
   gameType?: string | null;
   gameConfig?: GameConfiguration | null;
+  corkWinnerId?: string | null;
 }
 
 interface GameContextType {

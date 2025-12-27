@@ -1,8 +1,196 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { useBLE } from '../contexts/BLEContext';
-import { isDevMode } from '../utils/devMode';
-import { getCheckoutSuggestion } from '../utils/checkoutSolver';
-import type { DartThrowData } from '../utils/ble/bleConnection';
+import { useState, useCallback, useEffect } from 'react';
+import { getCheckoutSuggestion } from '../../utils/checkoutSolver';
+
+// Dart Simulator Panel for demo/preview mode
+function DartSimulator({
+  onThrow,
+  disabled,
+  splitBull,
+}: {
+  onThrow: (segment: string, score: number, multiplier: number) => void;
+  disabled: boolean;
+  splitBull: boolean;
+}) {
+  const [multiplierMode, setMultiplierMode] = useState<'single' | 'double' | 'triple'>('single');
+  const [expanded, setExpanded] = useState(true);
+
+  const handleNumberClick = (num: number) => {
+    if (disabled) return;
+    const mult = multiplierMode === 'triple' ? 3 : multiplierMode === 'double' ? 2 : 1;
+    const prefix = multiplierMode === 'triple' ? 'T' : multiplierMode === 'double' ? 'D' : 'S';
+    onThrow(`${prefix}${num}`, num * mult, mult);
+  };
+
+  const handleBullClick = (isDouble: boolean) => {
+    if (disabled) return;
+    if (!splitBull) {
+      onThrow('D25', 50, 2);
+      return;
+    }
+    if (isDouble) {
+      onThrow('D25', 50, 2);
+    } else {
+      onThrow('S25', 25, 1);
+    }
+  };
+
+  const handleMissClick = () => {
+    if (disabled) return;
+    onThrow('MISS', 0, 0);
+  };
+
+  // Dartboard number order (clockwise starting from 20 at top)
+  const dartboardOrder = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: '80px',
+      right: '20px',
+      width: '320px',
+      maxWidth: '44vw',
+      background: 'rgba(0, 0, 0, 0.9)',
+      backdropFilter: 'blur(12px)',
+      borderRadius: '12px',
+      border: '1px solid rgba(255, 255, 255, 0.2)',
+      padding: '36px 12px 12px',
+      zIndex: 500,
+      maxHeight: expanded ? '440px' : '40px',
+      overflow: 'hidden',
+      transition: 'max-height 0.3s ease-out',
+    }}>
+      {/* Toggle handle */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        style={{
+          position: 'absolute',
+          top: '6px',
+          right: '8px',
+          background: 'rgba(0, 0, 0, 0.6)',
+          border: '1px solid rgba(255, 255, 255, 0.2)',
+          borderRadius: '6px',
+          padding: '4px 10px',
+          color: '#fff',
+          fontSize: '12px',
+          cursor: 'pointer',
+          fontFamily: "'Helvetica Condensed', sans-serif",
+        }}
+      >
+        {expanded ? 'Hide' : 'Show'}
+      </button>
+
+      {/* Multiplier selector */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', justifyContent: 'center' }}>
+        {(['single', 'double', 'triple'] as const).map((mode) => (
+          <button
+            key={mode}
+            onClick={() => setMultiplierMode(mode)}
+            disabled={disabled}
+            style={{
+              padding: '6px 16px',
+              background: multiplierMode === mode ? (mode === 'triple' ? '#FF4444' : mode === 'double' ? '#44FF44' : '#6600FF') : 'rgba(255, 255, 255, 0.1)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: disabled ? 'not-allowed' : 'pointer',
+              fontFamily: "'Helvetica Condensed', sans-serif",
+              fontSize: '14px',
+              fontWeight: 600,
+              opacity: disabled ? 0.5 : 1,
+              textTransform: 'uppercase',
+            }}
+          >
+            {mode === 'single' ? 'Single (S)' : mode === 'double' ? 'Double (D)' : 'Triple (T)'}
+          </button>
+        ))}
+      </div>
+
+      {/* Number grid - dartboard order */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', justifyContent: 'center', marginBottom: '12px' }}>
+        {dartboardOrder.map((num) => (
+          <button
+            key={num}
+            onClick={() => handleNumberClick(num)}
+            disabled={disabled}
+            style={{
+              width: '44px',
+              height: '36px',
+              background: 'rgba(255, 255, 255, 0.1)',
+              color: '#fff',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              borderRadius: '4px',
+              cursor: disabled ? 'not-allowed' : 'pointer',
+              fontFamily: "'Helvetica Condensed', sans-serif",
+              fontSize: '16px',
+              fontWeight: 600,
+              opacity: disabled ? 0.5 : 1,
+            }}
+          >
+            {num}
+          </button>
+        ))}
+      </div>
+
+      {/* Bull and Miss buttons */}
+      <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+        <button
+          onClick={() => handleBullClick(false)}
+          disabled={disabled}
+          style={{
+            padding: '8px 20px',
+            background: '#228B22',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: disabled ? 'not-allowed' : 'pointer',
+            fontFamily: "'Helvetica Condensed', sans-serif",
+            fontSize: '14px',
+            fontWeight: 600,
+            opacity: disabled ? 0.5 : 1,
+          }}
+        >
+          BULL (25)
+        </button>
+        <button
+          onClick={() => handleBullClick(true)}
+          disabled={disabled}
+          style={{
+            padding: '8px 20px',
+            background: '#FF4444',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: disabled ? 'not-allowed' : 'pointer',
+            fontFamily: "'Helvetica Condensed', sans-serif",
+            fontSize: '14px',
+            fontWeight: 600,
+            opacity: disabled ? 0.5 : 1,
+          }}
+        >
+          D-BULL (50)
+        </button>
+        <button
+          onClick={handleMissClick}
+          disabled={disabled}
+          style={{
+            padding: '8px 20px',
+            background: 'rgba(100, 100, 100, 0.5)',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: disabled ? 'not-allowed' : 'pointer',
+            fontFamily: "'Helvetica Condensed', sans-serif",
+            fontSize: '14px',
+            fontWeight: 600,
+            opacity: disabled ? 0.5 : 1,
+          }}
+        >
+          MISS
+        </button>
+      </div>
+    </div>
+  );
+}
 
 interface DartThrow {
   segment: string;
@@ -75,6 +263,14 @@ const PLAYERS = {
 const ROUND_WORDS = ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE', 'TEN',
   'ELEVEN', 'TWELVE', 'THIRTEEN', 'FOURTEEN', 'FIFTEEN', 'SIXTEEN', 'SEVENTEEN', 'EIGHTEEN', 'NINETEEN', 'TWENTY'];
 
+// Game type abbreviations for match format display
+const GAME_ABBREV: Record<string, string> = {
+  '501': '01',
+  '301': '01',
+  'cricket': 'CR',
+  'choice': 'CH', // Winner of cork picks the game type
+};
+
 // Achievement display names
 const ACHIEVEMENT_LABELS: Record<Exclude<AchievementType, null>, string> = {
   win: 'GAME!',
@@ -90,7 +286,6 @@ const ACHIEVEMENT_LABELS: Record<Exclude<AchievementType, null>, string> = {
 };
 
 
-// Checkout suggestions for 01 games (Double Out)
 // Checkout suggestions are handled by the dynamic solver.
 
 // Checkout table kept for reference; runtime uses dynamic solver.
@@ -251,37 +446,14 @@ const goodLuckKeyframes = `
 }
 `;
 
-interface GameScreenProps {
+interface O1GSPreviewProps {
   onLeaveMatch?: () => void;
-  backgroundImage?: string;
-  gameType?: string;
-  startingPlayer?: 'p1' | 'p2';
-  onGameComplete?: (winner: 'p1' | 'p2') => void;
 }
 
-export function O1InhouseGameScreen({
-  onLeaveMatch,
-  backgroundImage = '/assets/gamescreenbackground.png',
-  gameType,
-  startingPlayer,
-  onGameComplete,
-}: GameScreenProps) {
-  // BLE integration
-  const { lastThrow, isConnected, simulateThrow: bleSimulateThrow } = useBLE();
-  const devMode = isDevMode();
-  const lastProcessedThrowRef = useRef<string | null>(null);
-
-  const resolvedGameType = useMemo(() => {
-    const raw = gameType || '501';
-    const normalized = typeof raw === 'string' ? raw.toUpperCase() : '501';
-    return normalized === '301' ? '301' : '501';
-  }, [gameType]);
-
-  const startScore = resolvedGameType === '301' ? 301 : 501;
-
-  const [p1Score, setP1Score] = useState(startScore);
-  const [p2Score, setP2Score] = useState(startScore);
-  const [currentThrower, setCurrentThrower] = useState<'p1' | 'p2'>(() => startingPlayer || 'p1');
+export function O1GSPreview({ onLeaveMatch }: O1GSPreviewProps) {
+  const [p1Score, setP1Score] = useState(301);
+  const [p2Score, setP2Score] = useState(301);
+  const [currentThrower, setCurrentThrower] = useState<'p1' | 'p2'>('p1');
   const [currentDarts, setCurrentDarts] = useState<DartThrow[]>([]);
   const [roundScore, setRoundScore] = useState(0);
   const [showPlayerChange, setShowPlayerChange] = useState(false);
@@ -299,6 +471,32 @@ export function O1InhouseGameScreen({
   const [gameWinner, setGameWinner] = useState<'p1' | 'p2' | null>(null);
   const [showWinnerScreen, setShowWinnerScreen] = useState(false);
 
+  // Request fullscreen on mobile/tablet
+  useEffect(() => {
+    const requestFullscreen = async () => {
+      try {
+        if (document.documentElement.requestFullscreen) {
+          await document.documentElement.requestFullscreen();
+        } else if ((document.documentElement as any).webkitRequestFullscreen) {
+          await (document.documentElement as any).webkitRequestFullscreen();
+        }
+      } catch (err) {
+        console.log('Fullscreen not available');
+      }
+    };
+    requestFullscreen();
+
+    return () => {
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+    };
+  }, []);
+
+  // Medley match tracking
+  const [matchGameWinners, setMatchGameWinners] = useState<('p1' | 'p2')[]>([]); // Winners of each game in match
+  const [currentGameIndex, setCurrentGameIndex] = useState(0); // Which game we're on (0-indexed)
+
   // 80% Stat Tracking
   // For 01: PPR = (startScore - currentScore) / dartsThrown
   // For Cricket: MPR = totalMarks / rounds
@@ -312,6 +510,10 @@ export function O1InhouseGameScreen({
   const [p1HasStarted, setP1HasStarted] = useState(false);
   const [p2HasStarted, setP2HasStarted] = useState(false);
 
+  // Match format: array of game types
+  // Example: ['501', 'cricket', 'choice'] for a best-of-3
+  const [matchGames] = useState<string[]>(['501']); // Single game preview
+
   // Game settings: Separate IN and OUT modes (any combo allowed)
   // Open = any dart, Master = double/triple/any bull, Double = outer double or D25 only
   const [inMode] = useState<'open' | 'master' | 'double'>('open'); // Demo: Open In
@@ -320,13 +522,19 @@ export function O1InhouseGameScreen({
 
   const currentScore = currentThrower === 'p1' ? p1Score : p2Score;
 
-  const isOhOneGame = true;
-  const isCricketGame = false;
+  // Get current game type from match
+  const currentGameType = matchGames[currentGameIndex] || '501';
+  const isOhOneGame = ['501', '301'].includes(currentGameType);
+  const isCricketGame = currentGameType === 'cricket';
+  const isChoiceGame = currentGameType === 'choice';
+
+  // Starting score for 01 games (used for PPR calculation)
+  const startScore = currentGameType === '501' ? 501 : 301;
 
   // 80% threshold: points remaining when stats should freeze
   // 301: <=50 remaining (scored >=251)
   // 501: <=100 remaining (scored >=401)
-  const eightyPercentThreshold = startScore === 501 ? 100 : 50;
+  const eightyPercentThreshold = currentGameType === '501' ? 100 : 50;
 
   // Calculate live PPR for each player (Points Per Round = points scored / darts thrown * 3)
   // PPR = (startScore - currentScore) / dartsThrown * 3
@@ -336,6 +544,80 @@ export function O1InhouseGameScreen({
   // Display PPR: use frozen value if 80% triggered, otherwise live
   const p1DisplayPPR = eightyPercentTriggered && p1FrozenPPR !== null ? p1FrozenPPR : p1LivePPR;
   const p2DisplayPPR = eightyPercentTriggered && p2FrozenPPR !== null ? p2FrozenPPR : p2LivePPR;
+
+  // Medley match logic
+  const isMedley = matchGames.length > 1;
+  const p1MatchWins = matchGameWinners.filter(w => w === 'p1').length;
+  const p2MatchWins = matchGameWinners.filter(w => w === 'p2').length;
+  const gamesNeededToWin = Math.ceil(matchGames.length / 2);
+  const matchWinner = p1MatchWins >= gamesNeededToWin ? 'p1' : p2MatchWins >= gamesNeededToWin ? 'p2' : null;
+  const isTiebreakerGame = currentGameIndex === matchGames.length - 1 && p1MatchWins === p2MatchWins && p1MatchWins > 0;
+
+  // Determine who should throw first for next game
+  // - First game: Cork
+  // - Middle games: Loser of previous game goes first
+  // - Last game (tiebreaker): Cork
+  const getNextGameStarter = (): 'p1' | 'p2' | 'cork' => {
+    const nextGameIndex = currentGameIndex + 1;
+
+    // First game - cork to start
+    if (nextGameIndex === 0) {
+      return 'cork';
+    }
+
+    // Last game (tiebreaker) - cork again
+    if (nextGameIndex === matchGames.length - 1) {
+      // Only cork if it's actually a tiebreaker (scores are tied going in)
+      const p1WinsAfterThis = p1MatchWins + (gameWinner === 'p1' ? 1 : 0);
+      const p2WinsAfterThis = p2MatchWins + (gameWinner === 'p2' ? 1 : 0);
+      if (p1WinsAfterThis === p2WinsAfterThis) {
+        return 'cork';
+      }
+    }
+
+    // Middle games - loser of previous game goes first
+    if (gameWinner) return gameWinner === 'p1' ? 'p2' : 'p1';
+
+    // Fallback to loser of last recorded game
+    const lastWinner = matchGameWinners[matchGameWinners.length - 1];
+    if (lastWinner) return lastWinner === 'p1' ? 'p2' : 'p1';
+
+    return 'cork'; // fallback to cork if unsure
+  };
+
+  // Start the next game in medley
+  const startNextGame = useCallback((firstThrower: 'p1' | 'p2') => {
+    // Record current game winner
+    if (gameWinner) {
+      setMatchGameWinners(prev => [...prev, gameWinner]);
+    }
+
+    // Reset game state
+    setShowWinnerScreen(false);
+    setGameWinner(null);
+    setP1Score(301);
+    setP2Score(301);
+    setCurrentDarts([]);
+    setRoundScore(0);
+    setCurrentRound(1);
+    setP1ThrewThisRound(false);
+    setP2ThrewThisRound(false);
+    setP1HasStarted(false);
+    setP2HasStarted(false);
+    setDartHistory([]);
+    setUndosRemaining(3);
+    setCurrentThrower(firstThrower);
+    setCurrentGameIndex(prev => prev + 1);
+    setShowGoodLuck(true);
+    setIntroComplete(false);
+
+    // Reset 80% stat tracking for new game
+    setP1DartsThrown(0);
+    setP2DartsThrown(0);
+    setEightyPercentTriggered(false);
+    setP1FrozenPPR(null);
+    setP2FrozenPPR(null);
+  }, [gameWinner]);
 
   // Detect achievements based on the 3 darts thrown
   // Priority: win > ton80 > threeInBlack > shanghai > whiteHorse > hatTrick > threeInBed > highTon > lowTon > bust
@@ -624,24 +906,6 @@ export function O1InhouseGameScreen({
     if (newDarts.length === 3) setShowPlayerChange(true);
   }, [currentDarts, currentScore, currentThrower, roundScore, showPlayerChange, introComplete, p1Score, p2Score, p1HasStarted, p2HasStarted, inMode, outMode, detectAchievement, triggerAchievement]);
 
-  // Handle BLE throws
-  useEffect(() => {
-    if (!lastThrow) return;
-    if (lastThrow.timestamp === lastProcessedThrowRef.current) return;
-    lastProcessedThrowRef.current = lastThrow.timestamp;
-
-    let segment = lastThrow.segment;
-    if (lastThrow.segmentType === 'BULL') segment = 'S25';
-    else if (lastThrow.segmentType === 'DBL_BULL') segment = 'D25';
-
-    throwDart(segment, lastThrow.score, lastThrow.multiplier);
-  }, [lastThrow, throwDart]);
-
-  const handleDevSimulateThrow = useCallback(() => {
-    if (!devMode) return;
-    bleSimulateThrow();
-  }, [devMode, bleSimulateThrow]);
-
   const formatDart = (segment: string) => {
     if (segment === 'MISS') return 'MISS';
     if (segment === 'S25') return 'BULL';
@@ -659,6 +923,7 @@ export function O1InhouseGameScreen({
   const [prevThrower, setPrevThrower] = useState<'p1' | 'p2' | null>(null);
   const [turnKey, setTurnKey] = useState(0);
   const [hasHadTurnSwitch, setHasHadTurnSwitch] = useState(false);
+  const allowP2Highlight = hasHadTurnSwitch;
 
   // Track turn changes - only set prevThrower after actual turn switch (not on initial intro)
   useEffect(() => {
@@ -703,11 +968,11 @@ export function O1InhouseGameScreen({
       {/* Inject keyframes */}
       <style>{goodLuckKeyframes}</style>
 
-      {/* BACKGROUND IMAGE (instead of split-screen video) */}
+      {/* Background */}
       <div style={{
         position: 'absolute',
         inset: 0,
-        backgroundImage: backgroundImage ? `url(${backgroundImage})` : 'none',
+        backgroundImage: 'url(/assets/gamescreenbackground.png)',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
       }} />
@@ -771,6 +1036,32 @@ export function O1InhouseGameScreen({
             </>
           ) : (
             <>
+              {/* Game types row (medley only) */}
+              {isMedley && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: `calc(8 * ${scale})` }}>
+                  {matchGames.map((game, index) => (
+                    <span key={index} style={{ display: 'flex', alignItems: 'center' }}>
+                      {index > 0 && (
+                        <span style={{
+                          color: 'rgba(255, 255, 255, 0.3)',
+                          fontFamily: FONT_NAME,
+                          fontSize: `calc(24 * ${scale})`,
+                          marginRight: `calc(8 * ${scale})`,
+                        }}>|</span>
+                      )}
+                      <span style={{
+                        fontFamily: FONT_NAME,
+                        fontWeight: index === currentGameIndex ? 700 : 400,
+                        fontSize: `calc(24 * ${scale})`,
+                        color: index === currentGameIndex ? '#FFFFFF' : 'rgba(255, 255, 255, 0.4)',
+                        textShadow: index === currentGameIndex ? '-2px 2px 4px rgba(0, 0, 0, 0.5)' : 'none',
+                      }}>
+                        {GAME_ABBREV[game] || game.toUpperCase()}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              )}
               {/* Settings row - abbreviated format, hide opens and fat bull */}
               {/* Combine in/out modes: MiMo, DiDo, MiDo, DiMo, or single Mi/Mo/Di/Do */}
               <div style={{
@@ -793,7 +1084,7 @@ export function O1InhouseGameScreen({
       <div style={{
         position: 'absolute',
         left: '50%',
-        top: '50%',
+        top: '40%',
         transform: 'translate(-50%, -50%)',
         fontFamily: FONT_SCORE,
         fontWeight: 300,
@@ -1070,7 +1361,7 @@ export function O1InhouseGameScreen({
           background: greyGradient,
         }} />
         {/* Dart progress border - top edge, 1/3 per dart when active, swipes down on exit */}
-        {introComplete && p2Active && (
+        {introComplete && allowP2Highlight && p2Active && (
           <div style={{
             position: 'absolute',
             top: 0,
@@ -1082,7 +1373,7 @@ export function O1InhouseGameScreen({
             zIndex: 5,
           }} />
         )}
-        {introComplete && p2Exiting && (
+        {introComplete && allowP2Highlight && p2Exiting && (
           <div key={`p2-progress-exit-${turnKey}`} style={{
             position: 'absolute',
             top: 0,
@@ -1095,7 +1386,7 @@ export function O1InhouseGameScreen({
           }} />
         )}
         {/* Colored layer - swipes up when active, swipes down when exiting */}
-        {introComplete && (p2Active || p2Exiting) && (
+        {introComplete && allowP2Highlight && (p2Active || p2Exiting) && (
           <div key={`p2-bar-${turnKey}`} style={{
             position: 'absolute',
             inset: 0,
@@ -1164,7 +1455,7 @@ export function O1InhouseGameScreen({
           zIndex: 1,
         }} />
         {/* Avatar - colored overlay */}
-        {introComplete && (p2Active || p2Exiting) && (
+        {introComplete && allowP2Highlight && (p2Active || p2Exiting) && (
           <div key={`p2-avatar-${turnKey}`} style={{
             position: 'absolute',
             width: `calc(${FIGMA.avatar} * ${scale})`,
@@ -1219,31 +1510,6 @@ export function O1InhouseGameScreen({
             overflow: 'hidden',
             minWidth: `calc(160 * ${scale})`,
           }}>
-            {/* Dev Mode Simulate Throw */}
-            {devMode && (
-              <button
-                onClick={() => {
-                  handleDevSimulateThrow();
-                  setMenuOpen(false);
-                }}
-                style={{
-                  width: '100%',
-                  padding: `calc(14 * ${scale}) calc(20 * ${scale})`,
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#FFA500',
-                  fontFamily: FONT_NAME,
-                  fontSize: `calc(18 * ${scale})`,
-                  fontWeight: 500,
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 165, 0, 0.1)'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-              >
-                🎯 Simulate Throw
-              </button>
-            )}
             {/* Undo Dart */}
             <button
               onClick={() => {
@@ -1256,7 +1522,6 @@ export function O1InhouseGameScreen({
                 padding: `calc(14 * ${scale}) calc(20 * ${scale})`,
                 background: 'transparent',
                 border: 'none',
-                borderTop: devMode ? '1px solid rgba(255, 255, 255, 0.1)' : 'none',
                 color: (dartHistory.length === 0 || undosRemaining <= 0) ? '#555' : '#FFFFFF',
                 fontFamily: FONT_NAME,
                 fontSize: `calc(18 * ${scale})`,
@@ -1356,7 +1621,22 @@ export function O1InhouseGameScreen({
             background: `radial-gradient(circle at center, ${PLAYERS[gameWinner].profilecolor}40 0%, transparent 60%)`,
           }} />
 
-          {/* WINNER label */}
+          {/* Match score for medley */}
+          {isMedley && (
+            <div style={{
+              fontFamily: FONT_NAME,
+              fontSize: `calc(24 * ${scale})`,
+              color: 'rgba(255, 255, 255, 0.5)',
+              marginBottom: `calc(10 * ${scale})`,
+              animation: 'winnerNameSlide 0.6s ease-out forwards',
+              animationDelay: '0.1s',
+              opacity: 0,
+            }}>
+              Game {currentGameIndex + 1} of {matchGames.length} | Match: {p1MatchWins + (gameWinner === 'p1' ? 1 : 0)} - {p2MatchWins + (gameWinner === 'p2' ? 1 : 0)}
+            </div>
+          )}
+
+          {/* WINNER label - changes for match winner */}
           <div style={{
             fontFamily: FONT_SCORE,
             fontWeight: 300,
@@ -1369,7 +1649,7 @@ export function O1InhouseGameScreen({
             animationDelay: '0.2s',
             opacity: 0,
           }}>
-            GAME WINNER
+            {matchWinner || (p1MatchWins + (gameWinner === 'p1' ? 1 : 0) >= gamesNeededToWin || p2MatchWins + (gameWinner === 'p2' ? 1 : 0) >= gamesNeededToWin) ? 'MATCH WINNER' : 'GAME WINNER'}
           </div>
 
           {/* Winner name */}
@@ -1409,95 +1689,122 @@ export function O1InhouseGameScreen({
             animationDelay: '0.8s',
             opacity: 0,
           }}>
-            {onGameComplete ? (
-              <button
-                onClick={() => {
-                  setShowWinnerScreen(false);
-                  setGameWinner(null);
-                  onGameComplete(gameWinner);
-                }}
-                style={{
-                  padding: `calc(16 * ${scale}) calc(48 * ${scale})`,
-                  fontFamily: FONT_NAME,
-                  fontSize: `calc(24 * ${scale})`,
-                  fontWeight: 500,
-                  color: '#FFFFFF',
-                  background: PLAYERS[gameWinner].profilecolor,
-                  border: 'none',
-                  borderRadius: `calc(12 * ${scale})`,
-                  cursor: 'pointer',
-                  boxShadow: `0 0 30px ${PLAYERS[gameWinner].profilecolor}80`,
-                }}
-              >
-                Continue
-              </button>
-            ) : (
-              <>
-                <button
-                  onClick={() => {
-                    setShowWinnerScreen(false);
-                    setGameWinner(null);
-                    setP1Score(startScore);
-                    setP2Score(startScore);
-                    setCurrentDarts([]);
-                    setRoundScore(0);
-                    setCurrentRound(1);
-                    setP1ThrewThisRound(false);
-                    setP2ThrewThisRound(false);
-                    setP1HasStarted(false);
-                    setP2HasStarted(false);
-                    setDartHistory([]);
-                    setUndosRemaining(3);
-                    setCurrentThrower(startingPlayer || 'p1');
-                    setShowGoodLuck(true);
-                    setIntroComplete(false);
-                    setP1DartsThrown(0);
-                    setP2DartsThrown(0);
-                    setEightyPercentTriggered(false);
-                    setP1FrozenPPR(null);
-                    setP2FrozenPPR(null);
-                  }}
-                  style={{
-                    padding: `calc(16 * ${scale}) calc(48 * ${scale})`,
-                    fontFamily: FONT_NAME,
-                    fontSize: `calc(24 * ${scale})`,
-                    fontWeight: 500,
-                    color: '#FFFFFF',
-                    background: PLAYERS[gameWinner].profilecolor,
-                    border: 'none',
-                    borderRadius: `calc(12 * ${scale})`,
-                    cursor: 'pointer',
-                    boxShadow: `0 0 30px ${PLAYERS[gameWinner].profilecolor}80`,
-                  }}
-                >
-                  Rematch
-                </button>
-                <button
-                  onClick={() => {
-                    setShowWinnerScreen(false);
-                    setGameWinner(null);
-                  }}
-                  style={{
-                    padding: `calc(16 * ${scale}) calc(48 * ${scale})`,
-                    fontFamily: FONT_NAME,
-                    fontSize: `calc(24 * ${scale})`,
-                    fontWeight: 500,
-                    color: 'rgba(255, 255, 255, 0.7)',
-                    background: 'transparent',
-                    border: `2px solid rgba(255, 255, 255, 0.3)`,
-                    borderRadius: `calc(12 * ${scale})`,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Exit to Lobby
-                </button>
-              </>
-            )}
+            {/* Next Game / Rematch button */}
+            {(() => {
+              // Check if this win would complete the match
+              const wouldCompleteMatch =
+                (gameWinner === 'p1' && p1MatchWins + 1 >= gamesNeededToWin) ||
+                (gameWinner === 'p2' && p2MatchWins + 1 >= gamesNeededToWin);
+
+              if (isMedley && !wouldCompleteMatch && currentGameIndex < matchGames.length - 1) {
+                // Still have games to play - show Next Game
+                const nextStarter = getNextGameStarter();
+
+                return (
+                  <button
+                    onClick={() => {
+                      // Direct transition - loser goes first (cork handled externally by CorkScreen component)
+                      startNextGame(nextStarter === 'cork' ? 'p1' : nextStarter as 'p1' | 'p2');
+                    }}
+                    style={{
+                      padding: `calc(16 * ${scale}) calc(48 * ${scale})`,
+                      fontFamily: FONT_NAME,
+                      fontSize: `calc(24 * ${scale})`,
+                      fontWeight: 500,
+                      color: '#FFFFFF',
+                      background: PLAYERS[gameWinner].profilecolor,
+                      border: 'none',
+                      borderRadius: `calc(12 * ${scale})`,
+                      cursor: 'pointer',
+                      boxShadow: `0 0 30px ${PLAYERS[gameWinner].profilecolor}80`,
+                    }}
+                  >
+                    Next Game
+                  </button>
+                );
+              } else {
+                // Match complete or single game - show Rematch
+                return (
+                  <button
+                    onClick={() => {
+                      // Reset everything for full rematch
+                      setShowWinnerScreen(false);
+                      setGameWinner(null);
+                      setMatchGameWinners([]);
+                      setCurrentGameIndex(0);
+                      setP1Score(301);
+                      setP2Score(301);
+                      setCurrentDarts([]);
+                      setRoundScore(0);
+                      setCurrentRound(1);
+                      setP1ThrewThisRound(false);
+                      setP2ThrewThisRound(false);
+                      setP1HasStarted(false);
+                      setP2HasStarted(false);
+                      setDartHistory([]);
+                      setUndosRemaining(3);
+                      setCurrentThrower('p1');
+                      setShowGoodLuck(true);
+                      setIntroComplete(false);
+                      // Reset 80% stat tracking
+                      setP1DartsThrown(0);
+                      setP2DartsThrown(0);
+                      setEightyPercentTriggered(false);
+                      setP1FrozenPPR(null);
+                      setP2FrozenPPR(null);
+                    }}
+                    style={{
+                      padding: `calc(16 * ${scale}) calc(48 * ${scale})`,
+                      fontFamily: FONT_NAME,
+                      fontSize: `calc(24 * ${scale})`,
+                      fontWeight: 500,
+                      color: '#FFFFFF',
+                      background: PLAYERS[gameWinner].profilecolor,
+                      border: 'none',
+                      borderRadius: `calc(12 * ${scale})`,
+                      cursor: 'pointer',
+                      boxShadow: `0 0 30px ${PLAYERS[gameWinner].profilecolor}80`,
+                    }}
+                  >
+                    Rematch
+                  </button>
+                );
+              }
+            })()}
+
+            {/* Exit to Lobby button */}
+            <button
+              onClick={() => {
+                setShowWinnerScreen(false);
+                setGameWinner(null);
+                console.log('Exit to lobby clicked');
+              }}
+              style={{
+                padding: `calc(16 * ${scale}) calc(48 * ${scale})`,
+                fontFamily: FONT_NAME,
+                fontSize: `calc(24 * ${scale})`,
+                fontWeight: 500,
+                color: 'rgba(255, 255, 255, 0.7)',
+                background: 'transparent',
+                border: `2px solid rgba(255, 255, 255, 0.3)`,
+                borderRadius: `calc(12 * ${scale})`,
+                cursor: 'pointer',
+              }}
+            >
+              Exit to Lobby
+            </button>
           </div>
         </div>
       )}
+
+      {/* Dart Simulator Panel - for demo/preview mode */}
+      <DartSimulator
+        onThrow={throwDart}
+        disabled={showPlayerChange || !introComplete || showWinnerScreen || !!activeAnimation}
+        splitBull={splitBull}
+      />
     </div>
   );
 }
 
-export default O1InhouseGameScreen;
+export default O1GSPreview;

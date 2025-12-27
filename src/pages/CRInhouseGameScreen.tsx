@@ -30,6 +30,8 @@ type AchievementType =
 interface CRInhouseGameScreenProps {
   onLeaveMatch: () => void;
   backgroundImage?: string;
+  startingPlayer?: 'p1' | 'p2';
+  onGameComplete?: (winner: 'p1' | 'p2') => void;
 }
 
 const PLAYERS = {
@@ -137,7 +139,12 @@ const goodLuckKeyframes = `
 }
 `;
 
-export function CRInhouseGameScreen({ onLeaveMatch, backgroundImage = '/assets/gamescreenbackground.png' }: CRInhouseGameScreenProps) {
+export function CRInhouseGameScreen({
+  onLeaveMatch,
+  backgroundImage = '/assets/gamescreenbackground.png',
+  startingPlayer,
+  onGameComplete,
+}: CRInhouseGameScreenProps) {
   // BLE for throw detection
   const { lastThrow, isConnected: bleConnected, connect: bleConnect, disconnect: bleDisconnect, status: bleStatus } = useBLE();
   const lastProcessedThrowRef = useRef<string | null>(null);
@@ -151,7 +158,7 @@ export function CRInhouseGameScreen({ onLeaveMatch, backgroundImage = '/assets/g
   const [p2Score, setP2Score] = useState(0);
 
   // Game flow state
-  const [currentThrower, setCurrentThrower] = useState<'p1' | 'p2'>('p1');
+  const [currentThrower, setCurrentThrower] = useState<'p1' | 'p2'>(() => startingPlayer || 'p1');
   const [currentDarts, setCurrentDarts] = useState<DartThrow[]>([]);
   const [showPlayerChange, setShowPlayerChange] = useState(false);
   const [introComplete, setIntroComplete] = useState(false);
@@ -923,17 +930,36 @@ export function CRInhouseGameScreen({ onLeaveMatch, backgroundImage = '/assets/g
             display: 'flex', gap: `calc(20 * ${scale})`, marginTop: `calc(60 * ${scale})`,
             animation: 'winnerNameSlide 0.6s ease-out forwards', animationDelay: '0.8s', opacity: 0,
           }}>
-            <button
-              onClick={onLeaveMatch}
-              style={{
-                padding: `calc(16 * ${scale}) calc(48 * ${scale})`,
-                fontFamily: FONT_NAME, fontSize: `calc(24 * ${scale})`, fontWeight: 500,
-                color: 'rgba(255, 255, 255, 0.7)', background: 'transparent',
-                border: '2px solid rgba(255, 255, 255, 0.3)', borderRadius: `calc(12 * ${scale})`, cursor: 'pointer',
-              }}
-            >
-              Exit to Lobby
-            </button>
+            {onGameComplete ? (
+              <button
+                onClick={() => {
+                  setShowWinnerScreen(false);
+                  setGameWinner(null);
+                  onGameComplete(gameWinner);
+                }}
+                style={{
+                  padding: `calc(16 * ${scale}) calc(48 * ${scale})`,
+                  fontFamily: FONT_NAME, fontSize: `calc(24 * ${scale})`, fontWeight: 500,
+                  color: '#FFFFFF', background: PLAYERS[gameWinner].profilecolor,
+                  border: 'none', borderRadius: `calc(12 * ${scale})`, cursor: 'pointer',
+                  boxShadow: `0 0 30px ${PLAYERS[gameWinner].profilecolor}80`,
+                }}
+              >
+                Continue
+              </button>
+            ) : (
+              <button
+                onClick={onLeaveMatch}
+                style={{
+                  padding: `calc(16 * ${scale}) calc(48 * ${scale})`,
+                  fontFamily: FONT_NAME, fontSize: `calc(24 * ${scale})`, fontWeight: 500,
+                  color: 'rgba(255, 255, 255, 0.7)', background: 'transparent',
+                  border: '2px solid rgba(255, 255, 255, 0.3)', borderRadius: `calc(12 * ${scale})`, cursor: 'pointer',
+                }}
+              >
+                Exit to Lobby
+              </button>
+            )}
           </div>
         </div>
       )}

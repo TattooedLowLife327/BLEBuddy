@@ -84,14 +84,6 @@ const PLAYERS = {
 const ROUND_WORDS = ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE', 'TEN',
   'ELEVEN', 'TWELVE', 'THIRTEEN', 'FOURTEEN', 'FIFTEEN', 'SIXTEEN', 'SEVENTEEN', 'EIGHTEEN', 'NINETEEN', 'TWENTY'];
 
-// Game type abbreviations for match format display
-const GAME_ABBREV: Record<string, string> = {
-  '501': '01',
-  '301': '01',
-  'cricket': 'CR',
-  'choice': 'CH', // Winner of cork picks the game type
-};
-
 // Achievement display names
 const ACHIEVEMENT_LABELS: Record<Exclude<AchievementType, null>, string> = {
   win: 'GAME!',
@@ -275,7 +267,9 @@ interface GameScreenProps {
   isInitiator: boolean;
   gameConfig?: GameConfiguration | null;
   onLeaveMatch?: () => void;
-  matchGames?: string[];
+  gameType?: string;
+  startingPlayer?: 'p1' | 'p2';
+  onGameComplete?: (winner: 'p1' | 'p2') => void;
 }
 
 export function O1OnlineGameScreen({
@@ -285,7 +279,9 @@ export function O1OnlineGameScreen({
   isInitiator,
   gameConfig,
   onLeaveMatch,
-  matchGames: matchGamesProp,
+  gameType,
+  startingPlayer,
+  onGameComplete,
 }: GameScreenProps) {
   // BLE integration
   const { lastThrow, isConnected, simulateThrow: bleSimulateThrow } = useBLE();
@@ -305,9 +301,17 @@ export function O1OnlineGameScreen({
 
   const { localStream, remoteStream, initialize: webrtcInit, disconnect: webrtcDisconnect } = useWebRTC(webRTCOptions);
 
-  const [p1Score, setP1Score] = useState(301);
-  const [p2Score, setP2Score] = useState(301);
-  const [currentThrower, setCurrentThrower] = useState<'p1' | 'p2'>('p1');
+  const resolvedGameType = useMemo(() => {
+    const raw = gameType || gameConfig?.games?.find(entry => entry) || '501';
+    const normalized = typeof raw === 'string' ? raw.toUpperCase() : '501';
+    return normalized === '301' ? '301' : '501';
+  }, [gameType, gameConfig?.games]);
+
+  const startScore = resolvedGameType === '301' ? 301 : 501;
+
+  const [p1Score, setP1Score] = useState(startScore);
+  const [p2Score, setP2Score] = useState(startScore);
+  const [currentThrower, setCurrentThrower] = useState<'p1' | 'p2'>(() => startingPlayer || 'p1');
   const [currentDarts, setCurrentDarts] = useState<DartThrow[]>([]);
   const [roundScore, setRoundScore] = useState(0);
   const [showPlayerChange, setShowPlayerChange] = useState(false);
@@ -325,10 +329,6 @@ export function O1OnlineGameScreen({
   const [gameWinner, setGameWinner] = useState<'p1' | 'p2' | null>(null);
   const [showWinnerScreen, setShowWinnerScreen] = useState(false);
 
-  // Medley match tracking
-  const [matchGameWinners, setMatchGameWinners] = useState<('p1' | 'p2')[]>([]); // Winners of each game in match
-  const [currentGameIndex, setCurrentGameIndex] = useState(0); // Which game we're on (0-indexed)
-
   // 80% Stat Tracking
   const [p1DartsThrown, setP1DartsThrown] = useState(0);
   const [p2DartsThrown, setP2DartsThrown] = useState(0);
@@ -340,11 +340,6 @@ export function O1OnlineGameScreen({
   const [p1HasStarted, setP1HasStarted] = useState(false);
   const [p2HasStarted, setP2HasStarted] = useState(false);
 
-  // Match format
-  const [matchGames] = useState<string[]>(
-    matchGamesProp && matchGamesProp.length > 0 ? matchGamesProp : ['501']
-  );
-
   // Game settings
   const [inMode, setInMode] = useState<'open' | 'master' | 'double'>('open');
   const [outMode, setOutMode] = useState<'open' | 'master' | 'double'>('master');
@@ -352,17 +347,11 @@ export function O1OnlineGameScreen({
 
   const currentScore = currentThrower === 'p1' ? p1Score : p2Score;
 
-  // Get current game type from match
-  const currentGameType = matchGames[currentGameIndex] || '501';
-  const isOhOneGame = ['501', '301'].includes(currentGameType);
-  const isCricketGame = currentGameType === 'cricket';
-  const isChoiceGame = currentGameType === 'choice';
-
-  // Starting score for 01 games
-  const startScore = currentGameType === '501' ? 501 : 301;
+  const isOhOneGame = true;
+  const isCricketGame = false;
 
   // 80% threshold
-  const eightyPercentThreshold = currentGameType === '501' ? 100 : 50;
+  const eightyPercentThreshold = startScore === 501 ? 100 : 50;
 
   // Calculate live PPR
   const p1LivePPR = p1DartsThrown > 0 ? ((startScore - p1Score) / p1DartsThrown) * 3 : 0;
@@ -372,54 +361,6 @@ export function O1OnlineGameScreen({
   const p1DisplayPPR = eightyPercentTriggered && p1FrozenPPR !== null ? p1FrozenPPR : p1LivePPR;
   const p2DisplayPPR = eightyPercentTriggered && p2FrozenPPR !== null ? p2FrozenPPR : p2LivePPR;
 
-  // Medley match logic
-  const isMedley = matchGames.length > 1;
-  const p1MatchWins = matchGameWinners.filter(w => w === 'p1').length;
-  const p2MatchWins = matchGameWinners.filter(w => w === 'p2').length;
-  const gamesNeededToWin = Math.ceil(matchGames.length / 2);
-  const matchWinner = p1MatchWins >= gamesNeededToWin ? 'p1' : p2MatchWins >= gamesNeededToWin ? 'p2' : null;
-
-  // Determine who should throw first for next game
-  const getNextGameStarter = (): 'p1' | 'p2' | 'cork' => {
-    const nextGameIndex = currentGameIndex + 1;
-    if (nextGameIndex === 0) return 'cork';
-    if (nextGameIndex === matchGames.length - 1) {
-      const p1WinsAfterThis = p1MatchWins + (gameWinner === 'p1' ? 1 : 0);
-      const p2WinsAfterThis = p2MatchWins + (gameWinner === 'p2' ? 1 : 0);
-      if (p1WinsAfterThis === p2WinsAfterThis) return 'cork';
-    }
-    if (gameWinner) return gameWinner === 'p1' ? 'p2' : 'p1';
-    const lastWinner = matchGameWinners[matchGameWinners.length - 1];
-    if (lastWinner) return lastWinner === 'p1' ? 'p2' : 'p1';
-    return 'cork';
-  };
-
-  // Start the next game in medley
-  const startNextGame = useCallback((firstThrower: 'p1' | 'p2') => {
-    if (gameWinner) setMatchGameWinners(prev => [...prev, gameWinner]);
-    setShowWinnerScreen(false);
-    setGameWinner(null);
-    setP1Score(301);
-    setP2Score(301);
-    setCurrentDarts([]);
-    setRoundScore(0);
-    setCurrentRound(1);
-    setP1ThrewThisRound(false);
-    setP2ThrewThisRound(false);
-    setP1HasStarted(false);
-    setP2HasStarted(false);
-    setDartHistory([]);
-    setUndosRemaining(3);
-    setCurrentThrower(firstThrower);
-    setCurrentGameIndex(prev => prev + 1);
-    setShowGoodLuck(true);
-    setIntroComplete(false);
-    setP1DartsThrown(0);
-    setP2DartsThrown(0);
-    setEightyPercentTriggered(false);
-    setP1FrozenPPR(null);
-    setP2FrozenPPR(null);
-  }, [gameWinner]);
 
   // Detect achievements
   const detectAchievement = useCallback((darts: DartThrow[], totalScore: number, didBust: boolean, didWin: boolean): AchievementType => {
@@ -871,31 +812,6 @@ export function O1OnlineGameScreen({
             </>
           ) : (
             <>
-              {isMedley && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: `calc(8 * ${scale})` }}>
-                  {matchGames.map((game, index) => (
-                    <span key={index} style={{ display: 'flex', alignItems: 'center' }}>
-                      {index > 0 && (
-                        <span style={{
-                          color: 'rgba(255, 255, 255, 0.3)',
-                          fontFamily: FONT_NAME,
-                          fontSize: `calc(24 * ${scale})`,
-                          marginRight: `calc(8 * ${scale})`,
-                        }}>|</span>
-                      )}
-                      <span style={{
-                        fontFamily: FONT_NAME,
-                        fontWeight: index === currentGameIndex ? 700 : 400,
-                        fontSize: `calc(24 * ${scale})`,
-                        color: index === currentGameIndex ? '#FFFFFF' : 'rgba(255, 255, 255, 0.4)',
-                        textShadow: index === currentGameIndex ? '-2px 2px 4px rgba(0, 0, 0, 0.5)' : 'none',
-                      }}>
-                        {GAME_ABBREV[game] || game.toUpperCase()}
-                      </span>
-                    </span>
-                  ))}
-                </div>
-              )}
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -1299,22 +1215,13 @@ export function O1OnlineGameScreen({
             position: 'absolute', inset: 0,
             background: `radial-gradient(circle at center, ${PLAYERS[gameWinner].profilecolor}40 0%, transparent 60%)`,
           }} />
-          {isMedley && (
-            <div style={{
-              fontFamily: FONT_NAME, fontSize: `calc(24 * ${scale})`, color: 'rgba(255, 255, 255, 0.5)',
-              marginBottom: `calc(10 * ${scale})`,
-              animation: 'winnerNameSlide 0.6s ease-out forwards', animationDelay: '0.1s', opacity: 0,
-            }}>
-              Game {currentGameIndex + 1} of {matchGames.length} | Match: {p1MatchWins + (gameWinner === 'p1' ? 1 : 0)} - {p2MatchWins + (gameWinner === 'p2' ? 1 : 0)}
-            </div>
-          )}
           <div style={{
             fontFamily: FONT_SCORE, fontWeight: 300, fontSize: `calc(60 * ${scale})`, lineHeight: 1,
             color: 'rgba(255, 255, 255, 0.6)', letterSpacing: `calc(20 * ${scale})`,
             marginBottom: `calc(20 * ${scale})`,
             animation: 'winnerNameSlide 0.6s ease-out forwards', animationDelay: '0.2s', opacity: 0,
           }}>
-            {matchWinner || (p1MatchWins + (gameWinner === 'p1' ? 1 : 0) >= gamesNeededToWin || p2MatchWins + (gameWinner === 'p2' ? 1 : 0) >= gamesNeededToWin) ? 'MATCH WINNER' : 'GAME WINNER'}
+            GAME WINNER
           </div>
           <div style={{
             fontFamily: FONT_SCORE, fontWeight: 300, fontSize: `calc(160 * ${scale})`, lineHeight: 1,
@@ -1335,78 +1242,72 @@ export function O1OnlineGameScreen({
             display: 'flex', gap: `calc(20 * ${scale})`, marginTop: `calc(60 * ${scale})`,
             animation: 'winnerNameSlide 0.6s ease-out forwards', animationDelay: '0.8s', opacity: 0,
           }}>
-            {(() => {
-              const wouldCompleteMatch =
-                (gameWinner === 'p1' && p1MatchWins + 1 >= gamesNeededToWin) ||
-                (gameWinner === 'p2' && p2MatchWins + 1 >= gamesNeededToWin);
-              if (isMedley && !wouldCompleteMatch && currentGameIndex < matchGames.length - 1) {
-                const nextStarter = getNextGameStarter();
-                return (
-                  <button
-                    onClick={() => startNextGame(nextStarter === 'cork' ? 'p1' : nextStarter as 'p1' | 'p2')}
-                    style={{
-                      padding: `calc(16 * ${scale}) calc(48 * ${scale})`,
-                      fontFamily: FONT_NAME, fontSize: `calc(24 * ${scale})`, fontWeight: 500,
-                      color: '#FFFFFF', background: PLAYERS[gameWinner].profilecolor,
-                      border: 'none', borderRadius: `calc(12 * ${scale})`, cursor: 'pointer',
-                      boxShadow: `0 0 30px ${PLAYERS[gameWinner].profilecolor}80`,
-                    }}
-                  >
-                    Next Game
-                  </button>
-                );
-              } else {
-                return (
-                  <button
-                    onClick={() => {
-                      setShowWinnerScreen(false);
-                      setGameWinner(null);
-                      setMatchGameWinners([]);
-                      setCurrentGameIndex(0);
-                      setP1Score(301);
-                      setP2Score(301);
-                      setCurrentDarts([]);
-                      setRoundScore(0);
-                      setCurrentRound(1);
-                      setP1ThrewThisRound(false);
-                      setP2ThrewThisRound(false);
-                      setP1HasStarted(false);
-                      setP2HasStarted(false);
-                      setDartHistory([]);
-                      setUndosRemaining(3);
-                      setCurrentThrower('p1');
-                      setShowGoodLuck(true);
-                      setIntroComplete(false);
-                      setP1DartsThrown(0);
-                      setP2DartsThrown(0);
-                      setEightyPercentTriggered(false);
-                      setP1FrozenPPR(null);
-                      setP2FrozenPPR(null);
-                    }}
-                    style={{
-                      padding: `calc(16 * ${scale}) calc(48 * ${scale})`,
-                      fontFamily: FONT_NAME, fontSize: `calc(24 * ${scale})`, fontWeight: 500,
-                      color: '#FFFFFF', background: PLAYERS[gameWinner].profilecolor,
-                      border: 'none', borderRadius: `calc(12 * ${scale})`, cursor: 'pointer',
-                      boxShadow: `0 0 30px ${PLAYERS[gameWinner].profilecolor}80`,
-                    }}
-                  >
-                    Rematch
-                  </button>
-                );
-              }
-            })()}
-            <button
-              onClick={() => { setShowWinnerScreen(false); setGameWinner(null); }}
-              style={{
-                padding: `calc(16 * ${scale}) calc(48 * ${scale})`,
-                fontFamily: FONT_NAME, fontSize: `calc(24 * ${scale})`, fontWeight: 500,
-                color: 'rgba(255, 255, 255, 0.7)', background: 'transparent',
-                border: '2px solid rgba(255, 255, 255, 0.3)', borderRadius: `calc(12 * ${scale})`, cursor: 'pointer',
-              }}
-            >
-              Exit to Lobby
-            </button>
+            {onGameComplete ? (
+              <button
+                onClick={() => {
+                  setShowWinnerScreen(false);
+                  setGameWinner(null);
+                  onGameComplete(gameWinner);
+                }}
+                style={{
+                  padding: `calc(16 * ${scale}) calc(48 * ${scale})`,
+                  fontFamily: FONT_NAME, fontSize: `calc(24 * ${scale})`, fontWeight: 500,
+                  color: '#FFFFFF', background: PLAYERS[gameWinner].profilecolor,
+                  border: 'none', borderRadius: `calc(12 * ${scale})`, cursor: 'pointer',
+                  boxShadow: `0 0 30px ${PLAYERS[gameWinner].profilecolor}80`,
+                }}
+              >
+                Continue
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={() => {
+                    setShowWinnerScreen(false);
+                    setGameWinner(null);
+                    setP1Score(startScore);
+                    setP2Score(startScore);
+                    setCurrentDarts([]);
+                    setRoundScore(0);
+                    setCurrentRound(1);
+                    setP1ThrewThisRound(false);
+                    setP2ThrewThisRound(false);
+                    setP1HasStarted(false);
+                    setP2HasStarted(false);
+                    setDartHistory([]);
+                    setUndosRemaining(3);
+                    setCurrentThrower(startingPlayer || 'p1');
+                    setShowGoodLuck(true);
+                    setIntroComplete(false);
+                    setP1DartsThrown(0);
+                    setP2DartsThrown(0);
+                    setEightyPercentTriggered(false);
+                    setP1FrozenPPR(null);
+                    setP2FrozenPPR(null);
+                  }}
+                  style={{
+                    padding: `calc(16 * ${scale}) calc(48 * ${scale})`,
+                    fontFamily: FONT_NAME, fontSize: `calc(24 * ${scale})`, fontWeight: 500,
+                    color: '#FFFFFF', background: PLAYERS[gameWinner].profilecolor,
+                    border: 'none', borderRadius: `calc(12 * ${scale})`, cursor: 'pointer',
+                    boxShadow: `0 0 30px ${PLAYERS[gameWinner].profilecolor}80`,
+                  }}
+                >
+                  Rematch
+                </button>
+                <button
+                  onClick={() => { setShowWinnerScreen(false); setGameWinner(null); }}
+                  style={{
+                    padding: `calc(16 * ${scale}) calc(48 * ${scale})`,
+                    fontFamily: FONT_NAME, fontSize: `calc(24 * ${scale})`, fontWeight: 500,
+                    color: 'rgba(255, 255, 255, 0.7)', background: 'transparent',
+                    border: '2px solid rgba(255, 255, 255, 0.3)', borderRadius: `calc(12 * ${scale})`, cursor: 'pointer',
+                  }}
+                >
+                  Exit to Lobby
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}

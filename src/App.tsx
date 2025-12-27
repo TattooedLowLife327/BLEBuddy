@@ -5,15 +5,17 @@ import { Dashboard } from './pages/Dashboard';
 import { OnlineLobby } from './pages/OnlineLobby';
 import { LocalDubsSetup } from './pages/LocalDubsSetup';
 import { RemoteDubsSetup } from './pages/RemoteDubsSetup';
-import { CorkScreen } from './components/CorkScreen';
 import { O1InhouseGameScreen } from './pages/01InhouseGameScreen';
 import { O1GSPreview } from './pages/preview/01GSPreview';
 import { CRGSPreview } from './pages/preview/CRGSPreview';
-import { MedleyPreview } from './pages/preview/MedleyPreview';
 import { CorkPreview } from './pages/preview/CorkPreview';
+import { Online01Preview } from './pages/preview/Online01Preview';
+import { OnlineCRPreview } from './pages/preview/OnlineCRPreview';
+import PreviewIndex from './pages/preview/PreviewIndex';
 import { CROnlineGameScreen } from './pages/CROnlineGameScreen';
 import { CRInhouseGameScreen } from './pages/CRInhouseGameScreen';
 import { O1OnlineGameScreen } from './pages/01OnlineGameScreen';
+import { MedleyMatchManager } from './pages/MedleyMatchManager';
 import { SettingsModal } from './components/SettingsModal';
 import { createClient } from './utils/supabase/client';
 import { useBLE } from './contexts/BLEContext';
@@ -399,10 +401,19 @@ export default function App() {
     navigate('/cork');
   };
 
-  const handleCorkComplete = (_firstPlayerId: string) => {
-    const firstGame = activeGame?.gameConfig?.games?.find(game => game) || activeGame?.gameType || 'cricket';
+  const handleCorkComplete = (firstPlayerId: string) => {
+    if (activeGame) {
+      setActiveGame({ ...activeGame, corkWinnerId: firstPlayerId });
+    }
+    const configuredGames = activeGame?.gameConfig?.games || [];
+    const isMedley = configuredGames.length > 1 || activeGame?.gameType === 'medley';
+    if (isMedley) {
+      navigate('/game/match');
+      return;
+    }
+    const firstGame = configuredGames.find(game => game) || activeGame?.gameType || 'cricket';
     const normalized = firstGame.toLowerCase();
-    const nextRoute = normalized === 'cricket' ? '/game/cricket' : '/game/01-online';
+    const nextRoute = normalized === 'cricket' || normalized === 'cr' ? '/game/cricket' : '/game/01-online';
     navigate(nextRoute);
   };
 
@@ -477,10 +488,12 @@ export default function App() {
     <>
     <Routes>
       {/* Preview screens - NO AUTH, must be first */}
+      <Route path="/preview" element={<PreviewIndex />} />
       <Route path="/preview/01" element={<O1GSPreview />} />
       <Route path="/preview/cr" element={<CRGSPreview />} />
-      <Route path="/preview/medley" element={<MedleyPreview />} />
       <Route path="/preview/cork" element={<CorkPreview />} />
+      <Route path="/preview/01-online" element={<Online01Preview />} />
+      <Route path="/preview/cr-online" element={<OnlineCRPreview />} />
 
       <Route path="/login" element={isAuthenticated ? <Navigate to={`/dashboard${queryString}`} /> : <Login onLoginSuccess={handleLoginSuccess} />} />
 
@@ -595,9 +608,12 @@ export default function App() {
             accentColor: activeGame.opponentAccentColor,
           }}
           isInitiator={activeGame.isInitiator}
+          gameType={activeGame.gameConfig?.games?.find(game => game) || activeGame.gameType || undefined}
+          startingPlayer={activeGame.corkWinnerId
+            ? (activeGame.corkWinnerId === (activeGame.isInitiator ? userId : activeGame.opponentId) ? 'p1' : 'p2')
+            : 'p1'}
           gameConfig={activeGame.gameConfig}
           onLeaveMatch={handleLeaveMatch}
-          matchGames={activeGame.gameConfig?.games}
         />
       } />
       <Route path="/game/cricket-inhouse" element={<CRInhouseGameScreen onLeaveMatch={() => window.location.href = '/dashboard'} />} />
@@ -621,6 +637,34 @@ export default function App() {
             accentColor: activeGame.opponentAccentColor,
           }}
           isInitiator={activeGame.isInitiator}
+          startingPlayer={activeGame.corkWinnerId
+            ? (activeGame.corkWinnerId === (activeGame.isInitiator ? userId : activeGame.opponentId) ? 'p1' : 'p2')
+            : 'p1'}
+          onLeaveMatch={handleLeaveMatch}
+        />
+      } />
+
+      {/* Online medley manager */}
+      <Route path="/game/match" element={
+        !isAuthenticated ? <Navigate to={`/login${queryString}`} /> :
+        !activeGame ? <Navigate to={`/dashboard${queryString}`} /> :
+        <MedleyMatchManager
+          gameId={activeGame.gameId}
+          localPlayer={{
+            id: userId,
+            name: userName,
+            profilePic: profilePic || undefined,
+            accentColor: accentColor,
+          }}
+          remotePlayer={{
+            id: activeGame.opponentId,
+            name: activeGame.opponentName,
+            profilePic: activeGame.opponentProfilePic,
+            accentColor: activeGame.opponentAccentColor,
+          }}
+          isInitiator={activeGame.isInitiator}
+          gameConfig={activeGame.gameConfig}
+          corkWinnerId={activeGame.corkWinnerId || null}
           onLeaveMatch={handleLeaveMatch}
         />
       } />

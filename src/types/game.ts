@@ -9,4 +9,11 @@ export interface GameConfiguration {
     inOut: GameInOut;
     bull: GameBull;
   };
+  medleyChoice?: {
+    mode?: 'pick_game' | 'go_first';
+    game?: string;
+    starter?: 'p1' | 'p2';
+    chooser?: 'p1' | 'p2';
+    corkWinnerId?: string;
+  };
 }
