@@ -38,6 +38,30 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
   }
 }
 
+// Mobile: request fullscreen + landscape lock on first user gesture when supported.
+if (typeof window !== 'undefined') {
+  const requestImmersive = async () => {
+    const docEl = document.documentElement
+    if (!document.fullscreenElement && docEl.requestFullscreen) {
+      try {
+        await docEl.requestFullscreen()
+      } catch {
+        // ignore fullscreen errors (not supported or blocked)
+      }
+    }
+    try {
+      if (screen.orientation && screen.orientation.lock) {
+        await screen.orientation.lock('landscape')
+      }
+    } catch {
+      // ignore orientation lock errors (not supported or blocked)
+    }
+  }
+
+  window.addEventListener('touchstart', requestImmersive, { once: true, passive: true })
+  window.addEventListener('click', requestImmersive, { once: true })
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
