@@ -978,8 +978,10 @@ export function O1GSPreview({ onLeaveMatch }: O1GSPreviewProps) {
 
   const formatDart = (segment: string) => {
     if (segment === 'MISS') return 'MISS';
-    if (segment === 'S25') return 'BULL';
-    if (segment === 'D25') return 'DBULL';
+    if (segment === 'S25' || segment === 'D25') {
+      if (!splitBull) return 'BULL';
+      return segment === 'D25' ? 'DBULL' : 'BULL';
+    }
     return segment;
   };
 
