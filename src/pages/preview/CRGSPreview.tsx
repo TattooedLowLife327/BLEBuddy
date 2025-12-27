@@ -596,6 +596,11 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
     }
   }, [currentDarts, currentThrower, introComplete, showPlayerChange, showWinnerScreen, p1Score, p2Score]);
 
+  const throwDartRef = useRef(throwDart);
+  useEffect(() => {
+    throwDartRef.current = throwDart;
+  }, [throwDart]);
+
   useEffect(() => {
     if (
       currentThrower !== 'p2' ||
@@ -629,7 +634,7 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
         return;
       }
       const pick = AUTO_THROW_POOL[Math.floor(Math.random() * AUTO_THROW_POOL.length)];
-      throwDart(pick.segment, pick.score, pick.multiplier);
+      throwDartRef.current(pick.segment, pick.score, pick.multiplier);
       dartCount += 1;
       setTimeout(throwNext, 650);
     };
@@ -639,7 +644,7 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
       canceled = true;
       clearTimeout(timer);
     };
-  }, [activeAnimation, currentThrower, introComplete, showPlayerChange, showWinnerScreen, throwDart]);
+  }, [activeAnimation, currentThrower, introComplete, showPlayerChange, showWinnerScreen]);
 
   // Handle player change
   useEffect(() => {

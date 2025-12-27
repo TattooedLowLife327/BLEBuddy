@@ -545,6 +545,11 @@ export function O1GSPreview({ onLeaveMatch }: O1GSPreviewProps) {
   // Starting score for 01 games (used for PPR calculation)
   const startScore = currentGameType === '501' ? 501 : 301;
 
+  useEffect(() => {
+    setP1Score(startScore);
+    setP2Score(startScore);
+  }, [startScore]);
+
   // 80% threshold: points remaining when stats should freeze
   // 301: <=50 remaining (scored >=251)
   // 501: <=100 remaining (scored >=401)
@@ -609,8 +614,8 @@ export function O1GSPreview({ onLeaveMatch }: O1GSPreviewProps) {
     // Reset game state
     setShowWinnerScreen(false);
     setGameWinner(null);
-    setP1Score(301);
-    setP2Score(301);
+    setP1Score(startScore);
+    setP2Score(startScore);
     setCurrentDarts([]);
     setRoundScore(0);
     setCurrentRound(1);
@@ -920,6 +925,11 @@ export function O1GSPreview({ onLeaveMatch }: O1GSPreviewProps) {
     if (newDarts.length === 3) setShowPlayerChange(true);
   }, [currentDarts, currentScore, currentThrower, roundScore, showPlayerChange, introComplete, p1Score, p2Score, p1HasStarted, p2HasStarted, inMode, outMode, detectAchievement, triggerAchievement]);
 
+  const throwDartRef = useRef(throwDart);
+  useEffect(() => {
+    throwDartRef.current = throwDart;
+  }, [throwDart]);
+
   useEffect(() => {
     if (
       currentThrower !== 'p2' ||
@@ -954,7 +964,7 @@ export function O1GSPreview({ onLeaveMatch }: O1GSPreviewProps) {
         return;
       }
       const pick = pool[Math.floor(Math.random() * pool.length)];
-      throwDart(pick.segment, pick.score, pick.multiplier);
+      throwDartRef.current(pick.segment, pick.score, pick.multiplier);
       dartCount += 1;
       setTimeout(throwNext, 650);
     };
@@ -964,7 +974,7 @@ export function O1GSPreview({ onLeaveMatch }: O1GSPreviewProps) {
       canceled = true;
       clearTimeout(timer);
     };
-  }, [activeAnimation, currentThrower, introComplete, showPlayerChange, showWinnerScreen, splitBull, throwDart]);
+  }, [activeAnimation, currentThrower, introComplete, showPlayerChange, showWinnerScreen, splitBull]);
 
   const formatDart = (segment: string) => {
     if (segment === 'MISS') return 'MISS';
@@ -1792,8 +1802,8 @@ export function O1GSPreview({ onLeaveMatch }: O1GSPreviewProps) {
                       setGameWinner(null);
                       setMatchGameWinners([]);
                       setCurrentGameIndex(0);
-                      setP1Score(301);
-                      setP2Score(301);
+                      setP1Score(startScore);
+                      setP2Score(startScore);
                       setCurrentDarts([]);
                       setRoundScore(0);
                       setCurrentRound(1);
