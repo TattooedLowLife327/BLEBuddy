@@ -7,7 +7,7 @@ const RX_UUID = '442f1572-8a00-9a28-cbe1-e1d4212d53eb';  // Notify (board -> app
 const TX_UUID = '442f1571-8a00-9a28-cbe1-e1d4212d53eb';  // Write (app -> board) - for LED control
 
 export type BLEStatus = 'disconnected' | 'scanning' | 'connecting' | 'connected' | 'error';
-export type SegmentType = 'SINGLE_INNER' | 'SINGLE_OUTER' | 'DOUBLE' | 'TRIPLE' | 'BULL' | 'DBL_BULL' | 'MISS' | 'RESET';
+export type SegmentType = 'SINGLE_INNER' | 'SINGLE_OUTER' | 'DOUBLE' | 'TRIPLE' | 'BULL' | 'DBL_BULL' | 'MISS' | 'RESET' | 'BUTTON';
 
 export interface DartThrowData {
   segment: string;
@@ -161,6 +161,7 @@ const SEGMENT_MAP: Record<string, SegmentInfo> = {
   // === SPECIAL ===
   '66-84-78-64': { value: 0, type: 'RESET' },
   '79-85-84-64': { value: 0, type: 'MISS' },
+  '42-54-4E-40': { value: 0, type: 'BUTTON' },
 };
 
 class BLEConnection {
@@ -445,6 +446,23 @@ class BLEConnection {
       if (segmentInfo.type === 'RESET') {
         console.log('🔄 Reset button pressed');
         this.dartCount = 0;
+        return;
+      }
+
+      if (segmentInfo.type === 'BUTTON') {
+        console.log('🔘 Board button pressed');
+        const buttonEvent: DartThrowData = {
+          segment: 'BTN',
+          score: 0,
+          multiplier: 0,
+          baseValue: 0,
+          segmentType: 'BUTTON',
+          dartNum: this.dartCount,
+          timestamp: new Date().toISOString(),
+          device: this.device?.name || 'Granboard',
+          rawBytes: byteKey
+        };
+        this.onThrowCallbacks.forEach(cb => cb(buttonEvent));
         return;
       }
 

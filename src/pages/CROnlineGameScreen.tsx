@@ -489,6 +489,32 @@ export function CROnlineGameScreen({
     }
   }, [currentDarts, currentThrower, introComplete, showPlayerChange, showWinnerScreen, p1Score, p2Score, marks, localIsP1, localPlayer.id]);
 
+  const endTurnWithMisses = useCallback(() => {
+    if (showPlayerChange || !introComplete || showWinnerScreen || !!activeAnimation) return;
+    const expectedLocal = (localIsP1 && currentThrower === 'p1') || (!localIsP1 && currentThrower === 'p2');
+    if (!expectedLocal) return;
+    const remaining = Math.max(0, 3 - currentDarts.length);
+    if (remaining === 0) {
+      setShowPlayerChange(true);
+    } else {
+      const misses = Array.from({ length: remaining }, () => ({ segment: 'MISS', score: 0, multiplier: 0 }));
+      setCurrentDarts([...currentDarts, ...misses]);
+      if (currentThrower === 'p1') {
+        setP1DartsThrown(prev => prev + remaining);
+      } else {
+        setP2DartsThrown(prev => prev + remaining);
+      }
+      setShowPlayerChange(true);
+    }
+    if (throwChannelRef.current) {
+      throwChannelRef.current.send({
+        type: 'broadcast',
+        event: 'turn_end',
+        payload: { playerId: localPlayer.id },
+      });
+    }
+  }, [activeAnimation, currentDarts, currentThrower, introComplete, localIsP1, localPlayer.id, showPlayerChange, showWinnerScreen]);
+
   // Handle BLE throws
   useEffect(() => {
     if (!lastThrow || !isLocalTurn) return;
@@ -496,13 +522,17 @@ export function CROnlineGameScreen({
     const throwKey = `${lastThrow.segment}-${lastThrow.timestamp}`;
     if (throwKey === lastProcessedThrowRef.current) return;
     lastProcessedThrowRef.current = throwKey;
+    if (lastThrow.segmentType === 'BUTTON' || lastThrow.segment === 'BTN') {
+      endTurnWithMisses();
+      return;
+    }
 
     // Convert BLE throw to segment string
     const segment = lastThrow.segment;
     const multiplier = lastThrow.multiplier;
 
     applyThrow(segment, multiplier, true);
-  }, [lastThrow, isLocalTurn, applyThrow]);
+  }, [lastThrow, isLocalTurn, applyThrow, endTurnWithMisses]);
 
   // Handle player change
   useEffect(() => {

@@ -298,6 +298,17 @@ const ACHIEVEMENT_LABELS: Record<Exclude<AchievementType, null>, string> = {
   lowTon: 'LOW TON!',
 };
 
+const AWARD_VIDEOS: Partial<Record<Exclude<AchievementType, null>, string>> = {
+  hatTrick: '/awards/blue&orange/hattrick.mp4',
+  threeInBlack: '/awards/blue&orange/3intheblack.mp4',
+  ton80: '/awards/blue&orange/ton80.mp4',
+  threeInBed: '/awards/blue&orange/3inabed.mp4',
+  whiteHorse: '/awards/blue&orange/whitehorse.mp4',
+  shanghai: '/awards/blue&orange/shanghai.mp4',
+  highTon: '/awards/blue&orange/highton.mp4',
+  lowTon: '/awards/blue&orange/lowton.mp4',
+};
+
 
 // Checkout suggestions are handled by the dynamic solver.
 
@@ -457,6 +468,18 @@ const goodLuckKeyframes = `
     transform: translateY(-10px) rotate(360deg);
   }
 }
+
+@keyframes doubleBullFade {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
 `;
 
 interface O1GSPreviewProps {
@@ -483,6 +506,8 @@ export function O1GSPreview({ onLeaveMatch }: O1GSPreviewProps) {
   const [activeAnimation, setActiveAnimation] = useState<AchievementType>(null);
   const [gameWinner, setGameWinner] = useState<'p1' | 'p2' | null>(null);
   const [showWinnerScreen, setShowWinnerScreen] = useState(false);
+  const [showDoubleBullEffect, setShowDoubleBullEffect] = useState(false);
+  const [doubleBullEffectKey, setDoubleBullEffectKey] = useState(0);
   const autoThrowingRef = useRef(false);
 
   // Request fullscreen on mobile/tablet
@@ -719,6 +744,7 @@ export function O1GSPreview({ onLeaveMatch }: O1GSPreviewProps) {
   // Trigger achievement animation
   const triggerAchievement = useCallback((achievement: AchievementType, winner?: 'p1' | 'p2') => {
     if (!achievement) return;
+    setShowDoubleBullEffect(false);
     setActiveAnimation(achievement);
     // Clear animation after it completes
     setTimeout(() => {
@@ -756,6 +782,14 @@ export function O1GSPreview({ onLeaveMatch }: O1GSPreviewProps) {
     }, 4000); // Animation duration
     return () => clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (!showDoubleBullEffect) return;
+    const timer = setTimeout(() => {
+      setShowDoubleBullEffect(false);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [showDoubleBullEffect, doubleBullEffectKey]);
 
   useEffect(() => {
     if (showPlayerChange) {
@@ -895,6 +929,9 @@ export function O1GSPreview({ onLeaveMatch }: O1GSPreviewProps) {
 
     // Check for win (score reaches exactly 0)
     const didWin = potentialNewScore === 0;
+    const achievement = (newDarts.length === 3 || didWin)
+      ? detectAchievement(newDarts, newRoundScore, false, didWin)
+      : null;
 
     // Update state
     setCurrentDarts(newDarts);
@@ -907,19 +944,21 @@ export function O1GSPreview({ onLeaveMatch }: O1GSPreviewProps) {
       setHasStarted(true);
     }
 
+    if (!achievement && isDoubleBull) {
+      setShowDoubleBullEffect(true);
+      setDoubleBullEffectKey(prev => prev + 1);
+    }
+
     // Check for achievements on 3rd dart or win
-    if (newDarts.length === 3 || didWin) {
-      const achievement = detectAchievement(newDarts, newRoundScore, false, didWin);
-      if (achievement) {
-        // Pass winner for win achievements (single game = show winner screen after)
-        const winner = didWin ? currentThrower : undefined;
-        triggerAchievement(achievement, winner);
-        // Don't show player change on win - winners screen will show
-        if (!didWin) {
-          setTimeout(() => setShowPlayerChange(true), 2000); // Wait for animation
-        }
-        return;
+    if (achievement) {
+      // Pass winner for win achievements (single game = show winner screen after)
+      const winner = didWin ? currentThrower : undefined;
+      triggerAchievement(achievement, winner);
+      // Don't show player change on win - winners screen will show
+      if (!didWin) {
+        setTimeout(() => setShowPlayerChange(true), 2000); // Wait for animation
       }
+      return;
     }
 
     if (newDarts.length === 3) setShowPlayerChange(true);
@@ -1048,6 +1087,28 @@ export function O1GSPreview({ onLeaveMatch }: O1GSPreviewProps) {
         backgroundSize: 'cover',
         backgroundPosition: 'center',
       }} />
+
+      {/* Double bull hit effect */}
+      {showDoubleBullEffect && (
+        <video
+          key={doubleBullEffectKey}
+          src="/hiteffects/blue&orange/dbull.mp4"
+          autoPlay
+          muted
+          playsInline
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            opacity: 1,
+            zIndex: 120,
+            pointerEvents: 'none',
+            animation: 'doubleBullFade 2s ease-out forwards',
+          }}
+        />
+      )}
 
       {/* Match Format / Checkout Display - Top Center */}
       {(() => {
@@ -1646,6 +1707,22 @@ export function O1GSPreview({ onLeaveMatch }: O1GSPreviewProps) {
           zIndex: 200,
           pointerEvents: 'none',
         }}>
+          {AWARD_VIDEOS[activeAnimation] && (
+            <video
+              key={activeAnimation}
+              src={AWARD_VIDEOS[activeAnimation]}
+              autoPlay
+              muted
+              playsInline
+              style={{
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+              }}
+            />
+          )}
           {/* Backdrop flash */}
           <div style={{
             position: 'absolute',
@@ -1654,22 +1731,24 @@ export function O1GSPreview({ onLeaveMatch }: O1GSPreviewProps) {
             animation: 'achievementPulse 2s ease-out forwards',
           }} />
           {/* Achievement text */}
-          <div style={{
-            position: 'absolute',
-            left: '50%',
-            top: '50%',
-            transform: 'translate(-50%, -50%)',
-            fontFamily: FONT_SCORE,
-            fontWeight: 300,
-            fontSize: `calc(120 * ${scale})`,
-            lineHeight: 1,
-            color: PLAYERS[currentThrower].profilecolor,
-            textShadow: `0 0 30px ${PLAYERS[currentThrower].profilecolor}, 0 0 60px ${PLAYERS[currentThrower].profilecolor}, -4px 4px 8px rgba(0, 0, 0, 0.8)`,
-            whiteSpace: 'nowrap',
-            animation: 'achievementPulse 2s ease-out forwards, achievementGlow 0.5s ease-in-out infinite',
-          }}>
-            {ACHIEVEMENT_LABELS[activeAnimation]}
-          </div>
+          {!AWARD_VIDEOS[activeAnimation] && (
+            <div style={{
+              position: 'absolute',
+              left: '50%',
+              top: '50%',
+              transform: 'translate(-50%, -50%)',
+              fontFamily: FONT_SCORE,
+              fontWeight: 300,
+              fontSize: `calc(120 * ${scale})`,
+              lineHeight: 1,
+              color: PLAYERS[currentThrower].profilecolor,
+              textShadow: `0 0 30px ${PLAYERS[currentThrower].profilecolor}, 0 0 60px ${PLAYERS[currentThrower].profilecolor}, -4px 4px 8px rgba(0, 0, 0, 0.8)`,
+              whiteSpace: 'nowrap',
+              animation: 'achievementPulse 2s ease-out forwards, achievementGlow 0.5s ease-in-out infinite',
+            }}>
+              {ACHIEVEMENT_LABELS[activeAnimation]}
+            </div>
+          )}
         </div>
       )}
 

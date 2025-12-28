@@ -541,16 +541,37 @@ export function O1OnlineGameScreen({
     if (newDarts.length === 3) setShowPlayerChange(true);
   }, [currentDarts, currentScore, currentThrower, roundScore, showPlayerChange, introComplete, p1Score, p2Score, p1HasStarted, p2HasStarted, inMode, outMode, detectAchievement, triggerAchievement]);
 
+  const endTurnWithMisses = useCallback(() => {
+    if (showPlayerChange || !introComplete || showWinnerScreen || !!activeAnimation) return;
+    const remaining = Math.max(0, 3 - currentDarts.length);
+    if (remaining === 0) {
+      setShowPlayerChange(true);
+      return;
+    }
+    const misses = Array.from({ length: remaining }, () => ({ segment: 'MISS', score: 0, multiplier: 0 }));
+    setCurrentDarts([...currentDarts, ...misses]);
+    if (currentThrower === 'p1') {
+      setP1DartsThrown(prev => prev + remaining);
+    } else {
+      setP2DartsThrown(prev => prev + remaining);
+    }
+    setShowPlayerChange(true);
+  }, [activeAnimation, currentDarts, currentThrower, introComplete, showPlayerChange, showWinnerScreen]);
+
   // Handle BLE throws
   useEffect(() => {
     if (!lastThrow) return;
     if (lastThrow.timestamp === lastProcessedThrowRef.current) return;
     lastProcessedThrowRef.current = lastThrow.timestamp;
+    if (lastThrow.segmentType === 'BUTTON' || lastThrow.segment === 'BTN') {
+      endTurnWithMisses();
+      return;
+    }
     let segment = lastThrow.segment;
     if (lastThrow.segmentType === 'BULL') segment = 'S25';
     else if (lastThrow.segmentType === 'DBL_BULL') segment = 'D25';
     throwDart(segment, lastThrow.score, lastThrow.multiplier);
-  }, [lastThrow, throwDart]);
+  }, [lastThrow, throwDart, endTurnWithMisses]);
 
   // Dev mode throw simulator
   const handleDevSimulateThrow = useCallback(() => {

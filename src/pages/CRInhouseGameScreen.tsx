@@ -339,6 +339,23 @@ export function CRInhouseGameScreen({
     }
   }, [currentDarts, currentThrower, introComplete, showPlayerChange, showWinnerScreen, p1Score, p2Score, marks]);
 
+  const endTurnWithMisses = useCallback(() => {
+    if (showPlayerChange || !introComplete || showWinnerScreen || !!activeAnimation) return;
+    const remaining = Math.max(0, 3 - currentDarts.length);
+    if (remaining === 0) {
+      setShowPlayerChange(true);
+      return;
+    }
+    const misses = Array.from({ length: remaining }, () => ({ segment: 'MISS', score: 0, multiplier: 0 }));
+    setCurrentDarts([...currentDarts, ...misses]);
+    if (currentThrower === 'p1') {
+      setP1DartsThrown(prev => prev + remaining);
+    } else {
+      setP2DartsThrown(prev => prev + remaining);
+    }
+    setShowPlayerChange(true);
+  }, [activeAnimation, currentDarts, currentThrower, introComplete, showPlayerChange, showWinnerScreen]);
+
   // Handle BLE throws
   useEffect(() => {
     if (!lastThrow) return;
@@ -346,12 +363,16 @@ export function CRInhouseGameScreen({
     const throwKey = `${lastThrow.segment}-${lastThrow.timestamp}`;
     if (throwKey === lastProcessedThrowRef.current) return;
     lastProcessedThrowRef.current = throwKey;
+    if (lastThrow.segmentType === 'BUTTON' || lastThrow.segment === 'BTN') {
+      endTurnWithMisses();
+      return;
+    }
 
     const segment = lastThrow.segment;
     const multiplier = lastThrow.multiplier;
 
     applyThrow(segment, multiplier);
-  }, [lastThrow, applyThrow]);
+  }, [lastThrow, applyThrow, endTurnWithMisses]);
 
   // Handle player change
   useEffect(() => {

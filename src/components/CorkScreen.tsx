@@ -65,6 +65,7 @@ function getCorkScore(throwData: DartThrowData): { score: number; valid: boolean
   if (segmentType === 'SINGLE_INNER') return { score: baseValue, valid: true, display: `${baseValue}` };
   if (segmentType === 'BULL') return { score: 25, valid: true, display: 'BULL' };
   if (segmentType === 'DBL_BULL') return { score: 50, valid: true, display: 'D-BULL' };
+  if (segmentType === 'BUTTON') return { score: 0, valid: false, display: '0' };
 
   let display = '0';
   if (segmentType === 'TRIPLE') display = `T${baseValue} -> 0`;
@@ -275,6 +276,11 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
 
     if (lastThrow.timestamp === lastTs) return;
     setLastTs(lastThrow.timestamp);
+
+    if (lastThrow.segmentType === 'BUTTON' || lastThrow.segment === 'BTN') {
+      sendCorkThrow(0, false, '0');
+      return;
+    }
 
     const { score, valid, display } = getCorkScore(lastThrow);
     sendCorkThrow(score, valid, display);
