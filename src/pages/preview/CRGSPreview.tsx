@@ -1155,8 +1155,8 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
         )}
       </div>
 
-      {/* Hamburger Menu */}
-      <div style={{ position: 'absolute', top: `calc(20 * ${scale})`, right: `calc(20 * ${scale})`, zIndex: 100 }}>
+      {/* Hamburger Menu (left so it stays visible on narrow viewports) */}
+      <div style={{ position: 'absolute', top: `calc(20 * ${scale})`, left: `calc(20 * ${scale})`, zIndex: 100 }}>
         <button
           onClick={() => setMenuOpen(!menuOpen)}
           style={{
@@ -1172,7 +1172,7 @@ export function CRGSPreview({ onLeaveMatch }: CRGSPreviewProps) {
         </button>
         {menuOpen && (
           <div style={{
-            position: 'absolute', top: `calc(50 * ${scale})`, right: 0,
+            position: 'absolute', top: `calc(50 * ${scale})`, left: 0,
             background: 'rgba(0, 0, 0, 0.8)', backdropFilter: 'blur(12px)',
             borderRadius: `calc(8 * ${scale})`, border: '1px solid rgba(255, 255, 255, 0.1)',
             overflow: 'hidden', minWidth: `calc(160 * ${scale})`,

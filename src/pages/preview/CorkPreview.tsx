@@ -67,6 +67,10 @@ const MOCK_P2 = {
   accentColor: '#FB00FF',
 };
 
+type CorkPreviewProps = {
+  onLeaveMatch?: () => void;
+};
+
 interface PlayerCorkState {
   status: 'waiting' | 'thrown';
   score: number | null;
@@ -236,7 +240,7 @@ function CorkSimulator({
   );
 }
 
-export function CorkPreview() {
+export function CorkPreview({ onLeaveMatch }: CorkPreviewProps) {
   const [animKey, setAnimKey] = useState(0);
 
   // Request fullscreen on mobile/tablet
@@ -358,7 +362,7 @@ export function CorkPreview() {
 
   const customMenuItems: CustomMenuItem[] = [
     { label: 'Refresh Video', icon: RefreshCw, onClick: () => {} },
-    { label: 'Leave Match', icon: DoorOpen, onClick: () => {}, className: 'focus:bg-red-500/20 focus:text-white text-red-400 cursor-pointer' },
+    { label: 'Leave Match', icon: DoorOpen, onClick: () => { onLeaveMatch?.(); }, className: 'focus:bg-red-500/20 focus:text-white text-red-400 cursor-pointer' },
   ];
 
   return (

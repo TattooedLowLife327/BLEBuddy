@@ -452,6 +452,10 @@ export default function App() {
     navigate('/online-lobby');
   };
 
+  const handlePreviewLeave = () => {
+    navigate('/preview');
+  };
+
   // Preview routes bypass ALL auth/loading checks
   const isPreviewRoute = location.pathname.startsWith('/preview');
 
@@ -489,9 +493,9 @@ export default function App() {
     <Routes>
       {/* Preview screens - NO AUTH, must be first */}
       <Route path="/preview" element={<PreviewIndex />} />
-      <Route path="/preview/01" element={<O1GSPreview />} />
-      <Route path="/preview/cr" element={<CRGSPreview />} />
-      <Route path="/preview/cork" element={<CorkPreview />} />
+      <Route path="/preview/01" element={<O1GSPreview onLeaveMatch={handlePreviewLeave} />} />
+      <Route path="/preview/cr" element={<CRGSPreview onLeaveMatch={handlePreviewLeave} />} />
+      <Route path="/preview/cork" element={<CorkPreview onLeaveMatch={handlePreviewLeave} />} />
       <Route path="/preview/01-online" element={<Online01Preview />} />
       <Route path="/preview/cr-online" element={<OnlineCRPreview />} />
 

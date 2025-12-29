@@ -1605,8 +1605,8 @@ export function O1GSPreview({ onLeaveMatch }: O1GSPreviewProps) {
         )}
       </div>
 
-      {/* Hamburger Menu - Top Right */}
-      <div style={{ position: 'absolute', top: `calc(20 * ${scale})`, right: `calc(20 * ${scale})`, zIndex: 100 }}>
+      {/* Hamburger Menu - Top Left (keeps it visible on narrow viewports) */}
+      <div style={{ position: 'absolute', top: `calc(20 * ${scale})`, left: `calc(20 * ${scale})`, zIndex: 100 }}>
         <button
           onClick={() => setMenuOpen(!menuOpen)}
           style={{
@@ -1634,7 +1634,7 @@ export function O1GSPreview({ onLeaveMatch }: O1GSPreviewProps) {
           <div style={{
             position: 'absolute',
             top: `calc(50 * ${scale})`,
-            right: 0,
+            left: 0,
             background: 'rgba(0, 0, 0, 0.8)',
             backdropFilter: 'blur(12px)',
             WebkitBackdropFilter: 'blur(12px)',
