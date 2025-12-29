@@ -95,8 +95,10 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
   const containerRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
 
+  const player1Name = typeof player1.name === 'string' && player1.name.trim() ? player1.name.trim() : 'Player 1';
+  const player2Name = typeof player2.name === 'string' && player2.name.trim() ? player2.name.trim() : 'Player 2';
   const remotePlayerId = visiblePlayerId === player1.id ? player2.id : player1.id;
-  const remotePlayerName = visiblePlayerId === player1.id ? player2.name : player1.name;
+  const remotePlayerName = visiblePlayerId === player1.id ? player2Name : player1Name;
 
   // Memoize WebRTC options to prevent infinite re-initialization loop
   const webRTCOptions = useMemo(() => ({
@@ -550,7 +552,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
                         <Avatar style={{ width: `calc(60 * ${scale})`, height: `calc(60 * ${scale})` }}>
                           <AvatarImage src={resolveProfilePicUrl(player1.profilePic)} />
                           <AvatarFallback className="bg-zinc-800 text-white" style={{ fontSize: `calc(24 * ${scale})` }}>
-                            {player1.name.charAt(0)}
+                            {player1Name.charAt(0)}
                           </AvatarFallback>
                         </Avatar>
                       </div>
@@ -620,7 +622,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
                         <Avatar style={{ width: `calc(60 * ${scale})`, height: `calc(60 * ${scale})` }}>
                           <AvatarImage src={resolveProfilePicUrl(player2.profilePic)} />
                           <AvatarFallback className="bg-zinc-800 text-white" style={{ fontSize: `calc(24 * ${scale})` }}>
-                            {player2.name.charAt(0)}
+                            {player2Name.charAt(0)}
                           </AvatarFallback>
                         </Avatar>
                       </div>
@@ -710,7 +712,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
           }}>
             <Avatar className="w-full h-full">
               <AvatarImage src={resolveProfilePicUrl(player1.profilePic)} />
-              <AvatarFallback className="bg-zinc-800 text-white">{player1.name.charAt(0)}</AvatarFallback>
+              <AvatarFallback className="bg-zinc-800 text-white">{player1Name.charAt(0)}</AvatarFallback>
             </Avatar>
           </div>
 
@@ -727,7 +729,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
             transition: 'color 0.3s ease',
             zIndex: 3,
           }}>
-            {player1.name}
+            {player1Name}
           </span>
 
           {/* Score on right side of bar */}
@@ -817,7 +819,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
             textAlign: 'right',
             zIndex: 3,
           }}>
-            {player2.name}
+            {player2Name}
           </span>
 
           {/* Avatar on right outer edge */}
@@ -838,7 +840,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
           }}>
             <Avatar className="w-full h-full">
               <AvatarImage src={resolveProfilePicUrl(player2.profilePic)} />
-              <AvatarFallback className="bg-zinc-800 text-white">{player2.name.charAt(0)}</AvatarFallback>
+              <AvatarFallback className="bg-zinc-800 text-white">{player2Name.charAt(0)}</AvatarFallback>
             </Avatar>
           </div>
         </div>
