@@ -45,3 +45,6 @@ public/figmaframereferences/
 # Markdown files (keep local)
 *.md
 !README.md
+
+# Local Netlify folder
+.netlify
