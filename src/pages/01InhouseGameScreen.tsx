@@ -67,9 +67,10 @@ const FIGMA = {
   scoreSize: 96,
 };
 
-const PLAYERS = {
-  p1: { id: 'p1', name: 'PLAYER1', profilecolor: '#6600FF' },
-  p2: { id: 'p2', name: 'PLAYER2', profilecolor: '#FB00FF' },
+// Default players - will be overridden by props if provided
+const DEFAULT_PLAYERS = {
+  p1: { id: 'p1', name: 'PLAYER1', profilecolor: '#6600FF', profilePic: undefined as string | undefined },
+  p2: { id: 'p2', name: 'PLAYER2', profilecolor: '#FB00FF', profilePic: undefined as string | undefined },
 };
 
 const ROUND_WORDS = ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE', 'TEN',
@@ -251,12 +252,20 @@ const goodLuckKeyframes = `
 }
 `;
 
+interface PlayerData {
+  id: string;
+  name: string;
+  profilePic?: string;
+  profileColor: string;
+}
+
 interface GameScreenProps {
   onLeaveMatch?: () => void;
   backgroundImage?: string;
   gameType?: string;
   startingPlayer?: 'p1' | 'p2';
   onGameComplete?: (winner: 'p1' | 'p2') => void;
+  player1?: PlayerData;
 }
 
 export function O1InhouseGameScreen({
@@ -265,11 +274,23 @@ export function O1InhouseGameScreen({
   gameType,
   startingPlayer,
   onGameComplete,
+  player1,
 }: GameScreenProps) {
   // BLE integration
   const { lastThrow, isConnected, simulateThrow: bleSimulateThrow } = useBLE();
   const devMode = isDevMode();
   const lastProcessedThrowRef = useRef<string | null>(null);
+
+  // Build players object from props or defaults
+  const PLAYERS = useMemo(() => ({
+    p1: player1 ? {
+      id: player1.id,
+      name: player1.name,
+      profilecolor: player1.profileColor,
+      profilePic: player1.profilePic,
+    } : DEFAULT_PLAYERS.p1,
+    p2: DEFAULT_PLAYERS.p2, // P2 stays as default for single player
+  }), [player1]);
 
   const resolvedGameType = useMemo(() => {
     const raw = gameType || '501';

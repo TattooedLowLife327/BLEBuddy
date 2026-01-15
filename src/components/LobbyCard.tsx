@@ -19,6 +19,9 @@ interface LobbyCardProps {
   onNavigateToSolo?: () => void;
   onNavigateToLocalDubs?: () => void;
   onNavigateToRemoteDubs?: () => void;
+  // In-house game navigation
+  onNavigateToInhouse01?: (gameType: '301' | '501' | '701') => void;
+  onNavigateToCricket?: () => void;
 }
 
 export function LobbyCard({
@@ -36,6 +39,8 @@ export function LobbyCard({
   onNavigateToSolo,
   onNavigateToLocalDubs,
   onNavigateToRemoteDubs,
+  onNavigateToInhouse01,
+  onNavigateToCricket,
 }: LobbyCardProps) {
   const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
   const [showScrollIndicator, setShowScrollIndicator] = useState(false);
@@ -346,28 +351,38 @@ export function LobbyCard({
                   <button
                     className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/10 text-white hover:bg-white/20 transition-colors text-center"
                     style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
-                    onClick={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onNavigateToInhouse01?.('301');
+                    }}
                   >
                     301
                   </button>
                   <button
                     className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/10 text-white hover:bg-white/20 transition-colors text-center"
                     style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
-                    onClick={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onNavigateToInhouse01?.('501');
+                    }}
                   >
                     501
                   </button>
                   <button
                     className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/10 text-white hover:bg-white/20 transition-colors text-center"
                     style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
-                    onClick={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onNavigateToInhouse01?.('701');
+                    }}
                   >
                     701
                   </button>
                   <button
-                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/10 text-white hover:bg-white/20 transition-colors text-center"
+                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/5 text-white/40 cursor-not-allowed text-center"
                     style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
                     onClick={(e) => e.stopPropagation()}
+                    disabled
                   >
                     Freeze
                   </button>
@@ -378,28 +393,34 @@ export function LobbyCard({
                   <button
                     className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/10 text-white hover:bg-white/20 transition-colors text-center"
                     style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
-                    onClick={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onNavigateToCricket?.();
+                    }}
                   >
                     Standard Cricket
                   </button>
                   <button
-                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/10 text-white hover:bg-white/20 transition-colors text-center"
+                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/5 text-white/40 cursor-not-allowed text-center"
                     style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
                     onClick={(e) => e.stopPropagation()}
+                    disabled
                   >
                     Wild Card Cricket
                   </button>
                   <button
-                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/10 text-white hover:bg-white/20 transition-colors text-center"
+                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/5 text-white/40 cursor-not-allowed text-center"
                     style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
                     onClick={(e) => e.stopPropagation()}
+                    disabled
                   >
                     Hidden Cricket
                   </button>
                   <button
-                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/10 text-white hover:bg-white/20 transition-colors text-center"
+                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/5 text-white/40 cursor-not-allowed text-center"
                     style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
                     onClick={(e) => e.stopPropagation()}
+                    disabled
                   >
                     Double Down
                   </button>
@@ -408,16 +429,18 @@ export function LobbyCard({
                 // Medley submenu
                 <>
                   <button
-                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/10 text-white hover:bg-white/20 transition-colors text-center"
+                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/5 text-white/40 cursor-not-allowed text-center"
                     style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
                     onClick={(e) => e.stopPropagation()}
+                    disabled
                   >
                     3 Leg
                   </button>
                   <button
-                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/10 text-white hover:bg-white/20 transition-colors text-center"
+                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/5 text-white/40 cursor-not-allowed text-center"
                     style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
                     onClick={(e) => e.stopPropagation()}
+                    disabled
                   >
                     5 Leg
                   </button>
@@ -426,37 +449,42 @@ export function LobbyCard({
                 // Practice submenu
                 <>
                   <button
-                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/10 text-white hover:bg-white/20 transition-colors text-center"
+                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/5 text-white/40 cursor-not-allowed text-center"
                     style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
                     onClick={(e) => e.stopPropagation()}
+                    disabled
                   >
                     Count Up
                   </button>
                   <button
-                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/10 text-white hover:bg-white/20 transition-colors text-center"
+                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/5 text-white/40 cursor-not-allowed text-center"
                     style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
                     onClick={(e) => e.stopPropagation()}
+                    disabled
                   >
                     Cricket Count Up
                   </button>
                   <button
-                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/10 text-white hover:bg-white/20 transition-colors text-center"
+                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/5 text-white/40 cursor-not-allowed text-center"
                     style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
                     onClick={(e) => e.stopPropagation()}
+                    disabled
                   >
                     Target
                   </button>
                   <button
-                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/10 text-white hover:bg-white/20 transition-colors text-center"
+                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/5 text-white/40 cursor-not-allowed text-center"
                     style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
                     onClick={(e) => e.stopPropagation()}
+                    disabled
                   >
                     Around the World
                   </button>
                   <button
-                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/10 text-white hover:bg-white/20 transition-colors text-center"
+                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/5 text-white/40 cursor-not-allowed text-center"
                     style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
                     onClick={(e) => e.stopPropagation()}
+                    disabled
                   >
                     Tic Tac Toe
                   </button>

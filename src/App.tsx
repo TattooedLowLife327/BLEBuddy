@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { OnlineLobby } from './pages/OnlineLobby';
@@ -29,6 +29,43 @@ type GameRequestNotification = {
   createdAt: string;
   schema: 'player' | 'youth';
 };
+
+// Wrapper component for in-house 01 games - reads URL params and passes user data
+function Inhouse01Route({ userId, userName, profilePic, accentColor }: { userId: string; userName: string; profilePic: string | null; accentColor: string }) {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const gameType = searchParams.get('type') || '501';
+
+  return (
+    <O1InhouseGameScreen
+      onLeaveMatch={() => navigate('/dashboard')}
+      gameType={gameType}
+      player1={{
+        id: userId,
+        name: userName || 'PLAYER1',
+        profilePic: profilePic || undefined,
+        profileColor: accentColor,
+      }}
+    />
+  );
+}
+
+// Wrapper component for in-house Cricket games - passes user data
+function CricketInhouseRoute({ userId, userName, profilePic, accentColor }: { userId: string; userName: string; profilePic: string | null; accentColor: string }) {
+  const navigate = useNavigate();
+
+  return (
+    <CRInhouseGameScreen
+      onLeaveMatch={() => navigate('/dashboard')}
+      player1={{
+        id: userId,
+        name: userName || 'PLAYER1',
+        profilePic: profilePic || undefined,
+        profileColor: accentColor,
+      }}
+    />
+  );
+}
 
 export default function App() {
   const rawNavigate = useNavigate();
@@ -520,6 +557,8 @@ export default function App() {
           onNavigateToOnlineLobby={() => navigate('/online-lobby')}
           onNavigateToLocalDubs={() => navigate('/local-dubs-setup')}
           onNavigateToRemoteDubs={() => navigate('/remote-dubs-setup')}
+          onNavigateToInhouse01={(gameType) => navigate(`/game/01-inhouse?type=${gameType}`)}
+          onNavigateToCricket={() => navigate('/game/cricket-inhouse')}
           missedRequests={missedRequests}
           onClearMissedRequests={() => setMissedRequests([])}
           onLogout={handleLogout}
@@ -594,8 +633,10 @@ export default function App() {
         <O1InhouseGameScreen onLeaveMatch={handleLeaveMatch} />
       } />
 
-      {/* Production games - no auth for testing */}
-      <Route path="/game/01-inhouse" element={<O1InhouseGameScreen onLeaveMatch={() => window.location.href = '/dashboard'} />} />
+      {/* Production games - in-house with user data */}
+      <Route path="/game/01-inhouse" element={
+        <Inhouse01Route userId={userId} userName={userName} profilePic={profilePic} accentColor={accentColor} />
+      } />
       <Route path="/game/01-online" element={
         !isAuthenticated ? <Navigate to={`/login${queryString}`} /> :
         !activeGame ? <Navigate to={`/dashboard${queryString}`} /> :
@@ -622,7 +663,9 @@ export default function App() {
           onLeaveMatch={handleLeaveMatch}
         />
       } />
-      <Route path="/game/cricket-inhouse" element={<CRInhouseGameScreen onLeaveMatch={() => window.location.href = '/dashboard'} />} />
+      <Route path="/game/cricket-inhouse" element={
+        <CricketInhouseRoute userId={userId} userName={userName} profilePic={profilePic} accentColor={accentColor} />
+      } />
 
       {/* Cricket online game */}
       <Route path="/game/cricket" element={

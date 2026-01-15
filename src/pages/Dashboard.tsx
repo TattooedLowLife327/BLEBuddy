@@ -36,6 +36,8 @@ interface DashboardProps {
   onNavigateToOnlineLobby: () => void;
   onNavigateToLocalDubs: () => void;
   onNavigateToRemoteDubs: () => void;
+  onNavigateToInhouse01: (gameType: '301' | '501' | '701') => void;
+  onNavigateToCricket: () => void;
   missedRequests: GameRequestNotification[];
   onClearMissedRequests: () => void;
   onLogout: () => void;
@@ -57,6 +59,8 @@ export function Dashboard({
   onNavigateToOnlineLobby,
   onNavigateToLocalDubs,
   onNavigateToRemoteDubs,
+  onNavigateToInhouse01,
+  onNavigateToCricket,
   missedRequests,
   onClearMissedRequests,
   onLogout,
@@ -288,6 +292,8 @@ export function Dashboard({
                       onNavigateToSolo={handleNavigateToOnlineLobby}
                       onNavigateToLocalDubs={onNavigateToLocalDubs}
                       onNavigateToRemoteDubs={onNavigateToRemoteDubs}
+                      onNavigateToInhouse01={onNavigateToInhouse01}
+                      onNavigateToCricket={onNavigateToCricket}
                     />
                   </div>
                 );

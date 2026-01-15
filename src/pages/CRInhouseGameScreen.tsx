@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useBLE } from '../contexts/BLEContext';
 import { isDevMode } from '../utils/devMode';
 
@@ -27,16 +27,25 @@ type AchievementType =
   | 'whiteHorse'
   | null;
 
+interface PlayerData {
+  id: string;
+  name: string;
+  profilePic?: string;
+  profileColor: string;
+}
+
 interface CRInhouseGameScreenProps {
   onLeaveMatch: () => void;
   backgroundImage?: string;
   startingPlayer?: 'p1' | 'p2';
   onGameComplete?: (winner: 'p1' | 'p2') => void;
+  player1?: PlayerData;
 }
 
-const PLAYERS = {
-  p1: { id: 'p1', name: 'PLAYER1', profilecolor: '#6600FF' },
-  p2: { id: 'p2', name: 'PLAYER2', profilecolor: '#FB00FF' },
+// Default players - will be overridden by props if provided
+const DEFAULT_PLAYERS = {
+  p1: { id: 'p1', name: 'PLAYER1', profilecolor: '#6600FF', profilePic: undefined as string | undefined },
+  p2: { id: 'p2', name: 'PLAYER2', profilecolor: '#FB00FF', profilePic: undefined as string | undefined },
 };
 
 const P1_ACTIVE = '#6600FF';
@@ -144,10 +153,22 @@ export function CRInhouseGameScreen({
   backgroundImage = '/assets/gamescreenbackground.png',
   startingPlayer,
   onGameComplete,
+  player1,
 }: CRInhouseGameScreenProps) {
   // BLE for throw detection
   const { lastThrow, isConnected: bleConnected, connect: bleConnect, disconnect: bleDisconnect, status: bleStatus } = useBLE();
   const lastProcessedThrowRef = useRef<string | null>(null);
+
+  // Build players object from props or defaults
+  const PLAYERS = useMemo(() => ({
+    p1: player1 ? {
+      id: player1.id,
+      name: player1.name,
+      profilecolor: player1.profileColor,
+      profilePic: player1.profilePic,
+    } : DEFAULT_PLAYERS.p1,
+    p2: DEFAULT_PLAYERS.p2, // P2 stays as default for single player
+  }), [player1]);
 
   // Cricket state
   const [marks, setMarks] = useState<Record<PlayerId, Record<Target, number>>>({
