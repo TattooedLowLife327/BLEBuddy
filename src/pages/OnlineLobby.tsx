@@ -614,20 +614,56 @@ export function OnlineLobby({
           const newStatus = payload.new.status;
 
           if (newStatus === 'accepted') {
-            // Navigate to cork screen - we are the initiator
-            if (onGameAccepted) {
-              onGameAccepted({
-                gameId: pendingOutgoingRequest.id,
-                opponentId: pendingOutgoingRequest.player2_id,
-                opponentName: pendingOutgoingRequest.player2_granboard_name,
-                opponentProfilePic: undefined, // Will be fetched
-                opponentAccentColor: '#a855f7', // Default, will be fetched
-                isInitiator: true,
-                gameType: normalizeGameType(pendingOutgoingRequest.game_type),
-                gameConfig: pendingOutgoingRequest.game_config || null,
-              });
-            }
-            setPendingOutgoingRequest(null);
+            // Fetch opponent profile data before navigating
+            const fetchOpponentProfile = async () => {
+              let opponentPic: string | undefined;
+              let opponentColor = '#a855f7';
+              try {
+                // Try player schema first
+                const playerSchema = (supabase as any).schema('player');
+                const { data: playerProfile } = await playerSchema
+                  .from('player_profiles')
+                  .select('profilepic, profilecolor')
+                  .eq('id', pendingOutgoingRequest.player2_id)
+                  .single();
+
+                if (playerProfile) {
+                  opponentPic = playerProfile.profilepic || undefined;
+                  opponentColor = playerProfile.profilecolor || '#a855f7';
+                } else {
+                  // Try youth schema
+                  const youthSchema = (supabase as any).schema('youth');
+                  const { data: youthProfile } = await youthSchema
+                    .from('youth_profiles')
+                    .select('profilepic, profilecolor')
+                    .eq('id', pendingOutgoingRequest.player2_id)
+                    .single();
+                  if (youthProfile) {
+                    opponentPic = youthProfile.profilepic || undefined;
+                    opponentColor = youthProfile.profilecolor || '#a855f7';
+                  }
+                }
+              } catch (err) {
+                console.error('Error fetching opponent profile:', err);
+              }
+              return { opponentPic, opponentColor };
+            };
+
+            fetchOpponentProfile().then(({ opponentPic, opponentColor }) => {
+              if (onGameAccepted) {
+                onGameAccepted({
+                  gameId: pendingOutgoingRequest.id,
+                  opponentId: pendingOutgoingRequest.player2_id,
+                  opponentName: pendingOutgoingRequest.player2_granboard_name,
+                  opponentProfilePic: opponentPic,
+                  opponentAccentColor: opponentColor,
+                  isInitiator: true,
+                  gameType: normalizeGameType(pendingOutgoingRequest.game_type),
+                  gameConfig: pendingOutgoingRequest.game_config || null,
+                });
+              }
+              setPendingOutgoingRequest(null);
+            });
           } else if (newStatus === 'declined') {
             alert(`${pendingOutgoingRequest.player2_granboard_name} declined the game.`);
             setPendingOutgoingRequest(null);
@@ -684,14 +720,46 @@ export function OnlineLobby({
         } catch (metaErr) {
           console.error('Error loading game metadata:', metaErr);
         }
+        // Fetch opponent profile data before navigating
+        let opponentPic: string | undefined;
+        let opponentColor = '#a855f7';
+        try {
+          // Try player schema first
+          const playerSchema = (supabase as any).schema('player');
+          const { data: playerProfile } = await playerSchema
+            .from('player_profiles')
+            .select('profilepic, profilecolor')
+            .eq('id', incomingRequest.player1_id)
+            .single();
+
+          if (playerProfile) {
+            opponentPic = playerProfile.profilepic || undefined;
+            opponentColor = playerProfile.profilecolor || '#a855f7';
+          } else {
+            // Try youth schema
+            const youthSchema = (supabase as any).schema('youth');
+            const { data: youthProfile } = await youthSchema
+              .from('youth_profiles')
+              .select('profilepic, profilecolor')
+              .eq('id', incomingRequest.player1_id)
+              .single();
+            if (youthProfile) {
+              opponentPic = youthProfile.profilepic || undefined;
+              opponentColor = youthProfile.profilecolor || '#a855f7';
+            }
+          }
+        } catch (profileErr) {
+          console.error('Error fetching opponent profile:', profileErr);
+        }
+
         // Navigate to cork screen - we are NOT the initiator (we accepted)
         if (onGameAccepted) {
           onGameAccepted({
             gameId: incomingRequest.id,
             opponentId: incomingRequest.player1_id,
             opponentName: incomingRequest.player1_granboard_name,
-            opponentProfilePic: undefined,
-            opponentAccentColor: '#a855f7',
+            opponentProfilePic: opponentPic,
+            opponentAccentColor: opponentColor,
             isInitiator: false,
             gameType: normalizeGameType(gameMeta?.game_type),
             gameConfig: gameMeta?.game_config || null,

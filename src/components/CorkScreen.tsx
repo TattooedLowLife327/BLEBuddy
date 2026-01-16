@@ -105,6 +105,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
   const remotePlayerId = visiblePlayerId === player1.id ? player2.id : player1.id;
   const remotePlayerName = visiblePlayerId === player1.id ? player2Name : player1Name;
 
+
   // Memoize WebRTC options to prevent infinite re-initialization loop
   const webRTCOptions = useMemo(() => ({
     gameId, localPlayerId: visiblePlayerId, remotePlayerId, isInitiator
@@ -152,6 +153,11 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
   // Determine if local player is P1 or P2
   const amP1 = visiblePlayerId === player1.id;
   const isP1Local = amP1;
+
+  // Local player info for UserMenu
+  const localPlayerName = isP1Local ? player1Name : player2Name;
+  const localPlayerPic = isP1Local ? player1.profilePic : player2.profilePic;
+  const localPlayerColor = isP1Local ? player1.accentColor : player2.accentColor;
 
   // Send cork throw to Supabase channel
   const sendCorkThrow = useCallback(async (score: number, wasValid: boolean, display: string) => {
@@ -487,6 +493,9 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
         {/* User menu */}
         <div className="absolute right-0" style={{ right: `calc(10 * ${scale})` }}>
           <UserMenu
+            profilepic={resolveProfilePicUrl(localPlayerPic)}
+            accentColor={localPlayerColor}
+            userName={localPlayerName}
             onLogout={handleLogoutAction}
             customItems={customMenuItems}
             size="sm"
