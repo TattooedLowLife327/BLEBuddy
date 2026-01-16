@@ -11,8 +11,8 @@ import { isDevMode } from '../utils/devMode';
 import { createClient } from '../utils/supabase/client';
 
 interface CorkScreenProps {
-  player1: { id: string; name: string; profilePic?: string; accentColor: string };
-  player2: { id: string; name: string; profilePic?: string; accentColor: string };
+  player1: { id: string; granboard_name: string; profilepic?: string; profilecolor: string };
+  player2: { id: string; granboard_name: string; profilepic?: string; profilecolor: string };
   gameId: string;
   visiblePlayerId: string;
   isInitiator: boolean;
@@ -118,8 +118,8 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
   const containerRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
 
-  const player1Name = typeof player1.name === 'string' && player1.name.trim() ? player1.name.trim() : 'Player 1';
-  const player2Name = typeof player2.name === 'string' && player2.name.trim() ? player2.name.trim() : 'Player 2';
+  const player1Name = typeof player1.granboard_name === 'string' && player1.granboard_name.trim() ? player1.granboard_name.trim() : 'Player 1';
+  const player2Name = typeof player2.granboard_name === 'string' && player2.granboard_name.trim() ? player2.granboard_name.trim() : 'Player 2';
   const remotePlayerId = visiblePlayerId === player1.id ? player2.id : player1.id;
   const remotePlayerName = visiblePlayerId === player1.id ? player2Name : player1Name;
 
@@ -178,8 +178,8 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
 
   // Local player info for UserMenu
   const localPlayerName = isP1Local ? player1Name : player2Name;
-  const localPlayerPic = isP1Local ? player1.profilePic : player2.profilePic;
-  const localPlayerColor = isP1Local ? player1.accentColor : player2.accentColor;
+  const localPlayerPic = isP1Local ? player1.profilepic : player2.profilepic;
+  const localPlayerColor = isP1Local ? player1.profilecolor : player2.profilecolor;
 
   // Send cork throw to Supabase channel
   const sendCorkThrow = useCallback(async (score: number, wasValid: boolean, display: string) => {
@@ -584,10 +584,10 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
             borderTopRightRadius: `calc(10 * ${scale})`,
             borderBottomRightRadius: `calc(10 * ${scale})`,
             pointerEvents: 'none',
-            background: `linear-gradient(180deg, ${player1.accentColor}BF 0%, ${player1.accentColor}40 15%, transparent 25%)`,
-            borderTop: `2px solid ${player1.accentColor}`,
-            borderRight: `2px solid ${player1.accentColor}`,
-            borderBottom: `2px solid ${player1.accentColor}`,
+            background: `linear-gradient(180deg, ${player1.profilecolor}BF 0%, ${player1.profilecolor}40 15%, transparent 25%)`,
+            borderTop: `2px solid ${player1.profilecolor}`,
+            borderRight: `2px solid ${player1.profilecolor}`,
+            borderBottom: `2px solid ${player1.profilecolor}`,
             borderLeft: 'none',
             animation: 'winnerOmbre 0.5s ease-out forwards',
           }} />
@@ -611,7 +611,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
           alignItems: 'center',
           justifyContent: 'center',
           overflow: 'hidden',
-          border: `2px solid ${p1IsLoser ? GREY : (p1CamPopped ? player1.accentColor : GREY)}`,
+          border: `2px solid ${p1IsLoser ? GREY : (p1CamPopped ? player1.profilecolor : GREY)}`,
           borderLeft: 'none',
           opacity: p1IsLoser ? 0.4 : 1,
           transition: p1IsLoser ? 'opacity 0.15s ease, border-color 0.15s ease' : 'border-color 0.3s ease',
@@ -620,15 +620,18 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
             localStream ? (
               <video ref={localVideoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }} />
             ) : (
-              <span style={{ color: '#666', fontSize: '14px' }}>{devMode ? 'No camera (dev mode)' : error || 'Starting camera...'}</span>
+              <Avatar style={{ width: '80px', height: '80px' }}>
+                <AvatarImage src={resolveProfilePicUrl(player1.profilepic)} />
+                <AvatarFallback className="bg-zinc-800 text-white text-2xl">{player1Name.charAt(0)}</AvatarFallback>
+              </Avatar>
             )
           ) : (
             remoteStream ? (
               <video ref={remoteVideoRef} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : (
-              <Avatar style={{ width: '60px', height: '60px' }}>
-                <AvatarImage src={resolveProfilePicUrl(player1.profilePic)} />
-                <AvatarFallback className="bg-zinc-800 text-white">{player1Name.charAt(0)}</AvatarFallback>
+              <Avatar style={{ width: '80px', height: '80px' }}>
+                <AvatarImage src={resolveProfilePicUrl(player1.profilepic)} />
+                <AvatarFallback className="bg-zinc-800 text-white text-2xl">{player1Name.charAt(0)}</AvatarFallback>
               </Avatar>
             )
           )}
@@ -658,10 +661,10 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
             borderTopLeftRadius: `calc(10 * ${scale})`,
             borderBottomLeftRadius: `calc(10 * ${scale})`,
             pointerEvents: 'none',
-            background: `linear-gradient(180deg, ${player2.accentColor}BF 0%, ${player2.accentColor}40 15%, transparent 25%)`,
-            borderTop: `2px solid ${player2.accentColor}`,
-            borderLeft: `2px solid ${player2.accentColor}`,
-            borderBottom: `2px solid ${player2.accentColor}`,
+            background: `linear-gradient(180deg, ${player2.profilecolor}BF 0%, ${player2.profilecolor}40 15%, transparent 25%)`,
+            borderTop: `2px solid ${player2.profilecolor}`,
+            borderLeft: `2px solid ${player2.profilecolor}`,
+            borderBottom: `2px solid ${player2.profilecolor}`,
             borderRight: 'none',
             animation: 'winnerOmbre 0.5s ease-out forwards',
           }} />
@@ -685,7 +688,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
           alignItems: 'center',
           justifyContent: 'center',
           overflow: 'hidden',
-          border: `2px solid ${p2IsLoser ? GREY : (p2CamPopped ? player2.accentColor : GREY)}`,
+          border: `2px solid ${p2IsLoser ? GREY : (p2CamPopped ? player2.profilecolor : GREY)}`,
           borderRight: 'none',
           opacity: p2IsLoser ? 0.4 : 1,
           transition: p2IsLoser ? 'opacity 0.15s ease, border-color 0.15s ease' : 'border-color 0.3s ease',
@@ -694,15 +697,18 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
             localStream ? (
               <video ref={localVideoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }} />
             ) : (
-              <span style={{ color: '#666', fontSize: '14px' }}>{devMode ? 'No camera (dev mode)' : error || 'Starting camera...'}</span>
+              <Avatar style={{ width: '80px', height: '80px' }}>
+                <AvatarImage src={resolveProfilePicUrl(player2.profilepic)} />
+                <AvatarFallback className="bg-zinc-800 text-white text-2xl">{player2Name.charAt(0)}</AvatarFallback>
+              </Avatar>
             )
           ) : (
             remoteStream ? (
               <video ref={remoteVideoRef} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : (
-              <Avatar style={{ width: '60px', height: '60px' }}>
-                <AvatarImage src={resolveProfilePicUrl(player2.profilePic)} />
-                <AvatarFallback className="bg-zinc-800 text-white">{player2Name.charAt(0)}</AvatarFallback>
+              <Avatar style={{ width: '80px', height: '80px' }}>
+                <AvatarImage src={resolveProfilePicUrl(player2.profilepic)} />
+                <AvatarFallback className="bg-zinc-800 text-white text-2xl">{player2Name.charAt(0)}</AvatarFallback>
               </Avatar>
             )
           )}
@@ -722,8 +728,8 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
           bottom: '0px',
           borderTopRightRadius: `calc(16 * ${scale})`,
           overflow: 'hidden',
-          borderTop: `2px solid ${p1Active ? player1.accentColor : GREY}`,
-          borderRight: `2px solid ${p1Active ? player1.accentColor : GREY}`,
+          borderTop: `2px solid ${p1Active ? player1.profilecolor : GREY}`,
+          borderRight: `2px solid ${p1Active ? player1.profilecolor : GREY}`,
           transform: phase >= 1 ? 'translateY(0)' : 'translateY(100%)',
           transition: 'transform 0.6s ease-out, border-color 0.3s ease',
           zIndex: 20,
@@ -733,7 +739,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
         {colorsRevealed && p1Active && (
           <div key={`p1-bar-${turnKey}`} style={{
             position: 'absolute', inset: 0,
-            background: `linear-gradient(180deg, ${player1.accentColor}40 0%, ${player1.accentColor}20 50%, transparent 100%)`,
+            background: `linear-gradient(180deg, ${player1.profilecolor}40 0%, ${player1.profilecolor}20 50%, transparent 100%)`,
             animation: 'colorSwipeUp 0.5s ease-out forwards',
           }} />
         )}
@@ -746,7 +752,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
           overflow: 'hidden',
         }}>
           <Avatar className="w-full h-full">
-            <AvatarImage src={resolveProfilePicUrl(player1.profilePic)} />
+            <AvatarImage src={resolveProfilePicUrl(player1.profilepic)} />
             <AvatarFallback className="bg-zinc-800 text-white">{player1Name.charAt(0)}</AvatarFallback>
           </Avatar>
         </div>
@@ -756,12 +762,12 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
             position: 'absolute',
             width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
             left: `calc(${FIGMA.avatarLeft} * ${scale})`, top: '50%', transform: 'translateY(-50%)',
-            background: '#000', border: `3px solid ${player1.accentColor}`, borderRadius: '50%', zIndex: 2,
+            background: '#000', border: `3px solid ${player1.profilecolor}`, borderRadius: '50%', zIndex: 2,
             overflow: 'hidden',
             animation: 'colorSwipeUp 0.5s ease-out forwards',
           }}>
             <Avatar className="w-full h-full">
-              <AvatarImage src={resolveProfilePicUrl(player1.profilePic)} />
+              <AvatarImage src={resolveProfilePicUrl(player1.profilepic)} />
               <AvatarFallback className="bg-zinc-800 text-white">{player1Name.charAt(0)}</AvatarFallback>
             </Avatar>
           </div>
@@ -784,7 +790,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
           top: '50%', transform: 'translateY(-50%)',
           fontFamily: FONT_SCORE, fontWeight: 300, fontSize: `calc(${FIGMA.scoreSize} * ${scale})`,
           lineHeight: 1,
-          color: p1State.status === 'thrown' && p1Active ? player1.accentColor : (p1Active ? '#FFFFFF' : GREY),
+          color: p1State.status === 'thrown' && p1Active ? player1.profilecolor : (p1Active ? '#FFFFFF' : GREY),
           textShadow: p1Active ? '-6px 6px 9.7px rgba(0, 0, 0, 0.78)' : 'none', zIndex: 3,
         }}>
           {getScoreDisplay(p1State, player1.id)}
@@ -802,8 +808,8 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
           bottom: '0px',
           borderTopLeftRadius: `calc(16 * ${scale})`,
           overflow: 'hidden',
-          borderTop: `2px solid ${p2Active ? player2.accentColor : GREY}`,
-          borderLeft: `2px solid ${p2Active ? player2.accentColor : GREY}`,
+          borderTop: `2px solid ${p2Active ? player2.profilecolor : GREY}`,
+          borderLeft: `2px solid ${p2Active ? player2.profilecolor : GREY}`,
           transform: phase >= 1 ? 'translateY(0)' : 'translateY(100%)',
           transition: 'transform 0.6s ease-out, border-color 0.3s ease',
           zIndex: 20,
@@ -813,7 +819,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
         {colorsRevealed && p2Active && (
           <div key={`p2-bar-${turnKey}`} style={{
             position: 'absolute', inset: 0,
-            background: `linear-gradient(180deg, ${player2.accentColor}40 0%, ${player2.accentColor}20 50%, transparent 100%)`,
+            background: `linear-gradient(180deg, ${player2.profilecolor}40 0%, ${player2.profilecolor}20 50%, transparent 100%)`,
             animation: 'colorSwipeUp 0.5s ease-out forwards',
           }} />
         )}
@@ -823,7 +829,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
           top: '50%', transform: 'translateY(-50%)',
           fontFamily: FONT_SCORE, fontWeight: 300, fontSize: `calc(${FIGMA.scoreSize} * ${scale})`,
           lineHeight: 1,
-          color: p2State.status === 'thrown' && p2Active ? player2.accentColor : (p2Active ? '#FFFFFF' : GREY),
+          color: p2State.status === 'thrown' && p2Active ? player2.profilecolor : (p2Active ? '#FFFFFF' : GREY),
           textShadow: p2Active ? '-6px 6px 9.7px rgba(0, 0, 0, 0.78)' : 'none', zIndex: 3,
         }}>
           {getScoreDisplay(p2State, player2.id)}
@@ -850,7 +856,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
           overflow: 'hidden',
         }}>
           <Avatar className="w-full h-full">
-            <AvatarImage src={resolveProfilePicUrl(player2.profilePic)} />
+            <AvatarImage src={resolveProfilePicUrl(player2.profilepic)} />
             <AvatarFallback className="bg-zinc-800 text-white">{player2Name.charAt(0)}</AvatarFallback>
           </Avatar>
         </div>
@@ -860,34 +866,34 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
             position: 'absolute',
             width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
             right: `calc(${FIGMA.avatarLeft} * ${scale})`, top: '50%', transform: 'translateY(-50%)',
-            background: '#000', border: `3px solid ${player2.accentColor}`, borderRadius: '50%', zIndex: 2,
+            background: '#000', border: `3px solid ${player2.profilecolor}`, borderRadius: '50%', zIndex: 2,
             overflow: 'hidden',
             animation: 'colorSwipeUp 0.5s ease-out forwards',
           }}>
             <Avatar className="w-full h-full">
-              <AvatarImage src={resolveProfilePicUrl(player2.profilePic)} />
+              <AvatarImage src={resolveProfilePicUrl(player2.profilepic)} />
               <AvatarFallback className="bg-zinc-800 text-white">{player2Name.charAt(0)}</AvatarFallback>
             </Avatar>
           </div>
         )}
       </div>
 
-      {/* Dev Mode Throw Simulator */}
+      {/* Dev Mode Throw Simulator - compact, right side */}
       {devMode && (
         <div
-          className="absolute bottom-24 left-1/2 -translate-x-1/2 p-3 bg-orange-900/50 border border-orange-600 rounded-lg z-30"
-          style={{ minWidth: `calc(400 * ${scale})` }}
+          className="absolute bottom-28 right-4 p-2 bg-orange-900/70 border border-orange-600 rounded-lg z-30"
+          style={{ width: '140px' }}
         >
-          <p className="text-orange-400 text-xs font-bold mb-2 text-center">
-            DEV MODE - Throw Simulator {myThrowSent ? '(Already thrown)' : ''}
+          <p className="text-orange-400 text-[10px] font-bold mb-1 text-center">
+            DEV {myThrowSent ? '(SENT)' : ''}
           </p>
-          <div className="flex flex-wrap gap-2 justify-center">
-            {[1, 5, 10, 15, 20].map(v => (
+          <div className="grid grid-cols-3 gap-1">
+            {[5, 10, 20].map(v => (
               <button
                 key={v}
                 onClick={() => simulateThrow('inner', v)}
                 disabled={myThrowSent}
-                className="px-3 py-1 bg-zinc-700 hover:bg-zinc-600 disabled:bg-zinc-800 disabled:text-zinc-600 text-white text-xs rounded"
+                className="px-1 py-1 bg-zinc-700 hover:bg-zinc-600 disabled:opacity-40 text-white text-[10px] rounded"
               >
                 {v}
               </button>
@@ -895,23 +901,23 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
             <button
               onClick={() => simulateThrow('bull')}
               disabled={myThrowSent}
-              className="px-3 py-1 bg-green-700 hover:bg-green-600 disabled:bg-green-900 disabled:text-green-700 text-white text-xs rounded"
+              className="px-1 py-1 bg-green-700 hover:bg-green-600 disabled:opacity-40 text-white text-[10px] rounded"
             >
-              BULL
+              B
             </button>
             <button
               onClick={() => simulateThrow('dblbull')}
               disabled={myThrowSent}
-              className="px-3 py-1 bg-red-700 hover:bg-red-600 disabled:bg-red-900 disabled:text-red-700 text-white text-xs rounded"
+              className="px-1 py-1 bg-red-700 hover:bg-red-600 disabled:opacity-40 text-white text-[10px] rounded"
             >
-              D-BULL
+              DB
             </button>
             <button
               onClick={() => simulateThrow('miss')}
               disabled={myThrowSent}
-              className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-900 disabled:text-zinc-700 text-zinc-400 text-xs rounded"
+              className="px-1 py-1 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 text-zinc-400 text-[10px] rounded"
             >
-              MISS
+              0
             </button>
           </div>
         </div>

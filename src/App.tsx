@@ -616,8 +616,8 @@ export default function App() {
         !isAuthenticated ? <Navigate to={`/login${queryString}`} /> :
         !activeGame ? <Navigate to={`/dashboard${queryString}`} /> :
         <CorkScreen
-          player1={{ id: userId, name: userName, profilePic: profilePic || undefined, accentColor }}
-          player2={{ id: activeGame.opponentId, name: activeGame.opponentName, profilePic: activeGame.opponentProfilePic, accentColor: activeGame.opponentAccentColor }}
+          player1={{ id: userId, granboard_name: userName, profilepic: profilePic || undefined, profilecolor: accentColor }}
+          player2={{ id: activeGame.opponentId, granboard_name: activeGame.opponentName, profilepic: activeGame.opponentProfilePic, profilecolor: activeGame.opponentAccentColor }}
           gameId={activeGame.gameId}
           visiblePlayerId={userId}
           isInitiator={activeGame.isInitiator}
