@@ -38,6 +38,18 @@ interface CorkThrowMessage {
 
 // CSS keyframes for animations
 const corkKeyframes = `
+@keyframes camSlideFromLeft {
+  0% { transform: translateY(-50%) translateX(-100%); }
+  100% { transform: translateY(-50%) translateX(0); }
+}
+@keyframes camSlideFromRight {
+  0% { transform: translateY(-50%) translateX(100%); }
+  100% { transform: translateY(-50%) translateX(0); }
+}
+@keyframes barSlideUp {
+  0% { transform: translateY(100%); }
+  100% { transform: translateY(0); }
+}
 @keyframes colorSwipeUp {
   0% { clip-path: inset(100% 0 0 0); }
   100% { clip-path: inset(0 0 0 0); }
@@ -46,17 +58,13 @@ const corkKeyframes = `
   0% { clip-path: inset(0 0 0 0); }
   100% { clip-path: inset(100% 0 0 0); }
 }
-@keyframes winnerPulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
-}
-@keyframes winnerSlideIn {
-  0% { transform: translateX(-100%); opacity: 0; }
-  100% { transform: translateX(0); opacity: 1; }
+@keyframes winnerOmbre {
+  0% { clip-path: inset(0 0 100% 0); }
+  100% { clip-path: inset(0 0 0 0); }
 }
 @keyframes tiePulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.05); }
+  0%, 100% { transform: translate(-50%, -50%) scale(1); }
+  50% { transform: translate(-50%, -50%) scale(1.05); }
 }
 `;
 
@@ -91,6 +99,16 @@ const resolveProfilePicUrl = (pic?: string): string | undefined => {
 const GREY = '#7E7E7E';
 const FONT_NAME = "'Helvetica Condensed', 'Helvetica', Arial, sans-serif";
 const FONT_SCORE = "'Helvetica Compressed', 'Helvetica', Arial, sans-serif";
+
+const FIGMA = {
+  frame: { w: 1180, h: 820 },
+  bar: { w: 450, h: 90 },
+  avatar: 60,
+  avatarLeft: 10,
+  nameLeft: 80,
+  nameSize: 32,
+  scoreSize: 72,
+};
 
 export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitiator, onCorkComplete, onCancel }: CorkScreenProps) {
   const { lastThrow, isConnected, connect, disconnect: bleDisconnect, status: bleStatus } = useBLE();
@@ -135,20 +153,24 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const devMode = isDevMode();
 
-  // Responsive scaling
-  const [scale, setScale] = useState(1);
+  // Phase-based intro animation (0=nothing, 1=cams slide in + bars slide up, 2=colors revealed)
+  const [phase, setPhase] = useState(0);
+  const [animKey, setAnimKey] = useState(0);
+  const [p1CamPopped, setP1CamPopped] = useState(false);
+  const [p2CamPopped, setP2CamPopped] = useState(false);
+  const [turnKey, setTurnKey] = useState(0);
+
+  // Responsive scaling - use CSS calc like preview
+  const scale = `calc(100vw / ${FIGMA.frame.w})`;
+  const greyGradient = 'linear-gradient(179.4deg, rgba(126, 126, 126, 0.2) 0.52%, rgba(0, 0, 0, 0.2) 95.46%)';
+
+  // Intro animation sequence
   useEffect(() => {
-    const updateScale = () => {
-      if (!containerRef.current) return;
-      const w = containerRef.current.clientWidth;
-      const h = containerRef.current.clientHeight;
-      // Reference: 1180 x 820 from game screens
-      setScale(Math.min(w / 1180, h / 820));
-    };
-    updateScale();
-    window.addEventListener('resize', updateScale);
-    return () => window.removeEventListener('resize', updateScale);
-  }, []);
+    const timers: NodeJS.Timeout[] = [];
+    timers.push(setTimeout(() => setPhase(1), 200));
+    timers.push(setTimeout(() => setPhase(2), 1000));
+    return () => timers.forEach(clearTimeout);
+  }, [animKey]);
 
   // Determine if local player is P1 or P2
   const amP1 = visiblePlayerId === player1.id;
@@ -183,8 +205,10 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
     // Update local state for my throw
     if (amP1) {
       setP1State({ status: 'thrown', score, wasValid, display });
+      setP1CamPopped(true);
     } else {
       setP2State({ status: 'thrown', score, wasValid, display });
+      setP2CamPopped(true);
     }
   }, [channelRef, myThrowSent, visiblePlayerId, corkRound, amP1]);
 
@@ -231,8 +255,10 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
 
         if (msg.playerId === player1.id) {
           setP1State({ status: 'thrown', score: msg.score, wasValid: msg.wasValid, display: msg.display });
+          setP1CamPopped(true);
         } else if (msg.playerId === player2.id) {
           setP2State({ status: 'thrown', score: msg.score, wasValid: msg.wasValid, display: msg.display });
+          setP2CamPopped(true);
         }
       })
       .subscribe((status) => {
@@ -318,7 +344,10 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
           setRevealed(false);
           setP1State({ status: 'waiting', score: null, wasValid: false, display: '-' });
           setP2State({ status: 'waiting', score: null, wasValid: false, display: '-' });
+          setP1CamPopped(false);
+          setP2CamPopped(false);
           setCorkRound(r => r + 1);
+          setTurnKey(k => k + 1);
           setMyThrowSent(false);
         }, 2500);
       }
@@ -368,6 +397,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
   const handleLogoutAction = () => setShowLeaveConfirm(true);
 
   // Determine states for UI
+  const colorsRevealed = phase >= 2;
   const p1HasThrown = p1State.status === 'thrown';
   const p2HasThrown = p2State.status === 'thrown';
   const p1IsWinner = winner === player1.id;
@@ -375,18 +405,9 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
   const p1IsLoser = winner !== null && !p1IsWinner;
   const p2IsLoser = winner !== null && !p2IsWinner;
 
-  // Camera border logic: gray -> profile color when thrown, bolder for winner
-  const getCameraBorderStyle = (hasThrown: boolean, isWinner: boolean, isLoser: boolean, accentColor: string) => {
-    if (isLoser) return { borderColor: GREY, borderWidth: '3px', opacity: 0.5 };
-    if (isWinner) return { borderColor: accentColor, borderWidth: '5px', opacity: 1 };
-    if (hasThrown) return { borderColor: accentColor, borderWidth: '3px', opacity: 1 };
-    return { borderColor: GREY, borderWidth: '3px', opacity: 1 };
-  };
-
-  // Player bar background gradient
-  const greyGradient = 'linear-gradient(179.4deg, rgba(126, 126, 126, 0.2) 0.52%, rgba(0, 0, 0, 0.2) 95.46%)';
-  const getColorGradient = (accentColor: string) =>
-    `linear-gradient(179.4deg, ${accentColor}33 0.52%, rgba(0, 0, 0, 0.2) 95.46%)`;
+  // Active states for bars (colors show when phase >= 2 and not loser)
+  const p1Active = colorsRevealed && !p1IsLoser;
+  const p2Active = colorsRevealed && !p2IsLoser;
 
   return (
     <div ref={containerRef} className="fixed inset-0 bg-black z-50 flex flex-col overflow-hidden">
@@ -468,396 +489,387 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
       )}
 
       {/* Header */}
-      <div
-        className="relative flex items-center justify-center shrink-0 z-20"
-        style={{ height: `calc(60 * ${scale})`, padding: `calc(10 * ${scale})` }}
-      >
-        {/* Back button */}
-        <button
-          onClick={() => setShowLeaveConfirm(true)}
-          className="absolute left-0 p-2 text-white hover:opacity-80 transition-opacity"
-          style={{ left: `calc(10 * ${scale})` }}
-          aria-label="Back"
-        >
-          <ChevronLeft style={{ width: `calc(28 * ${scale})`, height: `calc(28 * ${scale})` }} />
+      <div style={{ position: 'relative', zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', height: '56px' }}>
+        <button onClick={() => setShowLeaveConfirm(true)} style={{ color: '#fff', background: 'none', border: 'none', cursor: 'pointer' }}>
+          <ChevronLeft size={24} />
         </button>
-
-        {/* Title */}
-        <h1
-          className="text-white uppercase tracking-wider font-bold"
-          style={{ fontFamily: FONT_NAME, fontSize: `calc(24 * ${scale})` }}
-        >
-          THROW CORK{corkRound > 1 ? ` R${corkRound}` : ''}
-        </h1>
-
-        {/* User menu */}
-        <div className="absolute right-0" style={{ right: `calc(10 * ${scale})` }}>
-          <UserMenu
-            profilepic={resolveProfilePicUrl(localPlayerPic)}
-            profilecolor={localPlayerColor}
-            granboard_name={localPlayerName}
-            onLogout={handleLogoutAction}
-            customItems={customMenuItems}
-            size="sm"
-          />
-        </div>
+        <UserMenu
+          profilepic={resolveProfilePicUrl(localPlayerPic)}
+          profilecolor={localPlayerColor}
+          granboard_name={localPlayerName}
+          onLogout={handleLogoutAction}
+          customItems={customMenuItems}
+          size="sm"
+        />
       </div>
+
+      {/* Title - centered below header */}
+      <h1 style={{
+        position: 'absolute',
+        top: `calc(80 * ${scale})`,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        color: '#fff',
+        fontFamily: FONT_NAME,
+        fontSize: `calc(48 * ${scale})`,
+        fontWeight: 700,
+        textTransform: 'uppercase',
+        letterSpacing: '0.1em',
+        zIndex: 20,
+      }}>
+        THROW CORK{corkRound > 1 ? ` R${corkRound}` : ''}
+      </h1>
 
       {/* Opponent offline indicator */}
       {!isOpponentOnline && disconnectCountdown === null && (
-        <div
-          className="bg-yellow-600/20 border-b border-yellow-600 flex items-center justify-center gap-2 z-10"
-          style={{ padding: `calc(6 * ${scale})` }}
-        >
-          <WifiOff style={{ width: `calc(14 * ${scale})`, height: `calc(14 * ${scale})` }} className="text-yellow-500" />
-          <span className="text-yellow-500" style={{ fontSize: `calc(14 * ${scale})` }}>{remotePlayerName} appears offline</span>
+        <div style={{
+          position: 'absolute',
+          top: `calc(130 * ${scale})`,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'rgba(202, 138, 4, 0.2)',
+          border: '1px solid #ca8a04',
+          borderRadius: '8px',
+          padding: '8px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          zIndex: 20,
+        }}>
+          <WifiOff size={14} className="text-yellow-500" />
+          <span style={{ color: '#eab308', fontSize: '14px' }}>{remotePlayerName} appears offline</span>
         </div>
       )}
 
-      {/* Main content - Video feeds */}
-      <div className="flex-1 flex items-center justify-center relative z-10" style={{ padding: `calc(20 * ${scale})` }}>
-        {/* Tie overlay */}
-        {tieAlert && (
-          <div
-            className="absolute z-50 bg-yellow-600 text-black px-8 py-4 rounded-xl"
-            style={{
-              animation: 'tiePulse 0.5s ease-in-out infinite',
-              fontSize: `calc(28 * ${scale})`,
-              fontFamily: FONT_NAME,
-              fontWeight: 700,
-            }}
-          >
-            TIE! Both rethrow!
-          </div>
+      {/* Tie overlay */}
+      {tieAlert && (
+        <div style={{
+          position: 'absolute',
+          left: '50%',
+          top: '50%',
+          zIndex: 50,
+          background: '#ca8a04',
+          color: '#000',
+          padding: '16px 32px',
+          borderRadius: '12px',
+          fontSize: '24px',
+          fontWeight: 700,
+          fontFamily: FONT_NAME,
+          animation: 'tiePulse 0.5s ease-in-out infinite',
+        }}>
+          TIE! Both rethrow!
+        </div>
+      )}
+
+      {/* CAM 1 - flush left, 16:9 aspect ratio */}
+      <div
+        key={`cam1-${animKey}`}
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: '50%',
+          transform: phase >= 1 ? 'translateY(-50%) translateX(0)' : 'translateY(-50%) translateX(-100%)',
+          width: `min(calc(${FIGMA.bar.w + 50} * ${scale}), 45vh * 16 / 9)`,
+          height: `min(calc(${FIGMA.bar.w + 50} * ${scale} * 9 / 16), 45vh)`,
+          zIndex: 10,
+          transition: 'transform 0.6s ease-out',
+        }}
+      >
+        {/* Winner overlay gradient */}
+        {p1IsWinner && (
+          <div style={{
+            position: 'absolute',
+            top: 0, right: 0, bottom: 0, left: 0,
+            zIndex: 20,
+            borderTopRightRadius: `calc(10 * ${scale})`,
+            borderBottomRightRadius: `calc(10 * ${scale})`,
+            pointerEvents: 'none',
+            background: `linear-gradient(180deg, ${player1.accentColor}BF 0%, ${player1.accentColor}40 15%, transparent 25%)`,
+            borderTop: `2px solid ${player1.accentColor}`,
+            borderRight: `2px solid ${player1.accentColor}`,
+            borderBottom: `2px solid ${player1.accentColor}`,
+            borderLeft: 'none',
+            animation: 'winnerOmbre 0.5s ease-out forwards',
+          }} />
         )}
-
-        {/* Video container */}
-        <div
-          className="flex items-stretch justify-center gap-4 w-full"
-          style={{ maxWidth: `calc(900 * ${scale})`, gap: `calc(30 * ${scale})` }}
-        >
-          {/* Player 1 Video */}
-          <div className="flex-1 relative">
-            {(() => {
-              const borderStyle = getCameraBorderStyle(p1HasThrown, p1IsWinner, p1IsLoser, player1.accentColor);
-              return (
-                <div
-                  className="w-full aspect-video bg-zinc-900 rounded-lg overflow-hidden relative transition-all duration-500"
-                  style={{
-                    borderStyle: 'solid',
-                    borderColor: borderStyle.borderColor,
-                    borderWidth: borderStyle.borderWidth,
-                    opacity: borderStyle.opacity,
-                  }}
-                >
-                  {isP1Local ? (
-                    localStream ? (
-                      <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-zinc-500" style={{ fontSize: `calc(14 * ${scale})` }}>
-                        {devMode ? 'No camera (dev mode)' : error || 'Starting camera...'}
-                      </div>
-                    )
-                  ) : (
-                    remoteStream ? (
-                      <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Avatar style={{ width: `calc(60 * ${scale})`, height: `calc(60 * ${scale})` }}>
-                          <AvatarImage src={resolveProfilePicUrl(player1.profilePic)} />
-                          <AvatarFallback className="bg-zinc-800 text-white" style={{ fontSize: `calc(24 * ${scale})` }}>
-                            {player1Name.charAt(0)}
-                          </AvatarFallback>
-                        </Avatar>
-                      </div>
-                    )
-                  )}
-
-                  {/* Winner banner overlay */}
-                  {p1IsWinner && (
-                    <div
-                      className="absolute inset-x-0 bottom-0 flex items-center justify-center"
-                      style={{
-                        height: `calc(50 * ${scale})`,
-                        background: `linear-gradient(90deg, transparent 0%, ${player1.accentColor}CC 20%, ${player1.accentColor}CC 80%, transparent 100%)`,
-                        animation: 'winnerSlideIn 0.5s ease-out forwards',
-                      }}
-                    >
-                      <span
-                        className="text-white font-bold uppercase tracking-widest"
-                        style={{ fontFamily: FONT_NAME, fontSize: `calc(24 * ${scale})`, textShadow: '2px 2px 4px rgba(0,0,0,0.5)' }}
-                      >
-                        WINNER
-                      </span>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-          </div>
-
-          {/* VS divider */}
-          <div className="flex items-center">
-            <span
-              className="text-zinc-600 font-bold"
-              style={{ fontFamily: FONT_NAME, fontSize: `calc(24 * ${scale})` }}
-            >
-              VS
+        {p1IsWinner && (
+          <div style={{ position: 'absolute', top: `calc(12 * ${scale})`, left: `calc(12 * ${scale})`, zIndex: 30 }}>
+            <span style={{ color: '#fff', fontFamily: FONT_NAME, fontSize: `calc(28 * ${scale})`, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+              WINNER
             </span>
           </div>
-
-          {/* Player 2 Video */}
-          <div className="flex-1 relative">
-            {(() => {
-              const borderStyle = getCameraBorderStyle(p2HasThrown, p2IsWinner, p2IsLoser, player2.accentColor);
-              return (
-                <div
-                  className="w-full aspect-video bg-zinc-900 rounded-lg overflow-hidden relative transition-all duration-500"
-                  style={{
-                    borderStyle: 'solid',
-                    borderColor: borderStyle.borderColor,
-                    borderWidth: borderStyle.borderWidth,
-                    opacity: borderStyle.opacity,
-                  }}
-                >
-                  {!isP1Local ? (
-                    localStream ? (
-                      <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-zinc-500" style={{ fontSize: `calc(14 * ${scale})` }}>
-                        {devMode ? 'No camera (dev mode)' : error || 'Starting camera...'}
-                      </div>
-                    )
-                  ) : (
-                    remoteStream ? (
-                      <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Avatar style={{ width: `calc(60 * ${scale})`, height: `calc(60 * ${scale})` }}>
-                          <AvatarImage src={resolveProfilePicUrl(player2.profilePic)} />
-                          <AvatarFallback className="bg-zinc-800 text-white" style={{ fontSize: `calc(24 * ${scale})` }}>
-                            {player2Name.charAt(0)}
-                          </AvatarFallback>
-                        </Avatar>
-                      </div>
-                    )
-                  )}
-
-                  {/* Winner banner overlay */}
-                  {p2IsWinner && (
-                    <div
-                      className="absolute inset-x-0 bottom-0 flex items-center justify-center"
-                      style={{
-                        height: `calc(50 * ${scale})`,
-                        background: `linear-gradient(90deg, transparent 0%, ${player2.accentColor}CC 20%, ${player2.accentColor}CC 80%, transparent 100%)`,
-                        animation: 'winnerSlideIn 0.5s ease-out forwards',
-                      }}
-                    >
-                      <span
-                        className="text-white font-bold uppercase tracking-widest"
-                        style={{ fontFamily: FONT_NAME, fontSize: `calc(24 * ${scale})`, textShadow: '2px 2px 4px rgba(0,0,0,0.5)' }}
-                      >
-                        WINNER
-                      </span>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-          </div>
+        )}
+        <div style={{
+          width: 'calc(100% + 3px)',
+          height: 'calc(100% + 6px)',
+          marginLeft: '-3px',
+          marginTop: '-3px',
+          borderTopRightRadius: `calc(10 * ${scale})`,
+          borderBottomRightRadius: `calc(10 * ${scale})`,
+          background: '#000',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'hidden',
+          border: `2px solid ${p1IsLoser ? GREY : (p1CamPopped ? player1.accentColor : GREY)}`,
+          borderLeft: 'none',
+          opacity: p1IsLoser ? 0.4 : 1,
+          transition: p1IsLoser ? 'opacity 0.15s ease, border-color 0.15s ease' : 'border-color 0.3s ease',
+        }}>
+          {isP1Local ? (
+            localStream ? (
+              <video ref={localVideoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }} />
+            ) : (
+              <span style={{ color: '#666', fontSize: '14px' }}>{devMode ? 'No camera (dev mode)' : error || 'Starting camera...'}</span>
+            )
+          ) : (
+            remoteStream ? (
+              <video ref={remoteVideoRef} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              <Avatar style={{ width: '60px', height: '60px' }}>
+                <AvatarImage src={resolveProfilePicUrl(player1.profilePic)} />
+                <AvatarFallback className="bg-zinc-800 text-white">{player1Name.charAt(0)}</AvatarFallback>
+              </Avatar>
+            )
+          )}
         </div>
       </div>
 
-      {/* Player Bars at bottom */}
-      <div className="relative z-20" style={{ height: `calc(90 * ${scale})` }}>
-        {/* Player 1 Bar - Left */}
-        <div style={{
+      {/* CAM 2 - flush right, 16:9 aspect ratio */}
+      <div
+        key={`cam2-${animKey}`}
+        style={{
           position: 'absolute',
-          width: `calc(450 * ${scale})`,
-          height: `calc(90 * ${scale})`,
-          left: '0px',
+          right: 0,
+          top: '50%',
+          transform: phase >= 1 ? 'translateY(-50%) translateX(0)' : 'translateY(-50%) translateX(100%)',
+          width: `min(calc(${FIGMA.bar.w + 50} * ${scale}), 45vh * 16 / 9)`,
+          height: `min(calc(${FIGMA.bar.w + 50} * ${scale} * 9 / 16), 45vh)`,
+          zIndex: 10,
+          transition: 'transform 0.6s ease-out',
+        }}
+      >
+        {/* Winner overlay gradient */}
+        {p2IsWinner && (
+          <div style={{
+            position: 'absolute',
+            top: 0, right: 0, bottom: 0, left: 0,
+            zIndex: 20,
+            borderTopLeftRadius: `calc(10 * ${scale})`,
+            borderBottomLeftRadius: `calc(10 * ${scale})`,
+            pointerEvents: 'none',
+            background: `linear-gradient(180deg, ${player2.accentColor}BF 0%, ${player2.accentColor}40 15%, transparent 25%)`,
+            borderTop: `2px solid ${player2.accentColor}`,
+            borderLeft: `2px solid ${player2.accentColor}`,
+            borderBottom: `2px solid ${player2.accentColor}`,
+            borderRight: 'none',
+            animation: 'winnerOmbre 0.5s ease-out forwards',
+          }} />
+        )}
+        {p2IsWinner && (
+          <div style={{ position: 'absolute', top: `calc(12 * ${scale})`, right: `calc(12 * ${scale})`, zIndex: 30 }}>
+            <span style={{ color: '#fff', fontFamily: FONT_NAME, fontSize: `calc(28 * ${scale})`, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+              WINNER
+            </span>
+          </div>
+        )}
+        <div style={{
+          width: 'calc(100% + 3px)',
+          height: 'calc(100% + 6px)',
+          marginRight: '-3px',
+          marginTop: '-3px',
+          borderTopLeftRadius: `calc(10 * ${scale})`,
+          borderBottomLeftRadius: `calc(10 * ${scale})`,
+          background: '#000',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'hidden',
+          border: `2px solid ${p2IsLoser ? GREY : (p2CamPopped ? player2.accentColor : GREY)}`,
+          borderRight: 'none',
+          opacity: p2IsLoser ? 0.4 : 1,
+          transition: p2IsLoser ? 'opacity 0.15s ease, border-color 0.15s ease' : 'border-color 0.3s ease',
+        }}>
+          {!isP1Local ? (
+            localStream ? (
+              <video ref={localVideoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }} />
+            ) : (
+              <span style={{ color: '#666', fontSize: '14px' }}>{devMode ? 'No camera (dev mode)' : error || 'Starting camera...'}</span>
+            )
+          ) : (
+            remoteStream ? (
+              <video ref={remoteVideoRef} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              <Avatar style={{ width: '60px', height: '60px' }}>
+                <AvatarImage src={resolveProfilePicUrl(player2.profilePic)} />
+                <AvatarFallback className="bg-zinc-800 text-white">{player2Name.charAt(0)}</AvatarFallback>
+              </Avatar>
+            )
+          )}
+        </div>
+      </div>
+
+      {/* ===== PLAYER BARS ===== */}
+
+      {/* Player 1 Bar - Left */}
+      <div
+        key={`bar1-${animKey}`}
+        style={{
+          position: 'absolute',
+          width: `calc(${FIGMA.bar.w + 50} * ${scale} + 3px)`,
+          height: `calc(${FIGMA.bar.h} * ${scale})`,
+          left: '-3px',
           bottom: '0px',
           borderTopRightRadius: `calc(16 * ${scale})`,
           overflow: 'hidden',
+          borderTop: `2px solid ${p1Active ? player1.accentColor : GREY}`,
+          borderRight: `2px solid ${p1Active ? player1.accentColor : GREY}`,
+          transform: phase >= 1 ? 'translateY(0)' : 'translateY(100%)',
+          transition: 'transform 0.6s ease-out, border-color 0.3s ease',
+          zIndex: 20,
+        }}
+      >
+        <div style={{ position: 'absolute', inset: 0, background: greyGradient }} />
+        {colorsRevealed && p1Active && (
+          <div key={`p1-bar-${turnKey}`} style={{
+            position: 'absolute', inset: 0,
+            background: `linear-gradient(180deg, ${player1.accentColor}40 0%, ${player1.accentColor}20 50%, transparent 100%)`,
+            animation: 'colorSwipeUp 0.5s ease-out forwards',
+          }} />
+        )}
+        {/* Avatar grey base */}
+        <div style={{
+          position: 'absolute',
+          width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
+          left: `calc(${FIGMA.avatarLeft} * ${scale})`, top: '50%', transform: 'translateY(-50%)',
+          background: '#000', border: `3px solid ${GREY}`, borderRadius: '50%', zIndex: 1,
+          overflow: 'hidden',
         }}>
-          {/* Grey base */}
-          <div style={{ position: 'absolute', inset: 0, background: greyGradient }} />
-
-          {/* Color fill overlay with swipe animation */}
-          {p1HasThrown && !p1IsLoser && (
-            <div
-              key={`p1-bar-${corkRound}`}
-              style={{
-                position: 'absolute',
-                inset: 0,
-                background: getColorGradient(player1.accentColor),
-                animation: 'colorSwipeUp 0.5s ease-out forwards',
-              }}
-            />
-          )}
-
-          {/* Winner bar - bolder */}
-          {p1IsWinner && (
-            <div style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              height: '4px',
-              background: player1.accentColor,
-            }} />
-          )}
-
-          {/* Avatar on left outer edge */}
-          <div style={{
+          <Avatar className="w-full h-full">
+            <AvatarImage src={resolveProfilePicUrl(player1.profilePic)} />
+            <AvatarFallback className="bg-zinc-800 text-white">{player1Name.charAt(0)}</AvatarFallback>
+          </Avatar>
+        </div>
+        {/* Avatar color overlay */}
+        {colorsRevealed && p1Active && (
+          <div key={`p1-avatar-${turnKey}`} style={{
             position: 'absolute',
-            width: `calc(60 * ${scale})`,
-            height: `calc(60 * ${scale})`,
-            left: `calc(10 * ${scale})`,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            background: '#000',
-            border: `3px solid ${p1HasThrown && !p1IsLoser ? player1.accentColor : GREY}`,
-            borderRadius: '50%',
+            width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
+            left: `calc(${FIGMA.avatarLeft} * ${scale})`, top: '50%', transform: 'translateY(-50%)',
+            background: '#000', border: `3px solid ${player1.accentColor}`, borderRadius: '50%', zIndex: 2,
             overflow: 'hidden',
-            zIndex: 2,
-            transition: 'border-color 0.3s ease',
-            opacity: p1IsLoser ? 0.5 : 1,
+            animation: 'colorSwipeUp 0.5s ease-out forwards',
           }}>
             <Avatar className="w-full h-full">
               <AvatarImage src={resolveProfilePicUrl(player1.profilePic)} />
               <AvatarFallback className="bg-zinc-800 text-white">{player1Name.charAt(0)}</AvatarFallback>
             </Avatar>
           </div>
-
-          {/* Name */}
+        )}
+        {/* Name */}
+        <div style={{
+          position: 'absolute', left: `calc(${FIGMA.nameLeft} * ${scale})`,
+          top: '50%', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', zIndex: 3,
+        }}>
           <span style={{
-            position: 'absolute',
-            left: `calc(80 * ${scale})`,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            fontFamily: FONT_NAME,
-            fontWeight: 400,
-            fontSize: `calc(28 * ${scale})`,
-            color: p1IsLoser ? GREY : (p1HasThrown ? '#FFFFFF' : GREY),
-            transition: 'color 0.3s ease',
-            zIndex: 3,
+            fontFamily: FONT_NAME, fontWeight: 400, fontSize: `calc(${FIGMA.nameSize} * ${scale})`,
+            color: p1Active ? '#FFFFFF' : GREY,
           }}>
             {player1Name}
           </span>
-
-          {/* Score on right side of bar */}
-          <span style={{
-            position: 'absolute',
-            right: `calc(20 * ${scale})`,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            fontFamily: FONT_SCORE,
-            fontWeight: 300,
-            fontSize: `calc(56 * ${scale})`,
-            color: getScoreColor(p1State, player1.id, player1.accentColor),
-            opacity: p1IsLoser ? 0.5 : 1,
-            transition: 'color 0.3s ease',
-            zIndex: 3,
-          }}>
-            {getScoreDisplay(p1State, player1.id)}
-          </span>
         </div>
+        {/* Score */}
+        <span style={{
+          position: 'absolute', right: `calc(20 * ${scale})`,
+          top: '50%', transform: 'translateY(-50%)',
+          fontFamily: FONT_SCORE, fontWeight: 300, fontSize: `calc(${FIGMA.scoreSize} * ${scale})`,
+          lineHeight: 1,
+          color: p1State.status === 'thrown' && p1Active ? player1.accentColor : (p1Active ? '#FFFFFF' : GREY),
+          textShadow: p1Active ? '-6px 6px 9.7px rgba(0, 0, 0, 0.78)' : 'none', zIndex: 3,
+        }}>
+          {getScoreDisplay(p1State, player1.id)}
+        </span>
+      </div>
 
-        {/* Player 2 Bar - Right */}
-        <div style={{
+      {/* Player 2 Bar - Right */}
+      <div
+        key={`bar2-${animKey}`}
+        style={{
           position: 'absolute',
-          width: `calc(450 * ${scale})`,
-          height: `calc(90 * ${scale})`,
-          right: '0px',
+          width: `calc(${FIGMA.bar.w + 50} * ${scale} + 3px)`,
+          height: `calc(${FIGMA.bar.h} * ${scale})`,
+          right: '-3px',
           bottom: '0px',
           borderTopLeftRadius: `calc(16 * ${scale})`,
           overflow: 'hidden',
+          borderTop: `2px solid ${p2Active ? player2.accentColor : GREY}`,
+          borderLeft: `2px solid ${p2Active ? player2.accentColor : GREY}`,
+          transform: phase >= 1 ? 'translateY(0)' : 'translateY(100%)',
+          transition: 'transform 0.6s ease-out, border-color 0.3s ease',
+          zIndex: 20,
+        }}
+      >
+        <div style={{ position: 'absolute', inset: 0, background: greyGradient }} />
+        {colorsRevealed && p2Active && (
+          <div key={`p2-bar-${turnKey}`} style={{
+            position: 'absolute', inset: 0,
+            background: `linear-gradient(180deg, ${player2.accentColor}40 0%, ${player2.accentColor}20 50%, transparent 100%)`,
+            animation: 'colorSwipeUp 0.5s ease-out forwards',
+          }} />
+        )}
+        {/* Score */}
+        <span style={{
+          position: 'absolute', left: `calc(10 * ${scale})`,
+          top: '50%', transform: 'translateY(-50%)',
+          fontFamily: FONT_SCORE, fontWeight: 300, fontSize: `calc(${FIGMA.scoreSize} * ${scale})`,
+          lineHeight: 1,
+          color: p2State.status === 'thrown' && p2Active ? player2.accentColor : (p2Active ? '#FFFFFF' : GREY),
+          textShadow: p2Active ? '-6px 6px 9.7px rgba(0, 0, 0, 0.78)' : 'none', zIndex: 3,
         }}>
-          {/* Grey base */}
-          <div style={{ position: 'absolute', inset: 0, background: greyGradient }} />
-
-          {/* Color fill overlay with swipe animation */}
-          {p2HasThrown && !p2IsLoser && (
-            <div
-              key={`p2-bar-${corkRound}`}
-              style={{
-                position: 'absolute',
-                inset: 0,
-                background: getColorGradient(player2.accentColor),
-                animation: 'colorSwipeUp 0.5s ease-out forwards',
-              }}
-            />
-          )}
-
-          {/* Winner bar - bolder */}
-          {p2IsWinner && (
-            <div style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              height: '4px',
-              background: player2.accentColor,
-            }} />
-          )}
-
-          {/* Score on left side of bar */}
+          {getScoreDisplay(p2State, player2.id)}
+        </span>
+        {/* Name */}
+        <div style={{
+          position: 'absolute', right: `calc(${FIGMA.nameLeft} * ${scale})`,
+          top: '50%', transform: 'translateY(-50%)',
+          display: 'flex', flexDirection: 'column', alignItems: 'flex-end', zIndex: 3,
+        }}>
           <span style={{
-            position: 'absolute',
-            left: `calc(20 * ${scale})`,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            fontFamily: FONT_SCORE,
-            fontWeight: 300,
-            fontSize: `calc(56 * ${scale})`,
-            color: getScoreColor(p2State, player2.id, player2.accentColor),
-            opacity: p2IsLoser ? 0.5 : 1,
-            transition: 'color 0.3s ease',
-            zIndex: 3,
-          }}>
-            {getScoreDisplay(p2State, player2.id)}
-          </span>
-
-          {/* Name */}
-          <span style={{
-            position: 'absolute',
-            right: `calc(80 * ${scale})`,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            fontFamily: FONT_NAME,
-            fontWeight: 400,
-            fontSize: `calc(28 * ${scale})`,
-            color: p2IsLoser ? GREY : (p2HasThrown ? '#FFFFFF' : GREY),
-            transition: 'color 0.3s ease',
-            textAlign: 'right',
-            zIndex: 3,
+            fontFamily: FONT_NAME, fontWeight: 400, fontSize: `calc(${FIGMA.nameSize} * ${scale})`,
+            color: p2Active ? '#FFFFFF' : GREY,
           }}>
             {player2Name}
           </span>
-
-          {/* Avatar on right outer edge */}
-          <div style={{
+        </div>
+        {/* Avatar grey base */}
+        <div style={{
+          position: 'absolute',
+          width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
+          right: `calc(${FIGMA.avatarLeft} * ${scale})`, top: '50%', transform: 'translateY(-50%)',
+          background: '#000', border: `3px solid ${GREY}`, borderRadius: '50%', zIndex: 1,
+          overflow: 'hidden',
+        }}>
+          <Avatar className="w-full h-full">
+            <AvatarImage src={resolveProfilePicUrl(player2.profilePic)} />
+            <AvatarFallback className="bg-zinc-800 text-white">{player2Name.charAt(0)}</AvatarFallback>
+          </Avatar>
+        </div>
+        {/* Avatar color overlay */}
+        {colorsRevealed && p2Active && (
+          <div key={`p2-avatar-${turnKey}`} style={{
             position: 'absolute',
-            width: `calc(60 * ${scale})`,
-            height: `calc(60 * ${scale})`,
-            right: `calc(10 * ${scale})`,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            background: '#000',
-            border: `3px solid ${p2HasThrown && !p2IsLoser ? player2.accentColor : GREY}`,
-            borderRadius: '50%',
+            width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
+            right: `calc(${FIGMA.avatarLeft} * ${scale})`, top: '50%', transform: 'translateY(-50%)',
+            background: '#000', border: `3px solid ${player2.accentColor}`, borderRadius: '50%', zIndex: 2,
             overflow: 'hidden',
-            zIndex: 2,
-            transition: 'border-color 0.3s ease',
-            opacity: p2IsLoser ? 0.5 : 1,
+            animation: 'colorSwipeUp 0.5s ease-out forwards',
           }}>
             <Avatar className="w-full h-full">
               <AvatarImage src={resolveProfilePicUrl(player2.profilePic)} />
               <AvatarFallback className="bg-zinc-800 text-white">{player2Name.charAt(0)}</AvatarFallback>
             </Avatar>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Dev Mode Throw Simulator */}
