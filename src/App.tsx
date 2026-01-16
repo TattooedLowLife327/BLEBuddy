@@ -9,6 +9,7 @@ import { O1InhouseGameScreen } from './pages/01InhouseGameScreen';
 import { O1GSPreview } from './pages/preview/01GSPreview';
 import { CRGSPreview } from './pages/preview/CRGSPreview';
 import { CorkPreview } from './pages/preview/CorkPreview';
+import { CorkScreen } from './components/CorkScreen';
 import { Online01Preview } from './pages/preview/Online01Preview';
 import { OnlineCRPreview } from './pages/preview/OnlineCRPreview';
 import PreviewIndex from './pages/preview/PreviewIndex';
@@ -17,7 +18,6 @@ import { CRInhouseGameScreen } from './pages/CRInhouseGameScreen';
 import { O1OnlineGameScreen } from './pages/01OnlineGameScreen';
 import { MedleyMatchManager } from './pages/MedleyMatchManager';
 import { SettingsModal } from './components/SettingsModal';
-import { iOSBluefyBanner } from './components/iOSBluefyBanner';
 import { createClient } from './utils/supabase/client';
 import { useBLE } from './contexts/BLEContext';
 import { useGame, type GameData } from './contexts/GameContext';
@@ -528,7 +528,6 @@ export default function App() {
 
   return (
     <>
-    <iOSBluefyBanner />
     <Routes>
       {/* Preview screens - NO AUTH, must be first */}
       <Route path="/preview" element={<PreviewIndex />} />
