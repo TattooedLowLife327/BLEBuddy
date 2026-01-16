@@ -494,8 +494,8 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
         <div className="absolute right-0" style={{ right: `calc(10 * ${scale})` }}>
           <UserMenu
             profilepic={resolveProfilePicUrl(localPlayerPic)}
-            accentColor={localPlayerColor}
-            userName={localPlayerName}
+            profilecolor={localPlayerColor}
+            granboard_name={localPlayerName}
             onLogout={handleLogoutAction}
             customItems={customMenuItems}
             size="sm"

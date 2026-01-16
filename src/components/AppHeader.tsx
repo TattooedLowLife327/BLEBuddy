@@ -59,8 +59,8 @@ export function AppHeader({
   customMenuItems,
 }: AppHeaderProps) {
   const [profilepic, setProfilepic] = useState<string | null>(null);
-  const [accentColor, setAccentColor] = useState('#a855f7');
-  const [userName, setUserName] = useState('');
+  const [profilecolor, setProfilecolor] = useState('#a855f7');
+  const [granboard_name, setGranboardName] = useState('');
 
   const supabase = createClient();
   const notificationCount = missedRequests.length;
@@ -82,8 +82,8 @@ export function AppHeader({
 
         if (playerProfile) {
           if (playerProfile.profilepic) setProfilepic(playerProfile.profilepic);
-          if (playerProfile.profilecolor) setAccentColor(playerProfile.profilecolor);
-          if (playerProfile.granboard_name) setUserName(playerProfile.granboard_name);
+          if (playerProfile.profilecolor) setProfilecolor(playerProfile.profilecolor);
+          if (playerProfile.granboard_name) setGranboardName(playerProfile.granboard_name);
         } else {
           // Fallback to youth schema
           const { data: youthProfile } = await (supabase as any)
@@ -95,8 +95,8 @@ export function AppHeader({
 
           if (youthProfile) {
             if (youthProfile.profilepic) setProfilepic(youthProfile.profilepic);
-            if (youthProfile.profilecolor) setAccentColor(youthProfile.profilecolor);
-            if (youthProfile.granboard_name) setUserName(youthProfile.granboard_name);
+            if (youthProfile.profilecolor) setProfilecolor(youthProfile.profilecolor);
+            if (youthProfile.granboard_name) setGranboardName(youthProfile.granboard_name);
           }
         }
       } catch (error) {
@@ -250,8 +250,8 @@ export function AppHeader({
         {/* User menu */}
         <UserMenu
           profilepic={profilepic}
-          accentColor={accentColor}
-          userName={userName}
+          profilecolor={profilecolor}
+          granboard_name={granboard_name}
           onLogout={onLogout}
           onOpenSettings={onOpenSettings}
           customItems={customMenuItems}

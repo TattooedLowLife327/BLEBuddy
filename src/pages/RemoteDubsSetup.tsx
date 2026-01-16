@@ -8,10 +8,10 @@ import { UserMenu } from '../components/UserMenu';
 interface RemoteDubsSetupProps {
   onBack: () => void;
   onContinue: (partnerId: string) => void;
-  accentColor: string;
+  profilecolor: string;
   userId: string;
-  userProfilePic: string | null;
-  userName: string;
+  profilepic: string | null;
+  granboard_name: string;
   onLogout: () => void;
 }
 
@@ -26,10 +26,10 @@ interface FriendProfile {
 export function RemoteDubsSetup({
   onBack,
   onContinue,
-  accentColor,
+  profilecolor,
   userId,
-  userProfilePic,
-  userName,
+  profilepic,
+  granboard_name,
   onLogout,
 }: RemoteDubsSetupProps) {
   const [friends, setFriends] = useState<FriendProfile[]>([]);
@@ -174,16 +174,16 @@ export function RemoteDubsSetup({
             style={{
               fontFamily: 'Helvetica, Arial, sans-serif',
               fontWeight: 'bold',
-              color: accentColor,
+              color: profilecolor,
             }}
           >
             Select Remote Partner
           </h1>
 
           <UserMenu
-            profilePic={userProfilePic}
-            accentColor={accentColor}
-            userName={userName}
+            profilepic={profilepic}
+            profilecolor={profilecolor}
+            granboard_name={granboard_name}
             onLogout={onLogout}
           />
         </div>
@@ -209,7 +209,7 @@ export function RemoteDubsSetup({
                 onClick={fetchMutualFriendsOnline}
                 className="mt-4 px-6 py-3 rounded-lg text-white transition-all"
                 style={{
-                  backgroundColor: accentColor,
+                  backgroundColor: profilecolor,
                   fontFamily: 'Helvetica, Arial, sans-serif',
                   fontWeight: 'bold',
                 }}
@@ -258,13 +258,13 @@ export function RemoteDubsSetup({
                             <Avatar
                               className="w-24 h-24 border-4"
                               style={{
-                                borderColor: isSelected ? accentColor : friend.profilecolor,
+                                borderColor: isSelected ? profilecolor : friend.profilecolor,
                                 filter: isInGame ? 'grayscale(100%)' : 'none',
                                 boxShadow:
                                   !isInGame && !isSelected
                                     ? `0 0 30px ${friend.profilecolor}`
                                     : isSelected
-                                    ? `0 0 40px ${accentColor}`
+                                    ? `0 0 40px ${profilecolor}`
                                     : 'none',
                               }}
                             >
@@ -327,7 +327,7 @@ export function RemoteDubsSetup({
                     style={{
                       fontFamily: 'Helvetica, Arial, sans-serif',
                       fontWeight: 'bold',
-                      color: accentColor,
+                      color: profilecolor,
                     }}
                   >
                     {selectedFriend.granboard_name}
@@ -344,10 +344,10 @@ export function RemoteDubsSetup({
           disabled={!selectedFriend || selectedFriend.status === 'in_game'}
           className="w-full py-4 rounded-lg text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           style={{
-            backgroundColor: accentColor,
+            backgroundColor: profilecolor,
             fontFamily: 'Helvetica, Arial, sans-serif',
             fontWeight: 'bold',
-            boxShadow: selectedFriend ? `0 0 20px ${accentColor}60` : 'none',
+            boxShadow: selectedFriend ? `0 0 20px ${profilecolor}60` : 'none',
           }}
         >
           Send Invite

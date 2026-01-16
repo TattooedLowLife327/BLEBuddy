@@ -7,10 +7,10 @@ import { UserMenu } from '../components/UserMenu';
 interface LocalDubsSetupProps {
   onBack: () => void;
   onContinue: (partnerId: string, userGoesFirst: boolean) => void;
-  accentColor: string;
+  profilecolor: string;
   userId: string;
-  userProfilePic: string | null;
-  userName: string;
+  profilepic: string | null;
+  granboard_name: string;
   onLogout: () => void;
 }
 
@@ -24,10 +24,10 @@ interface PlayerProfile {
 export function LocalDubsSetup({
   onBack,
   onContinue,
-  accentColor,
+  profilecolor,
   userId,
-  userProfilePic,
-  userName,
+  profilepic,
+  granboard_name,
   onLogout,
 }: LocalDubsSetupProps) {
   const [selectedPartner, setSelectedPartner] = useState<PlayerProfile | null>(null);
@@ -113,23 +113,23 @@ export function LocalDubsSetup({
             style={{
               fontFamily: 'Helvetica, Arial, sans-serif',
               fontWeight: 'bold',
-              color: accentColor,
+              color: profilecolor,
             }}
           >
             Local Doubles Setup
           </h1>
 
           <UserMenu
-            profilePic={userProfilePic}
-            accentColor={accentColor}
-            userName={userName}
+            profilepic={profilepic}
+            profilecolor={profilecolor}
+            granboard_name={granboard_name}
             onLogout={onLogout}
           />
         </div>
 
         {/* Team Display */}
         <div className="mb-8">
-          <div className="rounded-lg border backdrop-blur-sm bg-white/5 p-6" style={{ borderColor: accentColor }}>
+          <div className="rounded-lg border backdrop-blur-sm bg-white/5 p-6" style={{ borderColor: profilecolor }}>
             <h2
               className="text-xl text-white mb-4 text-center"
               style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
@@ -140,24 +140,24 @@ export function LocalDubsSetup({
             <div className="flex items-center justify-center gap-8">
               {/* User */}
               <div className="flex flex-col items-center">
-                <Avatar className="w-24 h-24 border-4 mb-2" style={{ borderColor: accentColor }}>
-                  <AvatarImage src={userProfilePic || undefined} />
+                <Avatar className="w-24 h-24 border-4 mb-2" style={{ borderColor: profilecolor }}>
+                  <AvatarImage src={profilepic || undefined} />
                   <AvatarFallback className="bg-white/10 text-white text-2xl">
-                    {userName?.charAt(0) || 'U'}
+                    {granboard_name?.charAt(0) || 'U'}
                   </AvatarFallback>
                 </Avatar>
                 <p
                   className="text-white mb-2"
                   style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
                 >
-                  {userName || 'You'}
+                  {granboard_name || 'You'}
                 </p>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setUserGoesFirst(true)}
                     className="px-4 py-2 rounded-lg transition-all"
                     style={{
-                      backgroundColor: userGoesFirst ? accentColor : 'rgba(255, 255, 255, 0.1)',
+                      backgroundColor: userGoesFirst ? profilecolor : 'rgba(255, 255, 255, 0.1)',
                       fontFamily: 'Helvetica, Arial, sans-serif',
                       fontWeight: 'bold',
                       color: 'white',
@@ -169,7 +169,7 @@ export function LocalDubsSetup({
                     onClick={() => setUserGoesFirst(false)}
                     className="px-4 py-2 rounded-lg transition-all"
                     style={{
-                      backgroundColor: !userGoesFirst ? accentColor : 'rgba(255, 255, 255, 0.1)',
+                      backgroundColor: !userGoesFirst ? profilecolor : 'rgba(255, 255, 255, 0.1)',
                       fontFamily: 'Helvetica, Arial, sans-serif',
                       fontWeight: 'bold',
                       color: 'white',
@@ -209,7 +209,7 @@ export function LocalDubsSetup({
                         onClick={() => setUserGoesFirst(false)}
                         className="px-4 py-2 rounded-lg transition-all"
                         style={{
-                          backgroundColor: !userGoesFirst ? accentColor : 'rgba(255, 255, 255, 0.1)',
+                          backgroundColor: !userGoesFirst ? profilecolor : 'rgba(255, 255, 255, 0.1)',
                           fontFamily: 'Helvetica, Arial, sans-serif',
                           fontWeight: 'bold',
                           color: 'white',
@@ -221,7 +221,7 @@ export function LocalDubsSetup({
                         onClick={() => setUserGoesFirst(true)}
                         className="px-4 py-2 rounded-lg transition-all"
                         style={{
-                          backgroundColor: userGoesFirst ? accentColor : 'rgba(255, 255, 255, 0.1)',
+                          backgroundColor: userGoesFirst ? profilecolor : 'rgba(255, 255, 255, 0.1)',
                           fontFamily: 'Helvetica, Arial, sans-serif',
                           fontWeight: 'bold',
                           color: 'white',
@@ -290,9 +290,9 @@ export function LocalDubsSetup({
                 onClick={() => setSelectedPartner(player)}
                 className="w-full rounded-lg border backdrop-blur-sm bg-white/5 p-4 hover:bg-white/10 transition-all text-left"
                 style={{
-                  borderColor: selectedPartner?.id === player.id ? accentColor : '#4b5563',
+                  borderColor: selectedPartner?.id === player.id ? profilecolor : '#4b5563',
                   boxShadow:
-                    selectedPartner?.id === player.id ? `0 0 20px ${accentColor}40` : 'none',
+                    selectedPartner?.id === player.id ? `0 0 20px ${profilecolor}40` : 'none',
                 }}
               >
                 <div className="flex items-center gap-4">
@@ -325,10 +325,10 @@ export function LocalDubsSetup({
           disabled={!selectedPartner}
           className="w-full py-4 rounded-lg text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           style={{
-            backgroundColor: accentColor,
+            backgroundColor: profilecolor,
             fontFamily: 'Helvetica, Arial, sans-serif',
             fontWeight: 'bold',
-            boxShadow: selectedPartner ? `0 0 20px ${accentColor}60` : 'none',
+            boxShadow: selectedPartner ? `0 0 20px ${profilecolor}60` : 'none',
           }}
         >
           Continue to Lobby

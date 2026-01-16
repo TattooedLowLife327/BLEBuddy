@@ -591,10 +591,10 @@ export default function App() {
         <LocalDubsSetup
           onBack={() => navigate('/dashboard')}
           onContinue={handleLocalDubsContinue}
-          accentColor={accentColor}
+          profilecolor={accentColor}
           userId={userId}
-          userProfilePic={profilePic}
-          userName={userName}
+          profilepic={profilePic}
+          granboard_name={userName}
           onLogout={handleLogout}
         />
       } />
@@ -604,10 +604,10 @@ export default function App() {
         <RemoteDubsSetup
           onBack={() => navigate('/dashboard')}
           onContinue={handleRemoteDubsContinue}
-          accentColor={accentColor}
+          profilecolor={accentColor}
           userId={userId}
-          userProfilePic={profilePic}
-          userName={userName}
+          profilepic={profilePic}
+          granboard_name={userName}
           onLogout={handleLogout}
         />
       } />

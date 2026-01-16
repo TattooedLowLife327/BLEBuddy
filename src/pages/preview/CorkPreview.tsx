@@ -389,8 +389,8 @@ export function CorkPreview({ onLeaveMatch }: CorkPreviewProps) {
 
         <UserMenu
           profilepic="/assets/lllogo.png"
-          userName="Preview"
-          accentColor={MOCK_P1.accentColor}
+          granboard_name="Preview"
+          profilecolor={MOCK_P1.accentColor}
           onLogout={() => {}}
           customItems={customMenuItems}
           size="sm"

@@ -13,8 +13,8 @@ export interface CustomMenuItem {
 
 interface UserMenuProps {
   profilepic?: string | null;
-  accentColor?: string;
-  userName?: string | null;
+  profilecolor?: string;
+  granboard_name?: string | null;
   onLogout: () => void | Promise<void>;
   onOpenSettings?: () => void;
   customItems?: CustomMenuItem[];
@@ -24,8 +24,8 @@ interface UserMenuProps {
 
 export function UserMenu({
   profilepic,
-  accentColor = '#a855f7',
-  userName,
+  profilecolor = '#a855f7',
+  granboard_name,
   onLogout,
   onOpenSettings,
   customItems,
@@ -38,14 +38,14 @@ export function UserMenu({
     lg: 'w-14 h-14',
   };
   const initials = useMemo(() => {
-    if (!userName) return 'U';
-    const trimmed = userName.trim();
+    if (!granboard_name) return 'U';
+    const trimmed = granboard_name.trim();
     if (!trimmed) return 'U';
     const parts = trimmed.split(/\s+/);
     const first = parts[0]?.[0] ?? '';
     const second = parts.length > 1 ? parts[1]?.[0] ?? '' : '';
     return (first + second).toUpperCase() || 'U';
-  }, [userName]);
+  }, [granboard_name]);
 
   return (
     <DropdownMenu>
@@ -55,8 +55,8 @@ export function UserMenu({
           className={`flex items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-black rounded-full transition-transform hover:scale-[1.03] ${className ?? ''}`}
           aria-label="Open user menu"
         >
-          <Avatar className={`${sizeClasses[size]} border-2`} style={{ borderColor: accentColor }}>
-            <AvatarImage src={profilepic || undefined} alt={userName ?? 'Profile picture'} />
+          <Avatar className={`${sizeClasses[size]} border-2`} style={{ borderColor: profilecolor }}>
+            <AvatarImage src={profilepic || undefined} alt={granboard_name ?? 'Profile picture'} />
             <AvatarFallback className="bg-white/10 text-white text-base font-semibold">
               {initials}
             </AvatarFallback>
@@ -72,13 +72,13 @@ export function UserMenu({
       >
         <DropdownMenuLabel className="flex items-center gap-3">
           <Avatar className="w-10 h-10 border border-zinc-700">
-            <AvatarImage src={profilepic || undefined} alt={userName ?? 'Profile picture'} />
+            <AvatarImage src={profilepic || undefined} alt={granboard_name ?? 'Profile picture'} />
             <AvatarFallback className="bg-white/10 text-white text-sm font-semibold">
               {initials}
             </AvatarFallback>
           </Avatar>
           <div className="flex flex-col">
-            <span className="text-sm font-semibold">{userName || 'Player'}</span>
+            <span className="text-sm font-semibold">{granboard_name || 'Player'}</span>
             <span className="text-xs text-zinc-400">Manage your account</span>
           </div>
         </DropdownMenuLabel>
