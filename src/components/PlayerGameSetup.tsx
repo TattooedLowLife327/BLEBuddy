@@ -180,6 +180,10 @@ export function PlayerGameSetup({
         const resolveProfilePicUrl = (pic: string): string => {
           if (pic.startsWith('http')) {
             return pic;
+          } else if (pic.includes('LowLifeStore')) {
+            // Store purchases are served from the main PWA domain
+            const path = pic.startsWith('/') ? pic : `/${pic}`;
+            return `https://www.lowlifesofgranboard.com${path}`;
           } else if (pic.startsWith('/assets') || pic.startsWith('assets') || pic === 'default-pfp.png') {
             return pic.startsWith('/') ? pic : `/${pic}`;
           } else {

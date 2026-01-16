@@ -78,7 +78,12 @@ function getCorkScore(throwData: DartThrowData): { score: number; valid: boolean
 const resolveProfilePicUrl = (pic?: string): string | undefined => {
   if (!pic) return undefined;
   if (pic.startsWith('http')) return pic;
-  if (pic.startsWith('/assets') || pic.startsWith('assets')) return `https://llogb.netlify.app${pic.startsWith('/') ? pic : '/' + pic}`;
+  // LowLifeStore assets are served from the main PWA domain
+  if (pic.includes('LowLifeStore')) {
+    const path = pic.startsWith('/') ? pic : `/${pic}`;
+    return `https://www.lowlifesofgranboard.com${path}`;
+  }
+  if (pic.startsWith('/assets') || pic.startsWith('assets')) return pic.startsWith('/') ? pic : `/${pic}`;
   if (pic === 'default-pfp.png') return '/default-pfp.png';
   return `https://sndsyxxcnuwjmjgikzgg.supabase.co/storage/v1/object/public/profilepic/${pic}`;
 };

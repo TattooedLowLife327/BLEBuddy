@@ -3,6 +3,7 @@ import { Clock } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '../components/ui/avatar';
 import { createClient } from '../utils/supabase/client';
 import { PlayerGameSetup } from '../components/PlayerGameSetup';
+import { IncomingRequestModal } from '../components/IncomingRequestModal';
 import { AppHeader } from '../components/AppHeader';
 import { type GameData } from '../contexts/GameContext';
 import type { GameConfiguration } from '../types/game';
@@ -14,7 +15,13 @@ const resolveProfilePicUrl = (profilepic: string | undefined): string | undefine
   // Already a full URL
   if (profilepic.startsWith('http')) return profilepic;
 
-  // Local asset path (store purchases or default)
+  // LowLifeStore assets are served from the main PWA domain
+  if (profilepic.includes('LowLifeStore')) {
+    const path = profilepic.startsWith('/') ? profilepic : `/${profilepic}`;
+    return `https://www.lowlifesofgranboard.com${path}`;
+  }
+
+  // Local asset path (defaults only)
   if (profilepic.startsWith('/assets') || profilepic.startsWith('assets') || profilepic === 'default-pfp.png') {
     return profilepic.startsWith('/') ? profilepic : `/${profilepic}`;
   }
@@ -822,44 +829,11 @@ export function OnlineLobby({
 
       {/* Incoming Game Request Modal */}
       {incomingRequest && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
-          <div
-            className="rounded-lg border p-8 text-center backdrop-blur-sm bg-black max-w-md mx-4"
-            style={{
-              borderColor: accentColor,
-              boxShadow: `0 0 40px rgba(168, 85, 247, 0.5)`,
-            }}
-          >
-            <h2
-              className="text-2xl mb-4 text-white"
-              style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
-            >
-              🎯 Game Request!
-            </h2>
-            <p className="text-gray-300 mb-2" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-              <span className="text-white font-bold">{incomingRequest.player1_granboard_name}</span>
-            </p>
-            <p className="text-gray-400 mb-6" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-              wants to play!
-            </p>
-            <div className="flex gap-4 justify-center">
-              <button
-                onClick={handleDeclineGame}
-                className="px-6 py-3 rounded-lg text-white transition-colors bg-red-600 hover:bg-red-700"
-                style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
-              >
-                Decline
-              </button>
-              <button
-                onClick={handleAcceptGame}
-                className="px-6 py-3 rounded-lg text-white transition-colors bg-green-600 hover:bg-green-700"
-                style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
-              >
-                Accept
-              </button>
-            </div>
-          </div>
-        </div>
+        <IncomingRequestModal
+          request={incomingRequest}
+          onAccept={handleAcceptGame}
+          onDecline={handleDeclineGame}
+        />
       )}
 
       {/* Waiting for Response Modal */}

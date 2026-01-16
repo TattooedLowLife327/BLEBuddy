@@ -2,8 +2,9 @@
  * Resolves profile pic URLs from player.player_profiles.profilepic
  * Handles three formats:
  * 1. Full URLs (already resolved)
- * 2. Local asset paths (store purchases: /assets/LowLifeStore/...)
- * 3. Storage paths (Supabase storage: user-id.png)
+ * 2. LowLifeStore asset paths (store purchases: /assets/LowLifeStore/...) - served from main PWA
+ * 3. Local asset paths (default-pfp.png)
+ * 4. Storage paths (Supabase storage: user-id.png)
  */
 export const resolveProfilePicUrl = (profilepic: string | null | undefined): string | undefined => {
   if (!profilepic) return undefined;
@@ -11,7 +12,13 @@ export const resolveProfilePicUrl = (profilepic: string | null | undefined): str
   // Already a full URL
   if (profilepic.startsWith('http')) return profilepic;
 
-  // Local asset path (store purchases or defaults)
+  // LowLifeStore assets are served from the main PWA domain
+  if (profilepic.includes('LowLifeStore')) {
+    const path = profilepic.startsWith('/') ? profilepic : `/${profilepic}`;
+    return `https://www.lowlifesofgranboard.com${path}`;
+  }
+
+  // Local asset path (defaults only - not store purchases)
   if (profilepic.startsWith('/assets') || profilepic.startsWith('assets') || profilepic === 'default-pfp.png') {
     return profilepic.startsWith('/') ? profilepic : `/${profilepic}`;
   }
