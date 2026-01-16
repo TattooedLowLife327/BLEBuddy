@@ -447,11 +447,13 @@ export function OnlineLobby({
                 idleTimeRemaining = Math.max(0, IDLE_WARNING_DURATION_S - elapsedSeconds);
               }
 
-              const profileQuery = isYouth
-                ? (supabase as any).schema('youth').from('youth_profiles')
-                : supabase.from('player_profiles');
+              const profileSchema = isYouth
+                ? (supabase as any).schema('youth')
+                : (supabase as any).schema('player');
+              const profileTable = isYouth ? 'youth_profiles' : 'player_profiles';
 
-              const { data: rawProfileData, error: profileError } = await profileQuery
+              const { data: rawProfileData, error: profileError } = await profileSchema
+                .from(profileTable)
                 .select('granboard_name, profilepic, profilecolor')
                 .eq('id', playerId)
                 .single();
@@ -467,11 +469,13 @@ export function OnlineLobby({
                 profilecolor: string | null;
               }) || null;
 
-              const statsQuery = isYouth
-                ? (supabase as any).schema('youth').from('youth_stats')
-                : (supabase as any).schema('player').from('player_stats');
+              const statsSchema = isYouth
+                ? (supabase as any).schema('youth')
+                : (supabase as any).schema('player');
+              const statsTable = isYouth ? 'youth_stats' : 'player_stats';
 
-              const { data: rawStatsData, error: statsError } = await statsQuery
+              const { data: rawStatsData, error: statsError } = await statsSchema
+                .from(statsTable)
                 .select('mpr_numeric, ppr_numeric, overall_numeric, mpr_letter, ppr_letter, overall_letter, solo_games_played, solo_wins, solo_win_rate, solo_highest_checkout')
                 .eq('id', playerId)
                 .single();
@@ -496,11 +500,13 @@ export function OnlineLobby({
 
               let partnerDisplayName: string | undefined;
               if (lobbyEntry.partner_id) {
-                const partnerQuery = isYouth
-                  ? (supabase as any).schema('youth').from('youth_profiles')
-                  : supabase.from('player_profiles');
+                const partnerSchema = isYouth
+                  ? (supabase as any).schema('youth')
+                  : (supabase as any).schema('player');
+                const partnerTable = isYouth ? 'youth_profiles' : 'player_profiles';
 
-                const { data: rawPartnerData } = await partnerQuery
+                const { data: rawPartnerData } = await partnerSchema
+                  .from(partnerTable)
                   .select('granboard_name')
                   .eq('id', lobbyEntry.partner_id)
                   .single();
@@ -1132,37 +1138,37 @@ export function OnlineLobby({
                           <div className="text-center">
                             <div className="text-[8px] uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>01</div>
                             <div
-                              className="text-sm font-bold"
+                              className="text-base font-bold"
                               style={{ color: playerAccentColor }}
                             >
                               {player.pprLetter || '--'}
                             </div>
-                            <div className="text-[9px] text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                              {player.pprNumeric > 0 ? player.pprNumeric.toFixed(1) : '--'}
+                            <div className="text-[11px] text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                              {player.pprNumeric > 0 ? player.pprNumeric.toFixed(2) : '--'}
                             </div>
                           </div>
                           <div className="text-center">
                             <div className="text-[8px] uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>ALL</div>
                             <div
-                              className="text-sm font-bold"
+                              className="text-base font-bold"
                               style={{ color: playerAccentColor }}
                             >
                               {player.overallLetter || '--'}
                             </div>
-                            <div className="text-[9px] text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                              {player.overallNumeric > 0 ? player.overallNumeric.toFixed(1) : '--'}
+                            <div className="text-[11px] text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                              {player.overallNumeric > 0 ? player.overallNumeric.toFixed(2) : '--'}
                             </div>
                           </div>
                           <div className="text-center">
                             <div className="text-[8px] uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>CR</div>
                             <div
-                              className="text-sm font-bold"
+                              className="text-base font-bold"
                               style={{ color: playerAccentColor }}
                             >
                               {player.mprLetter || '--'}
                             </div>
-                            <div className="text-[9px] text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                              {player.mprNumeric > 0 ? player.mprNumeric.toFixed(1) : '--'}
+                            <div className="text-[11px] text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                              {player.mprNumeric > 0 ? player.mprNumeric.toFixed(2) : '--'}
                             </div>
                           </div>
                         </div>

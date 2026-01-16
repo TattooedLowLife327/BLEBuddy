@@ -1,6 +1,6 @@
 {
   "name": "ble-buddy-lowlife-companion",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "BLE Buddy - LowLife Companion - Mobile/Tablet Darts App",
   "scripts": {
