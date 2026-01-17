@@ -54,6 +54,7 @@ interface MissedRequest {
   challengerName: string;
   challengerId: string;
   timestamp: string;
+  schema?: 'player' | 'youth';
 }
 
 interface OnlineLobbyProps {
@@ -72,7 +73,10 @@ interface OnlineLobbyProps {
   missedRequests?: MissedRequest[];
   onClearMissedRequests?: () => void;
   onOpenSettings?: () => void;
+  onAddMissedRequest?: (request: MissedRequest) => void;
 }
+
+const REQUEST_TIMEOUT_MS = 7000; // 7 seconds
 
 type PlayerStatus = 'waiting' | 'idle' | 'in_match';
 
@@ -111,6 +115,7 @@ export function OnlineLobby({
   missedRequests = [],
   onClearMissedRequests,
   onOpenSettings,
+  onAddMissedRequest,
 }: OnlineLobbyProps) {
   const [availablePlayers, setAvailablePlayers] = useState<AvailablePlayer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -122,6 +127,8 @@ export function OnlineLobby({
   const [idleCountdown, setIdleCountdown] = useState(300); // 5 minutes in seconds
   const [cardScale, setCardScale] = useState(1);
   const [blockingGame, setBlockingGame] = useState<{ id: string; status: string; created_at: string; completed_at: string | null } | null>(null);
+  const [requestResultMessage, setRequestResultMessage] = useState<{ type: 'timeout' | 'declined'; name: string } | null>(null);
+  const outgoingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const supabase = createClient();
 
   // Check if user already has an active game - returns the blocking game or null
@@ -598,6 +605,26 @@ export function OnlineLobby({
   useEffect(() => {
     if (!pendingOutgoingRequest) return;
 
+    // Set up 7-second timeout for the request
+    outgoingTimeoutRef.current = setTimeout(async () => {
+      // Request timed out
+      const opponentName = pendingOutgoingRequest.player2_granboard_name;
+      setRequestResultMessage({ type: 'timeout', name: opponentName });
+
+      // Cancel the request
+      try {
+        await (supabase as any)
+          .schema('companion')
+          .from('active_games')
+          .delete()
+          .eq('id', pendingOutgoingRequest.id);
+      } catch (err) {
+        console.error('Error cleaning up timed out request:', err);
+      }
+
+      setPendingOutgoingRequest(null);
+    }, REQUEST_TIMEOUT_MS);
+
     const supabaseAny = supabase as any;
     const responseChannel = supabaseAny
       .channel('outgoing-game-response')
@@ -612,6 +639,12 @@ export function OnlineLobby({
         (payload: any) => {
           console.log('Game response received:', payload);
           const newStatus = payload.new.status;
+
+          // Clear the timeout since we got a response
+          if (outgoingTimeoutRef.current) {
+            clearTimeout(outgoingTimeoutRef.current);
+            outgoingTimeoutRef.current = null;
+          }
 
           if (newStatus === 'accepted') {
             // Fetch opponent profile data before navigating
@@ -665,7 +698,10 @@ export function OnlineLobby({
               setPendingOutgoingRequest(null);
             });
           } else if (newStatus === 'declined') {
-            alert(`${pendingOutgoingRequest.player2_granboard_name} declined the game.`);
+            setRequestResultMessage({ type: 'declined', name: pendingOutgoingRequest.player2_granboard_name });
+            setPendingOutgoingRequest(null);
+          } else if (newStatus === 'expired') {
+            setRequestResultMessage({ type: 'timeout', name: pendingOutgoingRequest.player2_granboard_name });
             setPendingOutgoingRequest(null);
           }
         }
@@ -673,6 +709,10 @@ export function OnlineLobby({
       .subscribe();
 
     return () => {
+      if (outgoingTimeoutRef.current) {
+        clearTimeout(outgoingTimeoutRef.current);
+        outgoingTimeoutRef.current = null;
+      }
       supabaseAny.removeChannel(responseChannel);
     };
   }, [supabase, pendingOutgoingRequest]);
@@ -799,6 +839,48 @@ export function OnlineLobby({
     setIncomingRequest(null);
   };
 
+  // Handle timeout on incoming request (receiver didn't respond in time)
+  const handleIncomingTimeout = useCallback(async () => {
+    if (!incomingRequest) return;
+
+    const requestId = incomingRequest.id;
+    const challengerName = incomingRequest.player1_granboard_name;
+    const challengerId = incomingRequest.player1_id;
+
+    // Add to missed requests (default to player schema)
+    if (onAddMissedRequest) {
+      onAddMissedRequest({
+        id: requestId,
+        challengerName,
+        challengerId,
+        timestamp: new Date().toISOString(),
+        schema: 'player',
+      });
+    }
+
+    // Update status to 'expired' so requester knows it timed out
+    try {
+      await (supabase as any)
+        .schema('companion')
+        .from('active_games')
+        .update({ status: 'expired' })
+        .eq('id', requestId);
+
+      // Then delete
+      await (supabase as any)
+        .schema('companion')
+        .from('active_games')
+        .delete()
+        .eq('id', requestId);
+
+      console.log('Incoming request timed out and cleaned up');
+    } catch (err) {
+      console.error('Error handling incoming timeout:', err);
+    }
+
+    setIncomingRequest(null);
+  }, [incomingRequest, onAddMissedRequest, supabase]);
+
   const handleStartGame = async (gameConfig: GameConfiguration) => {
     console.log('Starting game with config:', gameConfig);
     console.log('Against player:', selectedPlayer);
@@ -907,7 +989,49 @@ export function OnlineLobby({
           request={incomingRequest}
           onAccept={handleAcceptGame}
           onDecline={handleDeclineGame}
+          onTimeout={handleIncomingTimeout}
         />
+      )}
+
+      {/* Request Result Message Modal */}
+      {requestResultMessage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
+          <div
+            className="rounded-lg border p-8 text-center backdrop-blur-sm bg-black max-w-md mx-4"
+            style={{
+              borderColor: requestResultMessage.type === 'declined' ? '#dc2626' : '#f59e0b',
+              boxShadow: `0 0 40px ${requestResultMessage.type === 'declined' ? 'rgba(220, 38, 38, 0.5)' : 'rgba(245, 158, 11, 0.5)'}`,
+            }}
+          >
+            <h2
+              className="text-2xl mb-4"
+              style={{
+                fontFamily: 'Helvetica, Arial, sans-serif',
+                fontWeight: 'bold',
+                color: requestResultMessage.type === 'declined' ? '#dc2626' : '#f59e0b',
+              }}
+            >
+              {requestResultMessage.type === 'declined' ? 'Request Denied' : 'Request Timed Out'}
+            </h2>
+            <p className="text-gray-300 mb-6" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+              {requestResultMessage.type === 'declined'
+                ? <><span className="text-white font-bold">{requestResultMessage.name}</span> declined your game request.</>
+                : <><span className="text-white font-bold">{requestResultMessage.name}</span> didn't respond in time.</>
+              }
+            </p>
+            <button
+              onClick={() => setRequestResultMessage(null)}
+              className="px-6 py-3 rounded-lg text-white transition-colors"
+              style={{
+                backgroundColor: requestResultMessage.type === 'declined' ? '#dc2626' : '#f59e0b',
+                fontFamily: 'Helvetica, Arial, sans-serif',
+                fontWeight: 'bold',
+              }}
+            >
+              OK
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Waiting for Response Modal */}

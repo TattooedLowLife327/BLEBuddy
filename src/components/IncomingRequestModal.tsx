@@ -1,6 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { createClient } from '../utils/supabase/client';
+
+const REQUEST_TIMEOUT_SECONDS = 7;
 
 interface ChallengerStats {
   granid: string | null;
@@ -33,6 +35,7 @@ interface IncomingRequestModalProps {
   };
   onAccept: () => void;
   onDecline: () => void;
+  onTimeout?: () => void; // Called when request times out (7 seconds)
 }
 
 const hexToRgba = (hex: string, alpha: number) => {
@@ -42,13 +45,47 @@ const hexToRgba = (hex: string, alpha: number) => {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
-export function IncomingRequestModal({ request, onAccept, onDecline }: IncomingRequestModalProps) {
+export function IncomingRequestModal({ request, onAccept, onDecline, onTimeout }: IncomingRequestModalProps) {
   const [loading, setLoading] = useState(true);
   const [profilePic, setProfilePic] = useState<string | null>(null);
   const [profileColor, setProfileColor] = useState('#a855f7');
   const [stats, setStats] = useState<ChallengerStats | null>(null);
+  const [timeRemaining, setTimeRemaining] = useState(REQUEST_TIMEOUT_SECONDS);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const hasTimedOutRef = useRef(false);
 
   const supabase = createClient();
+
+  // Countdown timer
+  useEffect(() => {
+    setTimeRemaining(REQUEST_TIMEOUT_SECONDS);
+    hasTimedOutRef.current = false;
+
+    timerRef.current = setInterval(() => {
+      setTimeRemaining(prev => {
+        if (prev <= 1) {
+          // Timer expired
+          if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+          }
+          if (!hasTimedOutRef.current) {
+            hasTimedOutRef.current = true;
+            onTimeout?.();
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [request.id, onTimeout]);
 
   // Parse game config
   const gameConfig = request.game_config;
@@ -166,6 +203,30 @@ export function IncomingRequestModal({ request, onAccept, onDecline }: IncomingR
           boxShadow: `0 0 30px ${hexToRgba(profileColor, 0.5)}`,
         }}
       >
+        {/* Countdown Timer Bar */}
+        <div className="relative h-2 bg-zinc-800">
+          <div
+            className="absolute top-0 left-0 h-full transition-all duration-1000 ease-linear"
+            style={{
+              width: `${(timeRemaining / REQUEST_TIMEOUT_SECONDS) * 100}%`,
+              backgroundColor: timeRemaining <= 3 ? '#ef4444' : profileColor,
+            }}
+          />
+        </div>
+
+        {/* Timer Display */}
+        <div className="text-center py-2 border-b" style={{ borderColor: profileColor }}>
+          <span
+            className="text-sm font-bold"
+            style={{
+              fontFamily: 'Helvetica, Arial, sans-serif',
+              color: timeRemaining <= 3 ? '#ef4444' : '#fff',
+            }}
+          >
+            {timeRemaining}s to respond
+          </span>
+        </div>
+
         {/* Header */}
         <div className="flex items-center gap-4 px-5 py-4 border-b" style={{ borderColor: profileColor }}>
           <Avatar

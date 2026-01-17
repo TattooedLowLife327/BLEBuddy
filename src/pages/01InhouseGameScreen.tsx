@@ -46,8 +46,6 @@ type AchievementType =
   | null;
 
 // Figma exact colors
-const P1_ACTIVE = '#6600FF';
-const P2_ACTIVE = '#FB00FF';
 const INACTIVE = '#7E7E7E';
 
 // Figma fonts (loaded via @font-face in globals.css)
@@ -90,6 +88,17 @@ const ACHIEVEMENT_LABELS: Record<Exclude<AchievementType, null>, string> = {
   lowTon: 'LOW TON!',
 };
 
+// Award videos for achievements
+const AWARD_VIDEOS: Partial<Record<Exclude<AchievementType, null>, string>> = {
+  hatTrick: '/awards/blue&orange/hattrick.mp4',
+  threeInBlack: '/awards/blue&orange/3intheblack.mp4',
+  ton80: '/awards/blue&orange/ton80.mp4',
+  threeInBed: '/awards/blue&orange/3inabed.mp4',
+  whiteHorse: '/awards/blue&orange/whitehorse.mp4',
+  shanghai: '/awards/blue&orange/shanghai.mp4',
+  highTon: '/awards/blue&orange/highton.mp4',
+  lowTon: '/awards/blue&orange/lowton.mp4',
+};
 
 // Checkout suggestions for 01 games (Double Out)
 // Checkout suggestions are handled by the dynamic solver.
@@ -250,6 +259,21 @@ const goodLuckKeyframes = `
     transform: translateY(-10px) rotate(360deg);
   }
 }
+
+@keyframes doubleBullFade {
+  0% {
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
 `;
 
 interface PlayerData {
@@ -266,6 +290,7 @@ interface GameScreenProps {
   startingPlayer?: 'p1' | 'p2';
   onGameComplete?: (winner: 'p1' | 'p2') => void;
   player1?: PlayerData;
+  playerMode?: 'solo' | 'guest';
 }
 
 export function O1InhouseGameScreen({
@@ -275,11 +300,14 @@ export function O1InhouseGameScreen({
   startingPlayer,
   onGameComplete,
   player1,
+  playerMode = 'guest',
 }: GameScreenProps) {
   // BLE integration
   const { lastThrow, isConnected, simulateThrow: bleSimulateThrow } = useBLE();
   const devMode = isDevMode();
   const lastProcessedThrowRef = useRef<string | null>(null);
+
+  const isSoloMode = playerMode === 'solo';
 
   // Build players object from props or defaults
   const PLAYERS = useMemo(() => ({
@@ -289,8 +317,8 @@ export function O1InhouseGameScreen({
       profilecolor: player1.profileColor,
       profilePic: player1.profilePic,
     } : DEFAULT_PLAYERS.p1,
-    p2: DEFAULT_PLAYERS.p2, // P2 stays as default for single player
-  }), [player1]);
+    p2: isSoloMode ? null : { id: 'guest', name: 'GUEST', profilecolor: '#FB00FF', profilePic: undefined },
+  }), [player1, isSoloMode]);
 
   const resolvedGameType = useMemo(() => {
     const raw = gameType || '501';
@@ -319,6 +347,7 @@ export function O1InhouseGameScreen({
   const [activeAnimation, setActiveAnimation] = useState<AchievementType>(null);
   const [gameWinner, setGameWinner] = useState<'p1' | 'p2' | null>(null);
   const [showWinnerScreen, setShowWinnerScreen] = useState(false);
+  const [showDoubleBullEffect, setShowDoubleBullEffect] = useState(false);
 
   // 80% Stat Tracking
   // For 01: PPR = (startScore - currentScore) / dartsThrown
@@ -502,6 +531,20 @@ export function O1InhouseGameScreen({
           }
         }
 
+        // Solo mode: increment round after each turn, no player switching
+        if (isSoloMode) {
+          setRoundAnimState('out');
+          setTimeout(() => {
+            setCurrentRound(prev => prev + 1);
+            setRoundKey(prev => prev + 1);
+            setRoundAnimState('in');
+          }, 500);
+          setShowPlayerChange(false);
+          setCurrentDarts([]);
+          setRoundScore(0);
+          return;
+        }
+
         // Check if round is complete (both players threw)
         const willCompleteRound = (currentThrower === 'p1' && p2ThrewThisRound) ||
                                    (currentThrower === 'p2' && p1ThrewThisRound);
@@ -525,7 +568,7 @@ export function O1InhouseGameScreen({
       }, 1500);
       return () => clearTimeout(timer);
     }
-  }, [showPlayerChange, currentThrower, p1ThrewThisRound, p2ThrewThisRound, isOhOneGame, eightyPercentTriggered, p1Score, p2Score, eightyPercentThreshold, p1DartsThrown, p2DartsThrown, startScore]);
+  }, [showPlayerChange, currentThrower, p1ThrewThisRound, p2ThrewThisRound, isOhOneGame, eightyPercentTriggered, p1Score, p2Score, eightyPercentThreshold, p1DartsThrown, p2DartsThrown, startScore, isSoloMode]);
 
   const throwDart = useCallback((segment: string, score: number, multiplier: number) => {
     if (currentDarts.length >= 3 || showPlayerChange || !introComplete) return;
@@ -551,6 +594,12 @@ export function O1InhouseGameScreen({
     const isSingleBull = segment === 'S25';
     const isDoubleBull = segment === 'D25';
     const isAnyBull = isSingleBull || isDoubleBull;
+
+    // Trigger double bull effect
+    if (isDoubleBull) {
+      setShowDoubleBullEffect(true);
+      setTimeout(() => setShowDoubleBullEffect(false), 2000);
+    }
 
     // Valid IN check based on inMode:
     // - open: any dart
@@ -837,7 +886,7 @@ export function O1InhouseGameScreen({
       <div style={{
         position: 'absolute',
         left: '50%',
-        top: '50%',
+        top: '40%',
         transform: 'translate(-50%, -50%)',
         fontFamily: FONT_SCORE,
         fontWeight: 300,
@@ -994,7 +1043,7 @@ export function O1InhouseGameScreen({
             left: 0,
             height: '3px',
             width: `${(currentDarts.length / 3) * 100}%`,
-            background: P1_ACTIVE,
+            background: PLAYERS.p1.profilecolor,
             transition: 'width 0.2s ease-out',
             zIndex: 5,
           }} />
@@ -1006,7 +1055,7 @@ export function O1InhouseGameScreen({
             left: 0,
             height: '3px',
             width: '100%',
-            background: P1_ACTIVE,
+            background: PLAYERS.p1.profilecolor,
             zIndex: 5,
             animation: 'borderDrainDown 0.5s ease-out forwards',
           }} />
@@ -1043,7 +1092,7 @@ export function O1InhouseGameScreen({
             top: '50%',
             transform: 'translateY(-50%)',
             background: '#000000',
-            border: `3px solid ${P1_ACTIVE}`,
+            border: `3px solid ${PLAYERS.p1.profilecolor}`,
             borderRadius: '50%',
             zIndex: 2,
             animation: p1Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
@@ -1097,119 +1146,106 @@ export function O1InhouseGameScreen({
         </span>
       </div>
 
-      {/* Player 2 Bar - Right (mirrored) */}
-      <div style={{
-        position: 'absolute',
-        width: `calc(${FIGMA.bar.w} * ${scale})`,
-        height: `calc(${FIGMA.bar.h} * ${scale})`,
-        right: '0px',
-        bottom: '0px',
-        borderTopLeftRadius: `calc(16 * ${scale})`,
-        overflow: 'hidden',
-      }}>
-        {/* Grey base layer - always visible */}
+      {/* Player 2 Bar - Right (mirrored) - Hidden in solo mode */}
+      {!isSoloMode && PLAYERS.p2 && (
         <div style={{
           position: 'absolute',
-          inset: 0,
-          background: greyGradient,
-        }} />
-        {/* Dart progress border - top edge, 1/3 per dart when active, swipes down on exit */}
-        {introComplete && p2Active && (
+          width: `calc(${FIGMA.bar.w} * ${scale})`,
+          height: `calc(${FIGMA.bar.h} * ${scale})`,
+          right: '0px',
+          bottom: '0px',
+          borderTopLeftRadius: `calc(16 * ${scale})`,
+          overflow: 'hidden',
+        }}>
+          {/* Grey base layer - always visible */}
           <div style={{
             position: 'absolute',
-            top: 0,
-            right: 0,
-            height: '3px',
-            width: `${(currentDarts.length / 3) * 100}%`,
-            background: P2_ACTIVE,
-            transition: 'width 0.2s ease-out',
-            zIndex: 5,
-          }} />
-        )}
-        {introComplete && p2Exiting && (
-          <div key={`p2-progress-exit-${turnKey}`} style={{
-            position: 'absolute',
-            top: 0,
-            right: 0,
-            height: '3px',
-            width: '100%',
-            background: P2_ACTIVE,
-            zIndex: 5,
-            animation: 'borderDrainDown 0.5s ease-out forwards',
-          }} />
-        )}
-        {/* Colored layer - swipes up when active, swipes down when exiting */}
-        {introComplete && (p2Active || p2Exiting) && (
-          <div key={`p2-bar-${turnKey}`} style={{
-            position: 'absolute',
             inset: 0,
-            background: 'linear-gradient(179.4deg, rgba(251, 0, 255, 0.2) 0.52%, rgba(0, 0, 0, 0.2) 95.46%)',
-            animation: p2Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
+            background: greyGradient,
           }} />
-        )}
-        {/* Score - on left for P2 */}
-        <span style={{
-          position: 'absolute',
-          left: `calc(20 * ${scale})`,
-          top: '50%',
-          transform: 'translateY(-50%)',
-          fontFamily: FONT_SCORE,
-          fontWeight: 300,
-          fontSize: `calc(${FIGMA.scoreSize} * ${scale})`,
-          lineHeight: 1,
-          color: p2Active ? '#FFFFFF' : INACTIVE,
-          textShadow: p2Active ? '-6px 6px 9.7px rgba(0, 0, 0, 0.78)' : 'none',
-          zIndex: 3,
-        }}>
-          {p2Score}
-        </span>
-        {/* Name + PPR - in middle for P2 */}
-        <div style={{
-          position: 'absolute',
-          right: `calc(${FIGMA.nameLeft} * ${scale})`,
-          top: '50%',
-          transform: 'translateY(-50%)',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'flex-end',
-          zIndex: 3,
-        }}>
+          {/* Dart progress border - top edge, 1/3 per dart when active, swipes down on exit */}
+          {introComplete && p2Active && (
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              right: 0,
+              height: '3px',
+              width: `${(currentDarts.length / 3) * 100}%`,
+              background: PLAYERS.p2.profilecolor,
+              transition: 'width 0.2s ease-out',
+              zIndex: 5,
+            }} />
+          )}
+          {introComplete && p2Exiting && (
+            <div key={`p2-progress-exit-${turnKey}`} style={{
+              position: 'absolute',
+              top: 0,
+              right: 0,
+              height: '3px',
+              width: '100%',
+              background: PLAYERS.p2.profilecolor,
+              zIndex: 5,
+              animation: 'borderDrainDown 0.5s ease-out forwards',
+            }} />
+          )}
+          {/* Colored layer - swipes up when active, swipes down when exiting */}
+          {introComplete && (p2Active || p2Exiting) && (
+            <div key={`p2-bar-${turnKey}`} style={{
+              position: 'absolute',
+              inset: 0,
+              background: 'linear-gradient(179.4deg, rgba(251, 0, 255, 0.2) 0.52%, rgba(0, 0, 0, 0.2) 95.46%)',
+              animation: p2Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
+            }} />
+          )}
+          {/* Score - on left for P2 */}
           <span style={{
-            fontFamily: FONT_NAME,
-            fontWeight: 400,
-            fontSize: `calc(${FIGMA.nameSize} * ${scale})`,
+            position: 'absolute',
+            left: `calc(20 * ${scale})`,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            fontFamily: FONT_SCORE,
+            fontWeight: 300,
+            fontSize: `calc(${FIGMA.scoreSize} * ${scale})`,
+            lineHeight: 1,
             color: p2Active ? '#FFFFFF' : INACTIVE,
+            textShadow: p2Active ? '-6px 6px 9.7px rgba(0, 0, 0, 0.78)' : 'none',
+            zIndex: 3,
           }}>
-            {PLAYERS.p2.name}
+            {p2Score}
           </span>
-          {introComplete && isOhOneGame && (
+          {/* Name + PPR - in middle for P2 */}
+          <div style={{
+            position: 'absolute',
+            right: `calc(${FIGMA.nameLeft} * ${scale})`,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-end',
+            zIndex: 3,
+          }}>
             <span style={{
               fontFamily: FONT_NAME,
               fontWeight: 400,
-              fontSize: `calc(16 * ${scale})`,
-              color: p2Active ? 'rgba(255, 255, 255, 0.6)' : 'rgba(126, 126, 126, 0.6)',
-              marginTop: `calc(-4 * ${scale})`,
+              fontSize: `calc(${FIGMA.nameSize} * ${scale})`,
+              color: p2Active ? '#FFFFFF' : INACTIVE,
             }}>
-              PPR: {p2DisplayPPR.toFixed(1)}{eightyPercentTriggered ? ' (80%)' : ''}
+              {PLAYERS.p2.name}
             </span>
-          )}
-        </div>
-        {/* Avatar - grey base */}
-        <div style={{
-          position: 'absolute',
-          width: `calc(${FIGMA.avatar} * ${scale})`,
-          height: `calc(${FIGMA.avatar} * ${scale})`,
-          right: `calc(${FIGMA.avatarLeft} * ${scale})`,
-          top: '50%',
-          transform: 'translateY(-50%)',
-          background: '#000000',
-          border: `3px solid ${INACTIVE}`,
-          borderRadius: '50%',
-          zIndex: 1,
-        }} />
-        {/* Avatar - colored overlay */}
-        {introComplete && (p2Active || p2Exiting) && (
-          <div key={`p2-avatar-${turnKey}`} style={{
+            {introComplete && isOhOneGame && (
+              <span style={{
+                fontFamily: FONT_NAME,
+                fontWeight: 400,
+                fontSize: `calc(16 * ${scale})`,
+                color: p2Active ? 'rgba(255, 255, 255, 0.6)' : 'rgba(126, 126, 126, 0.6)',
+                marginTop: `calc(-4 * ${scale})`,
+              }}>
+                PPR: {p2DisplayPPR.toFixed(1)}{eightyPercentTriggered ? ' (80%)' : ''}
+              </span>
+            )}
+          </div>
+          {/* Avatar - grey base */}
+          <div style={{
             position: 'absolute',
             width: `calc(${FIGMA.avatar} * ${scale})`,
             height: `calc(${FIGMA.avatar} * ${scale})`,
@@ -1217,13 +1253,28 @@ export function O1InhouseGameScreen({
             top: '50%',
             transform: 'translateY(-50%)',
             background: '#000000',
-            border: `3px solid ${P2_ACTIVE}`,
+            border: `3px solid ${INACTIVE}`,
             borderRadius: '50%',
-            zIndex: 2,
-            animation: p2Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
+            zIndex: 1,
           }} />
-        )}
-      </div>
+          {/* Avatar - colored overlay */}
+          {introComplete && (p2Active || p2Exiting) && (
+            <div key={`p2-avatar-${turnKey}`} style={{
+              position: 'absolute',
+              width: `calc(${FIGMA.avatar} * ${scale})`,
+              height: `calc(${FIGMA.avatar} * ${scale})`,
+              right: `calc(${FIGMA.avatarLeft} * ${scale})`,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              background: '#000000',
+              border: `3px solid ${PLAYERS.p2.profilecolor}`,
+              borderRadius: '50%',
+              zIndex: 2,
+              animation: p2Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
+            }} />
+          )}
+        </div>
+      )}
 
       {/* Hamburger Menu - Top Right */}
       <div style={{ position: 'absolute', top: `calc(20 * ${scale})`, right: `calc(20 * ${scale})`, zIndex: 100 }}>
@@ -1343,7 +1394,7 @@ export function O1InhouseGameScreen({
       </div>
 
       {/* Achievement Animation Overlay */}
-      {activeAnimation && (
+      {activeAnimation && PLAYERS[currentThrower] && (
         <div style={{
           position: 'absolute',
           inset: 0,
@@ -1357,31 +1408,81 @@ export function O1InhouseGameScreen({
           <div style={{
             position: 'absolute',
             inset: 0,
-            background: `radial-gradient(circle, ${PLAYERS[currentThrower].profilecolor}33 0%, transparent 70%)`,
+            background: `radial-gradient(circle, ${PLAYERS[currentThrower]!.profilecolor}33 0%, transparent 70%)`,
             animation: 'achievementPulse 2s ease-out forwards',
           }} />
-          {/* Achievement text */}
-          <div style={{
-            position: 'absolute',
-            left: '50%',
-            top: '50%',
-            transform: 'translate(-50%, -50%)',
-            fontFamily: FONT_SCORE,
-            fontWeight: 300,
-            fontSize: `calc(120 * ${scale})`,
-            lineHeight: 1,
-            color: PLAYERS[currentThrower].profilecolor,
-            textShadow: `0 0 30px ${PLAYERS[currentThrower].profilecolor}, 0 0 60px ${PLAYERS[currentThrower].profilecolor}, -4px 4px 8px rgba(0, 0, 0, 0.8)`,
-            whiteSpace: 'nowrap',
-            animation: 'achievementPulse 2s ease-out forwards, achievementGlow 0.5s ease-in-out infinite',
-          }}>
-            {ACHIEVEMENT_LABELS[activeAnimation]}
-          </div>
+          {/* Award video if available */}
+          {AWARD_VIDEOS[activeAnimation] && (
+            <video
+              autoPlay
+              muted
+              playsInline
+              style={{
+                position: 'absolute',
+                left: '50%',
+                top: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: '80%',
+                maxWidth: '600px',
+                zIndex: 201,
+                animation: 'achievementPulse 2s ease-out forwards',
+              }}
+            >
+              <source src={AWARD_VIDEOS[activeAnimation]} type="video/mp4" />
+            </video>
+          )}
+          {/* Achievement text (only show if no video) */}
+          {!AWARD_VIDEOS[activeAnimation] && (
+            <div style={{
+              position: 'absolute',
+              left: '50%',
+              top: '50%',
+              transform: 'translate(-50%, -50%)',
+              fontFamily: FONT_SCORE,
+              fontWeight: 300,
+              fontSize: `calc(120 * ${scale})`,
+              lineHeight: 1,
+              color: PLAYERS[currentThrower]!.profilecolor,
+              textShadow: `0 0 30px ${PLAYERS[currentThrower]!.profilecolor}, 0 0 60px ${PLAYERS[currentThrower]!.profilecolor}, -4px 4px 8px rgba(0, 0, 0, 0.8)`,
+              whiteSpace: 'nowrap',
+              animation: 'achievementPulse 2s ease-out forwards, achievementGlow 0.5s ease-in-out infinite',
+            }}>
+              {ACHIEVEMENT_LABELS[activeAnimation]}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Double Bull Effect */}
+      {showDoubleBullEffect && (
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          zIndex: 150,
+          pointerEvents: 'none',
+          animation: 'doubleBullFade 2s ease-out forwards',
+        }}>
+          <video
+            autoPlay
+            muted
+            playsInline
+            style={{
+              position: 'absolute',
+              left: '50%',
+              top: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+            }}
+          >
+            <source src="/awards/bullseye_effect.mp4" type="video/mp4" />
+          </video>
         </div>
       )}
 
       {/* Winners Screen Overlay */}
-      {showWinnerScreen && gameWinner && (
+      {showWinnerScreen && gameWinner && PLAYERS[gameWinner] && (
         <div style={{
           position: 'absolute',
           inset: 0,
@@ -1397,7 +1498,7 @@ export function O1InhouseGameScreen({
           <div style={{
             position: 'absolute',
             inset: 0,
-            background: `radial-gradient(circle at center, ${PLAYERS[gameWinner].profilecolor}40 0%, transparent 60%)`,
+            background: `radial-gradient(circle at center, ${PLAYERS[gameWinner]!.profilecolor}40 0%, transparent 60%)`,
           }} />
 
           {/* WINNER label */}
@@ -1413,7 +1514,7 @@ export function O1InhouseGameScreen({
             animationDelay: '0.2s',
             opacity: 0,
           }}>
-            GAME WINNER
+            {isSoloMode ? 'GAME COMPLETE' : 'GAME WINNER'}
           </div>
 
           {/* Winner name */}
@@ -1422,16 +1523,16 @@ export function O1InhouseGameScreen({
             fontWeight: 300,
             fontSize: `calc(160 * ${scale})`,
             lineHeight: 1,
-            color: PLAYERS[gameWinner].profilecolor,
-            textShadow: `0 0 40px ${PLAYERS[gameWinner].profilecolor}, 0 0 80px ${PLAYERS[gameWinner].profilecolor}, -6px 6px 12px rgba(0, 0, 0, 0.8)`,
+            color: PLAYERS[gameWinner]!.profilecolor,
+            textShadow: `0 0 40px ${PLAYERS[gameWinner]!.profilecolor}, 0 0 80px ${PLAYERS[gameWinner]!.profilecolor}, -6px 6px 12px rgba(0, 0, 0, 0.8)`,
             animation: 'winnerNameSlide 0.8s ease-out forwards',
             animationDelay: '0.4s',
             opacity: 0,
           }}>
-            {PLAYERS[gameWinner].name}
+            {PLAYERS[gameWinner]!.name}
           </div>
 
-          {/* Final score */}
+          {/* Final stats */}
           <div style={{
             fontFamily: FONT_NAME,
             fontSize: `calc(28 * ${scale})`,
@@ -1441,7 +1542,10 @@ export function O1InhouseGameScreen({
             animationDelay: '0.6s',
             opacity: 0,
           }}>
-            Final: {gameWinner === 'p1' ? p1Score : p2Score} - {gameWinner === 'p1' ? p2Score : p1Score}
+            {isSoloMode
+              ? `Rounds: ${currentRound} | PPR: ${p1DisplayPPR.toFixed(1)}`
+              : `Final: ${gameWinner === 'p1' ? p1Score : p2Score} - ${gameWinner === 'p1' ? p2Score : p1Score}`
+            }
           </div>
 
           {/* Button row */}
@@ -1466,11 +1570,11 @@ export function O1InhouseGameScreen({
                   fontSize: `calc(24 * ${scale})`,
                   fontWeight: 500,
                   color: '#FFFFFF',
-                  background: PLAYERS[gameWinner].profilecolor,
+                  background: PLAYERS[gameWinner]!.profilecolor,
                   border: 'none',
                   borderRadius: `calc(12 * ${scale})`,
                   cursor: 'pointer',
-                  boxShadow: `0 0 30px ${PLAYERS[gameWinner].profilecolor}80`,
+                  boxShadow: `0 0 30px ${PLAYERS[gameWinner]!.profilecolor}80`,
                 }}
               >
                 Continue
@@ -1507,19 +1611,20 @@ export function O1InhouseGameScreen({
                     fontSize: `calc(24 * ${scale})`,
                     fontWeight: 500,
                     color: '#FFFFFF',
-                    background: PLAYERS[gameWinner].profilecolor,
+                    background: PLAYERS[gameWinner]!.profilecolor,
                     border: 'none',
                     borderRadius: `calc(12 * ${scale})`,
                     cursor: 'pointer',
-                    boxShadow: `0 0 30px ${PLAYERS[gameWinner].profilecolor}80`,
+                    boxShadow: `0 0 30px ${PLAYERS[gameWinner]!.profilecolor}80`,
                   }}
                 >
-                  Rematch
+                  {isSoloMode ? 'Play Again' : 'Rematch'}
                 </button>
                 <button
                   onClick={() => {
                     setShowWinnerScreen(false);
                     setGameWinner(null);
+                    onLeaveMatch?.();
                   }}
                   style={{
                     padding: `calc(16 * ${scale}) calc(48 * ${scale})`,
@@ -1533,7 +1638,7 @@ export function O1InhouseGameScreen({
                     cursor: 'pointer',
                   }}
                 >
-                  Exit to Lobby
+                  Exit
                 </button>
               </>
             )}

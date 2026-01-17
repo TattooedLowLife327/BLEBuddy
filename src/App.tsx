@@ -17,6 +17,7 @@ import { CROnlineGameScreen } from './pages/CROnlineGameScreen';
 import { CRInhouseGameScreen } from './pages/CRInhouseGameScreen';
 import { O1OnlineGameScreen } from './pages/01OnlineGameScreen';
 import { MedleyMatchManager } from './pages/MedleyMatchManager';
+import { InhousePlayerSelectScreen } from './pages/InhousePlayerSelectScreen';
 import { SettingsModal } from './components/SettingsModal';
 import { createClient } from './utils/supabase/client';
 import { useBLE } from './contexts/BLEContext';
@@ -30,16 +31,43 @@ type GameRequestNotification = {
   schema: 'player' | 'youth';
 };
 
+// Wrapper component for in-house player selection screen
+function InhousePlayerSelectRoute({ userId, userName, profilePic, accentColor }: { userId: string; userName: string; profilePic: string | null; accentColor: string }) {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const gameType = (searchParams.get('game') || '501') as 'cricket' | '301' | '501' | '701';
+
+  return (
+    <InhousePlayerSelectScreen
+      player1={{
+        id: userId,
+        name: userName || 'PLAYER1',
+        profilePic: profilePic || undefined,
+        profileColor: accentColor,
+      }}
+      gameType={gameType}
+      onBack={() => navigate('/dashboard')}
+    />
+  );
+}
+
 // Wrapper component for in-house 01 games - reads URL params and passes user data
 function Inhouse01Route({ userId, userName, profilePic, accentColor }: { userId: string; userName: string; profilePic: string | null; accentColor: string }) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const gameType = searchParams.get('type') || '501';
+  const mode = searchParams.get('mode');
+
+  // If no mode selected, redirect to player selection
+  if (!mode) {
+    return <Navigate to={`/game/inhouse-select?game=${gameType}`} replace />;
+  }
 
   return (
     <O1InhouseGameScreen
       onLeaveMatch={() => navigate('/dashboard')}
       gameType={gameType}
+      playerMode={mode as 'solo' | 'guest'}
       player1={{
         id: userId,
         name: userName || 'PLAYER1',
@@ -52,11 +80,19 @@ function Inhouse01Route({ userId, userName, profilePic, accentColor }: { userId:
 
 // Wrapper component for in-house Cricket games - passes user data
 function CricketInhouseRoute({ userId, userName, profilePic, accentColor }: { userId: string; userName: string; profilePic: string | null; accentColor: string }) {
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const mode = searchParams.get('mode');
+
+  // If no mode selected, redirect to player selection
+  if (!mode) {
+    return <Navigate to="/game/inhouse-select?game=cricket" replace />;
+  }
 
   return (
     <CRInhouseGameScreen
       onLeaveMatch={() => navigate('/dashboard')}
+      playerMode={mode as 'solo' | 'guest'}
       player1={{
         id: userId,
         name: userName || 'PLAYER1',
@@ -583,6 +619,7 @@ export default function App() {
           missedRequests={missedRequests.map(r => ({ id: r.id, challengerName: r.fromPlayerName, challengerId: r.fromPlayerId, timestamp: r.createdAt }))}
           onClearMissedRequests={() => setMissedRequests([])}
           onOpenSettings={() => setShowSettingsModal(true)}
+          onAddMissedRequest={(req) => setMissedRequests(prev => [...prev, { id: req.id, fromPlayerId: req.challengerId, fromPlayerName: req.challengerName, createdAt: req.timestamp, schema: req.schema || 'player' }])}
         />
       } />
 
@@ -633,6 +670,9 @@ export default function App() {
       } />
 
       {/* Production games - in-house with user data */}
+      <Route path="/game/inhouse-select" element={
+        <InhousePlayerSelectRoute userId={userId} userName={userName} profilePic={profilePic} accentColor={accentColor} />
+      } />
       <Route path="/game/01-inhouse" element={
         <Inhouse01Route userId={userId} userName={userName} profilePic={profilePic} accentColor={accentColor} />
       } />
