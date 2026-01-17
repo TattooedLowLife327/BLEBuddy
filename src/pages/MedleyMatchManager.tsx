@@ -237,8 +237,8 @@ export function MedleyMatchManager({
   if (showCork) {
     return (
       <CorkScreen
-        player1={localPlayer}
-        player2={remotePlayer}
+        player1={{ id: localPlayer.id, granboard_name: localPlayer.name, profilepic: localPlayer.profilePic, profilecolor: localPlayer.accentColor }}
+        player2={{ id: remotePlayer.id, granboard_name: remotePlayer.name, profilepic: remotePlayer.profilePic, profilecolor: remotePlayer.accentColor }}
         gameId={gameId}
         visiblePlayerId={localPlayer.id}
         isInitiator={isInitiator}

@@ -76,11 +76,6 @@ const FIGMA = {
   scoreSize: 96,
 };
 
-const PLAYERS = {
-  p1: { id: 'p1', name: 'PLAYER1', profilecolor: '#6600FF' },
-  p2: { id: 'p2', name: 'PLAYER2', profilecolor: '#FB00FF' },
-};
-
 const ROUND_WORDS = ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE', 'TEN',
   'ELEVEN', 'TWELVE', 'THIRTEEN', 'FOURTEEN', 'FIFTEEN', 'SIXTEEN', 'SEVENTEEN', 'EIGHTEEN', 'NINETEEN', 'TWENTY'];
 
@@ -96,6 +91,17 @@ const ACHIEVEMENT_LABELS: Record<Exclude<AchievementType, null>, string> = {
   shanghai: 'SHANGHAI!',
   highTon: 'HIGH TON!',
   lowTon: 'LOW TON!',
+};
+
+const AWARD_VIDEOS: Partial<Record<Exclude<AchievementType, null>, string>> = {
+  hatTrick: '/awards/blue&orange/hattrick.mp4',
+  threeInBlack: '/awards/blue&orange/3intheblack.mp4',
+  ton80: '/awards/blue&orange/ton80.mp4',
+  threeInBed: '/awards/blue&orange/3inabed.mp4',
+  whiteHorse: '/awards/blue&orange/whitehorse.mp4',
+  shanghai: '/awards/blue&orange/shanghai.mp4',
+  highTon: '/awards/blue&orange/highton.mp4',
+  lowTon: '/awards/blue&orange/lowton.mp4',
 };
 
 
@@ -258,6 +264,18 @@ const goodLuckKeyframes = `
     transform: translateY(-10px) rotate(360deg);
   }
 }
+
+@keyframes doubleBullFade {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
 `;
 
 interface GameScreenProps {
@@ -301,6 +319,10 @@ export function O1OnlineGameScreen({
 
   const { localStream, remoteStream, initialize: webrtcInit, disconnect: webrtcDisconnect } = useWebRTC(webRTCOptions);
 
+  // Determine which player is p1/p2 based on initiator
+  const p1 = isInitiator ? localPlayer : remotePlayer;
+  const p2 = isInitiator ? remotePlayer : localPlayer;
+
   const resolvedGameType = useMemo(() => {
     const raw = gameType || gameConfig?.games?.find(entry => entry) || '501';
     const normalized = typeof raw === 'string' ? raw.toUpperCase() : '501';
@@ -328,6 +350,8 @@ export function O1OnlineGameScreen({
   const [activeAnimation, setActiveAnimation] = useState<AchievementType>(null);
   const [gameWinner, setGameWinner] = useState<'p1' | 'p2' | null>(null);
   const [showWinnerScreen, setShowWinnerScreen] = useState(false);
+  const [showDoubleBullEffect, setShowDoubleBullEffect] = useState(false);
+  const [doubleBullEffectKey, setDoubleBullEffectKey] = useState(0);
 
   // 80% Stat Tracking
   const [p1DartsThrown, setP1DartsThrown] = useState(0);
@@ -442,6 +466,15 @@ export function O1OnlineGameScreen({
     return () => clearTimeout(timer);
   }, []);
 
+  // Double bull effect auto-hide
+  useEffect(() => {
+    if (!showDoubleBullEffect) return;
+    const timer = setTimeout(() => {
+      setShowDoubleBullEffect(false);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [showDoubleBullEffect, doubleBullEffectKey]);
+
   useEffect(() => {
     if (showPlayerChange) {
       const timer = setTimeout(() => {
@@ -532,11 +565,17 @@ export function O1OnlineGameScreen({
     if (newDarts.length === 3 || didWin) {
       const achievement = detectAchievement(newDarts, newRoundScore, false, didWin);
       if (achievement) {
+        setShowDoubleBullEffect(false);
         const winner = didWin ? currentThrower : undefined;
         triggerAchievement(achievement, winner);
         if (!didWin) setTimeout(() => setShowPlayerChange(true), 2000);
         return;
       }
+    }
+    // Trigger double bull effect if no achievement and segment is D25
+    if (!didWin && segment === 'D25') {
+      setShowDoubleBullEffect(true);
+      setDoubleBullEffectKey(prev => prev + 1);
     }
     if (newDarts.length === 3) setShowPlayerChange(true);
   }, [currentDarts, currentScore, currentThrower, roundScore, showPlayerChange, introComplete, p1Score, p2Score, p1HasStarted, p2HasStarted, inMode, outMode, detectAchievement, triggerAchievement]);
@@ -684,7 +723,7 @@ export function O1OnlineGameScreen({
           flex: 1,
           position: 'relative',
           background: '#000',
-          borderRight: `2px solid ${p1Active ? PLAYERS.p1.profilecolor : 'rgba(255, 255, 255, 0.2)'}`,
+          borderRight: `2px solid ${p1Active ? p1.accentColor : 'rgba(255, 255, 255, 0.2)'}`,
           transition: 'border-color 0.3s ease-out',
         }}>
           <video
@@ -719,7 +758,7 @@ export function O1OnlineGameScreen({
             <div style={{
               position: 'absolute',
               inset: 0,
-              boxShadow: `inset 0 0 80px ${PLAYERS.p1.profilecolor}40`,
+              boxShadow: `inset 0 0 80px ${p1.accentColor}40`,
               pointerEvents: 'none',
             }} />
           )}
@@ -730,7 +769,7 @@ export function O1OnlineGameScreen({
           flex: 1,
           position: 'relative',
           background: '#000',
-          borderLeft: `2px solid ${p2Active ? PLAYERS.p2.profilecolor : 'rgba(255, 255, 255, 0.2)'}`,
+          borderLeft: `2px solid ${p2Active ? p2.accentColor : 'rgba(255, 255, 255, 0.2)'}`,
           transition: 'border-color 0.3s ease-out',
         }}>
           <video
@@ -763,7 +802,7 @@ export function O1OnlineGameScreen({
             <div style={{
               position: 'absolute',
               inset: 0,
-              boxShadow: `inset 0 0 80px ${PLAYERS.p2.profilecolor}40`,
+              boxShadow: `inset 0 0 80px ${p2.accentColor}40`,
               pointerEvents: 'none',
             }} />
           )}
@@ -777,6 +816,28 @@ export function O1OnlineGameScreen({
         background: 'rgba(0, 0, 0, 0.4)',
         pointerEvents: 'none',
       }} />
+
+      {/* Double bull hit effect */}
+      {showDoubleBullEffect && (
+        <video
+          key={doubleBullEffectKey}
+          src="/hiteffects/blue&orange/dbull.mp4"
+          autoPlay
+          muted
+          playsInline
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            opacity: 1,
+            zIndex: 120,
+            pointerEvents: 'none',
+            animation: 'doubleBullFade 2s ease-out forwards',
+          }}
+        />
+      )}
 
       {/* Match Format / Checkout Display - Top Center */}
       {(() => {
@@ -855,7 +916,7 @@ export function O1OnlineGameScreen({
       <div style={{
         position: 'absolute',
         left: '50%',
-        top: '50%',
+        top: '40%',
         transform: 'translate(-50%, -50%)',
         fontFamily: FONT_SCORE,
         fontWeight: 300,
@@ -1036,7 +1097,7 @@ export function O1OnlineGameScreen({
             fontFamily: FONT_NAME, fontWeight: 400, fontSize: `calc(${FIGMA.nameSize} * ${scale})`,
             color: p1Active ? '#FFFFFF' : INACTIVE,
           }}>
-            {PLAYERS.p1.name}
+            {p1.name}
           </span>
           {introComplete && isOhOneGame && (
             <span style={{
@@ -1108,7 +1169,7 @@ export function O1OnlineGameScreen({
             fontFamily: FONT_NAME, fontWeight: 400, fontSize: `calc(${FIGMA.nameSize} * ${scale})`,
             color: p2Active ? '#FFFFFF' : INACTIVE,
           }}>
-            {PLAYERS.p2.name}
+            {p2.name}
           </span>
           {introComplete && isOhOneGame && (
             <span style={{
@@ -1209,21 +1270,41 @@ export function O1OnlineGameScreen({
           position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
           zIndex: 200, pointerEvents: 'none',
         }}>
+          {AWARD_VIDEOS[activeAnimation] && (
+            <video
+              key={activeAnimation}
+              src={AWARD_VIDEOS[activeAnimation]}
+              autoPlay
+              muted
+              playsInline
+              style={{
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+              }}
+            />
+          )}
+          {/* Backdrop flash */}
           <div style={{
             position: 'absolute', inset: 0,
-            background: `radial-gradient(circle, ${PLAYERS[currentThrower].profilecolor}33 0%, transparent 70%)`,
+            background: `radial-gradient(circle, ${(currentThrower === 'p1' ? p1.accentColor : p2.accentColor)}33 0%, transparent 70%)`,
             animation: 'achievementPulse 2s ease-out forwards',
           }} />
-          <div style={{
-            position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
-            fontFamily: FONT_SCORE, fontWeight: 300, fontSize: `calc(120 * ${scale})`, lineHeight: 1,
-            color: PLAYERS[currentThrower].profilecolor,
-            textShadow: `0 0 30px ${PLAYERS[currentThrower].profilecolor}, 0 0 60px ${PLAYERS[currentThrower].profilecolor}, -4px 4px 8px rgba(0, 0, 0, 0.8)`,
-            whiteSpace: 'nowrap',
-            animation: 'achievementPulse 2s ease-out forwards, achievementGlow 0.5s ease-in-out infinite',
-          }}>
-            {ACHIEVEMENT_LABELS[activeAnimation]}
-          </div>
+          {/* Achievement text - only show if no video */}
+          {!AWARD_VIDEOS[activeAnimation] && (
+            <div style={{
+              position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
+              fontFamily: FONT_SCORE, fontWeight: 300, fontSize: `calc(120 * ${scale})`, lineHeight: 1,
+              color: (currentThrower === 'p1' ? p1.accentColor : p2.accentColor),
+              textShadow: `0 0 30px ${(currentThrower === 'p1' ? p1.accentColor : p2.accentColor)}, 0 0 60px ${(currentThrower === 'p1' ? p1.accentColor : p2.accentColor)}, -4px 4px 8px rgba(0, 0, 0, 0.8)`,
+              whiteSpace: 'nowrap',
+              animation: 'achievementPulse 2s ease-out forwards, achievementGlow 0.5s ease-in-out infinite',
+            }}>
+              {ACHIEVEMENT_LABELS[activeAnimation]}
+            </div>
+          )}
         </div>
       )}
 
@@ -1236,7 +1317,7 @@ export function O1OnlineGameScreen({
         }}>
           <div style={{
             position: 'absolute', inset: 0,
-            background: `radial-gradient(circle at center, ${PLAYERS[gameWinner].profilecolor}40 0%, transparent 60%)`,
+            background: `radial-gradient(circle at center, ${(gameWinner === 'p1' ? p1.accentColor : p2.accentColor)}40 0%, transparent 60%)`,
           }} />
           <div style={{
             fontFamily: FONT_SCORE, fontWeight: 300, fontSize: `calc(60 * ${scale})`, lineHeight: 1,
@@ -1248,11 +1329,11 @@ export function O1OnlineGameScreen({
           </div>
           <div style={{
             fontFamily: FONT_SCORE, fontWeight: 300, fontSize: `calc(160 * ${scale})`, lineHeight: 1,
-            color: PLAYERS[gameWinner].profilecolor,
-            textShadow: `0 0 40px ${PLAYERS[gameWinner].profilecolor}, 0 0 80px ${PLAYERS[gameWinner].profilecolor}, -6px 6px 12px rgba(0, 0, 0, 0.8)`,
+            color: (gameWinner === 'p1' ? p1.accentColor : p2.accentColor),
+            textShadow: `0 0 40px ${(gameWinner === 'p1' ? p1.accentColor : p2.accentColor)}, 0 0 80px ${(gameWinner === 'p1' ? p1.accentColor : p2.accentColor)}, -6px 6px 12px rgba(0, 0, 0, 0.8)`,
             animation: 'winnerNameSlide 0.8s ease-out forwards', animationDelay: '0.4s', opacity: 0,
           }}>
-            {PLAYERS[gameWinner].name}
+            {(gameWinner === 'p1' ? p1.name : p2.name)}
           </div>
           <div style={{
             fontFamily: FONT_NAME, fontSize: `calc(28 * ${scale})`, color: 'rgba(255, 255, 255, 0.5)',
@@ -1275,9 +1356,9 @@ export function O1OnlineGameScreen({
                 style={{
                   padding: `calc(16 * ${scale}) calc(48 * ${scale})`,
                   fontFamily: FONT_NAME, fontSize: `calc(24 * ${scale})`, fontWeight: 500,
-                  color: '#FFFFFF', background: PLAYERS[gameWinner].profilecolor,
+                  color: '#FFFFFF', background: (gameWinner === 'p1' ? p1.accentColor : p2.accentColor),
                   border: 'none', borderRadius: `calc(12 * ${scale})`, cursor: 'pointer',
-                  boxShadow: `0 0 30px ${PLAYERS[gameWinner].profilecolor}80`,
+                  boxShadow: `0 0 30px ${(gameWinner === 'p1' ? p1.accentColor : p2.accentColor)}80`,
                 }}
               >
                 Continue
@@ -1311,9 +1392,9 @@ export function O1OnlineGameScreen({
                   style={{
                     padding: `calc(16 * ${scale}) calc(48 * ${scale})`,
                     fontFamily: FONT_NAME, fontSize: `calc(24 * ${scale})`, fontWeight: 500,
-                    color: '#FFFFFF', background: PLAYERS[gameWinner].profilecolor,
+                    color: '#FFFFFF', background: (gameWinner === 'p1' ? p1.accentColor : p2.accentColor),
                     border: 'none', borderRadius: `calc(12 * ${scale})`, cursor: 'pointer',
-                    boxShadow: `0 0 30px ${PLAYERS[gameWinner].profilecolor}80`,
+                    boxShadow: `0 0 30px ${(gameWinner === 'p1' ? p1.accentColor : p2.accentColor)}80`,
                   }}
                 >
                   Rematch

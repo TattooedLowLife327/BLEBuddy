@@ -71,16 +71,10 @@ const corkKeyframes = `
 function getCorkScore(throwData: DartThrowData): { score: number; valid: boolean; display: string } {
   const { segmentType, baseValue } = throwData;
   if (segmentType === 'SINGLE_INNER') return { score: baseValue, valid: true, display: `${baseValue}` };
-  if (segmentType === 'BULL') return { score: 25, valid: true, display: 'BULL' };
-  if (segmentType === 'DBL_BULL') return { score: 50, valid: true, display: 'D-BULL' };
-  if (segmentType === 'BUTTON') return { score: 0, valid: false, display: '0' };
-
-  let display = '0';
-  if (segmentType === 'TRIPLE') display = `T${baseValue} -> 0`;
-  else if (segmentType === 'DOUBLE') display = `D${baseValue} -> 0`;
-  else if (segmentType === 'SINGLE_OUTER') display = `outer ${baseValue} -> 0`;
-  else if (segmentType === 'MISS') display = 'MISS -> 0';
-  return { score: 0, valid: false, display };
+  if (segmentType === 'BULL') return { score: 25, valid: true, display: '25' };
+  if (segmentType === 'DBL_BULL') return { score: 50, valid: true, display: '50' };
+  // Invalid throws all score 0
+  return { score: 0, valid: false, display: '0' };
 }
 
 const resolveProfilePicUrl = (pic?: string): string | undefined => {

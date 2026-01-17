@@ -83,6 +83,14 @@ const ACHIEVEMENT_LABELS: Record<Exclude<AchievementType, null>, string> = {
   whiteHorse: 'WHITE HORSE!',
 };
 
+const AWARD_VIDEOS: Partial<Record<Exclude<AchievementType, null>, string>> = {
+  hatTrick: '/awards/blue&orange/hattrick.mp4',
+  threeInBlack: '/awards/blue&orange/3intheblack.mp4',
+  ton80: '/awards/blue&orange/ton80.mp4',
+  threeInBed: '/awards/blue&orange/3inabed.mp4',
+  whiteHorse: '/awards/blue&orange/whitehorse.mp4',
+};
+
 const goodLuckKeyframes = `
 @keyframes goodLuckSlide {
   0% { left: 100%; transform: translate(0, -50%); }
@@ -1206,21 +1214,39 @@ export function CROnlineGameScreen({
           position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
           zIndex: 200, pointerEvents: 'none',
         }}>
+          {AWARD_VIDEOS[activeAnimation] && (
+            <video
+              key={activeAnimation}
+              src={AWARD_VIDEOS[activeAnimation]}
+              autoPlay
+              muted
+              playsInline
+              style={{
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+              }}
+            />
+          )}
           <div style={{
             position: 'absolute', inset: 0,
             background: `radial-gradient(circle, ${currentThrower === 'p1' ? p1.accentColor : p2.accentColor}33 0%, transparent 70%)`,
             animation: 'achievementPulse 2s ease-out forwards',
           }} />
-          <div style={{
-            position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
-            fontFamily: FONT_SCORE, fontWeight: 300, fontSize: `calc(120 * ${scale})`, lineHeight: 1,
-            color: currentThrower === 'p1' ? p1.accentColor : p2.accentColor,
-            textShadow: `0 0 30px ${currentThrower === 'p1' ? p1.accentColor : p2.accentColor}, 0 0 60px ${currentThrower === 'p1' ? p1.accentColor : p2.accentColor}, -4px 4px 8px rgba(0, 0, 0, 0.8)`,
-            whiteSpace: 'nowrap',
-            animation: 'achievementPulse 2s ease-out forwards, achievementGlow 0.5s ease-in-out infinite',
-          }}>
-            {ACHIEVEMENT_LABELS[activeAnimation]}
-          </div>
+          {!AWARD_VIDEOS[activeAnimation] && (
+            <div style={{
+              position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
+              fontFamily: FONT_SCORE, fontWeight: 300, fontSize: `calc(120 * ${scale})`, lineHeight: 1,
+              color: currentThrower === 'p1' ? p1.accentColor : p2.accentColor,
+              textShadow: `0 0 30px ${currentThrower === 'p1' ? p1.accentColor : p2.accentColor}, 0 0 60px ${currentThrower === 'p1' ? p1.accentColor : p2.accentColor}, -4px 4px 8px rgba(0, 0, 0, 0.8)`,
+              whiteSpace: 'nowrap',
+              animation: 'achievementPulse 2s ease-out forwards, achievementGlow 0.5s ease-in-out infinite',
+            }}>
+              {ACHIEVEMENT_LABELS[activeAnimation]}
+            </div>
+          )}
         </div>
       )}
 
