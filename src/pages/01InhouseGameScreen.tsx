@@ -306,6 +306,7 @@ export function O1InhouseGameScreen({
   const { lastThrow, isConnected, simulateThrow: bleSimulateThrow } = useBLE();
   const devMode = isDevMode();
   const lastProcessedThrowRef = useRef<string | null>(null);
+  const playerChangeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isSoloMode = playerMode === 'solo';
 
@@ -691,11 +692,26 @@ export function O1InhouseGameScreen({
       }
     }
 
-    if (newDarts.length === 3) setShowPlayerChange(true);
+    // Add delay before player change to let dart effects complete (button press skips this)
+    if (newDarts.length === 3) {
+      playerChangeTimeoutRef.current = setTimeout(() => {
+        playerChangeTimeoutRef.current = null;
+        setShowPlayerChange(true);
+      }, 7000);
+    }
   }, [currentDarts, currentScore, currentThrower, roundScore, showPlayerChange, introComplete, p1Score, p2Score, p1HasStarted, p2HasStarted, inMode, outMode, detectAchievement, triggerAchievement]);
 
   const endTurnWithMisses = useCallback(() => {
-    if (showPlayerChange || !introComplete || showWinnerScreen || !!activeAnimation) return;
+    if (showPlayerChange || !introComplete || showWinnerScreen) return;
+    // Clear any pending player change timeout (button press = instant change)
+    if (playerChangeTimeoutRef.current) {
+      clearTimeout(playerChangeTimeoutRef.current);
+      playerChangeTimeoutRef.current = null;
+    }
+    // Clear any active animation (button skips it)
+    if (activeAnimation) {
+      setActiveAnimation(null);
+    }
     const remaining = Math.max(0, 3 - currentDarts.length);
     if (remaining === 0) {
       setShowPlayerChange(true);

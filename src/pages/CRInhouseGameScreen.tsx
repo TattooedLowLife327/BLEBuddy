@@ -167,6 +167,7 @@ export function CRInhouseGameScreen({
   // BLE for throw detection
   const { lastThrow, isConnected: bleConnected, connect: bleConnect, disconnect: bleDisconnect, status: bleStatus } = useBLE();
   const lastProcessedThrowRef = useRef<string | null>(null);
+  const playerChangeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isSoloMode = playerMode === 'solo';
 
@@ -367,12 +368,25 @@ export function CRInhouseGameScreen({
         setActiveAnimation(achievement);
         setTimeout(() => setActiveAnimation(null), 2000);
       }
-      setShowPlayerChange(true);
+      // Add delay before player change to let dart effects complete (button press skips this)
+      playerChangeTimeoutRef.current = setTimeout(() => {
+        playerChangeTimeoutRef.current = null;
+        setShowPlayerChange(true);
+      }, 7000);
     }
   }, [currentDarts, currentThrower, introComplete, showPlayerChange, showWinnerScreen, p1Score, p2Score, marks]);
 
   const endTurnWithMisses = useCallback(() => {
-    if (showPlayerChange || !introComplete || showWinnerScreen || !!activeAnimation) return;
+    if (showPlayerChange || !introComplete || showWinnerScreen) return;
+    // Clear any pending player change timeout (button press = instant change)
+    if (playerChangeTimeoutRef.current) {
+      clearTimeout(playerChangeTimeoutRef.current);
+      playerChangeTimeoutRef.current = null;
+    }
+    // Clear any active animation (button skips it)
+    if (activeAnimation) {
+      setActiveAnimation(null);
+    }
     const remaining = Math.max(0, 3 - currentDarts.length);
     if (remaining === 0) {
       setShowPlayerChange(true);
