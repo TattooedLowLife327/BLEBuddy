@@ -414,7 +414,10 @@ export function CRInhouseGameScreen({
       return;
     }
 
-    const segment = lastThrow.segment;
+    // Convert BLE segment types to standard format
+    let segment = lastThrow.segment;
+    if (lastThrow.segmentType === 'BULL') segment = 'S25';
+    else if (lastThrow.segmentType === 'DBL_BULL') segment = 'D25';
     const multiplier = lastThrow.multiplier;
 
     applyThrow(segment, multiplier);
