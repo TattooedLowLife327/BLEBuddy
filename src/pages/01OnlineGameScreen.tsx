@@ -306,6 +306,7 @@ export function O1OnlineGameScreen({
   const devMode = isDevMode();
   const lastProcessedThrowRef = useRef<string | null>(null);
   const playerChangeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const animationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Video element refs
   const localVideoRef = useRef<HTMLVideoElement>(null);
@@ -434,12 +435,13 @@ export function O1OnlineGameScreen({
     return null;
   }, [isOhOneGame, isCricketGame]);
 
-  // Trigger achievement animation (7 seconds to let award videos play fully)
+  // Trigger achievement animation (7 seconds to let award videos play fully, button can cancel)
   const triggerAchievement = useCallback((achievement: AchievementType, winner?: 'p1' | 'p2') => {
     if (!achievement) return;
     setActiveAnimation(achievement);
-    // Clear animation after 7 seconds (matches player change delay, button can skip both)
-    setTimeout(() => {
+    // Clear animation after 7 seconds (use ref so button can cancel)
+    animationTimeoutRef.current = setTimeout(() => {
+      animationTimeoutRef.current = null;
       setActiveAnimation(null);
       if (achievement === 'win' && winner) {
         setGameWinner(winner);
@@ -637,6 +639,11 @@ export function O1OnlineGameScreen({
     if (playerChangeTimeoutRef.current) {
       clearTimeout(playerChangeTimeoutRef.current);
       playerChangeTimeoutRef.current = null;
+    }
+    // Clear any pending animation timeout
+    if (animationTimeoutRef.current) {
+      clearTimeout(animationTimeoutRef.current);
+      animationTimeoutRef.current = null;
     }
     // Clear any active animation (button skips it)
     if (activeAnimation) {

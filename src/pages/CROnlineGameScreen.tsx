@@ -183,6 +183,7 @@ export function CROnlineGameScreen({
   const { lastThrow, isConnected: bleConnected, connect: bleConnect, disconnect: bleDisconnect, status: bleStatus } = useBLE();
   const lastProcessedThrowRef = useRef<string | null>(null);
   const playerChangeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const animationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
 
   // WebRTC for video - memoize options to prevent infinite re-initialization
@@ -491,8 +492,11 @@ export function CROnlineGameScreen({
       const achievement = detectAchievement(newDarts);
       if (achievement) {
         setActiveAnimation(achievement);
-        // 7 seconds to let award videos play fully (button can skip)
-        setTimeout(() => setActiveAnimation(null), 7000);
+        // 7 seconds to let award videos play fully (button can skip via animationTimeoutRef)
+        animationTimeoutRef.current = setTimeout(() => {
+          animationTimeoutRef.current = null;
+          setActiveAnimation(null);
+        }, 7000);
       }
       // Add delay before player change to let dart effects complete (button press skips this)
       playerChangeTimeoutRef.current = setTimeout(() => {
@@ -518,6 +522,11 @@ export function CROnlineGameScreen({
     if (playerChangeTimeoutRef.current) {
       clearTimeout(playerChangeTimeoutRef.current);
       playerChangeTimeoutRef.current = null;
+    }
+    // Clear any pending animation timeout
+    if (animationTimeoutRef.current) {
+      clearTimeout(animationTimeoutRef.current);
+      animationTimeoutRef.current = null;
     }
     // Clear any active animation (button skips it)
     if (activeAnimation) {
