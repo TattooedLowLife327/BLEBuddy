@@ -212,6 +212,10 @@ export function CRInhouseGameScreen({
   const [p1TotalMarks, setP1TotalMarks] = useState(0);
   const [p2TotalMarks, setP2TotalMarks] = useState(0);
 
+  // Track when each player reached their current score (for tiebreaker: who got there first)
+  const [p1ScoreReachedRound, setP1ScoreReachedRound] = useState(1);
+  const [p2ScoreReachedRound, setP2ScoreReachedRound] = useState(1);
+
   // Turn tracking for animations
   const [prevThrower, setPrevThrower] = useState<'p1' | 'p2' | null>(null);
   const [turnKey, setTurnKey] = useState(0);
@@ -334,15 +338,19 @@ export function CRInhouseGameScreen({
           const value = target === 'B' ? 25 : parseInt(target, 10);
           if (currentThrower === 'p1') {
             setP1Score(s => s + overflow * value);
+            setP1ScoreReachedRound(currentRound);
           } else {
             setP2Score(s => s + overflow * value);
+            setP2ScoreReachedRound(currentRound);
           }
         } else if (currentMarks >= 3 && oppMarks < 3) {
           const value = target === 'B' ? 25 : parseInt(target, 10);
           if (currentThrower === 'p1') {
             setP1Score(s => s + hitMarks * value);
+            setP1ScoreReachedRound(currentRound);
           } else {
             setP2Score(s => s + hitMarks * value);
+            setP2ScoreReachedRound(currentRound);
           }
         }
 
@@ -374,7 +382,7 @@ export function CRInhouseGameScreen({
         setShowPlayerChange(true);
       }, 7000);
     }
-  }, [currentDarts, currentThrower, introComplete, showPlayerChange, showWinnerScreen, p1Score, p2Score, marks]);
+  }, [currentDarts, currentThrower, introComplete, showPlayerChange, showWinnerScreen, p1Score, p2Score, marks, currentRound]);
 
   const endTurnWithMisses = useCallback(() => {
     if (showPlayerChange || !introComplete || showWinnerScreen) return;
@@ -449,6 +457,30 @@ export function CRInhouseGameScreen({
         const willCompleteRound = (currentThrower === 'p1' && p2ThrewThisRound) ||
                                    (currentThrower === 'p2' && p1ThrewThisRound);
 
+        // Round 20 limit: If round 20 completes without a winner, determine by tiebreaker
+        if (willCompleteRound && currentRound === 20 && !gameWinner) {
+          let winner: 'p1' | 'p2';
+          if (p1Score > p2Score) {
+            // P1 has more points - P1 wins
+            winner = 'p1';
+          } else if (p2Score > p1Score) {
+            // P2 has more points - P2 wins
+            winner = 'p2';
+          } else if (p1TotalMarks > p2TotalMarks) {
+            // Points tied, P1 has more marks - P1 wins
+            winner = 'p1';
+          } else if (p2TotalMarks > p1TotalMarks) {
+            // Points tied, P2 has more marks - P2 wins
+            winner = 'p2';
+          } else {
+            // Points and marks both tied - whoever reached that point total first wins
+            winner = p1ScoreReachedRound <= p2ScoreReachedRound ? 'p1' : 'p2';
+          }
+          setGameWinner(winner);
+          setTimeout(() => setShowWinnerScreen(true), 500);
+          return;
+        }
+
         if (willCompleteRound) {
           setRoundAnimState('out');
           setTimeout(() => {
@@ -466,7 +498,7 @@ export function CRInhouseGameScreen({
       }, 1500);
       return () => clearTimeout(timer);
     }
-  }, [showPlayerChange, currentThrower, p1ThrewThisRound, p2ThrewThisRound, isSoloMode]);
+  }, [showPlayerChange, currentThrower, p1ThrewThisRound, p2ThrewThisRound, isSoloMode, currentRound, gameWinner, p1Score, p2Score, p1TotalMarks, p2TotalMarks, p1ScoreReachedRound, p2ScoreReachedRound]);
 
   const formatDart = (segment: string) => {
     if (segment === 'MISS') return 'MISS';

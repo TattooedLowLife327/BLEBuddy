@@ -305,6 +305,7 @@ export function O1OnlineGameScreen({
   const { lastThrow, isConnected, simulateThrow: bleSimulateThrow } = useBLE();
   const devMode = isDevMode();
   const lastProcessedThrowRef = useRef<string | null>(null);
+  const playerChangeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Video element refs
   const localVideoRef = useRef<HTMLVideoElement>(null);
@@ -363,6 +364,10 @@ export function O1OnlineGameScreen({
   // Track if each player has "started" (hit their first valid in for DI/MIMO modes)
   const [p1HasStarted, setP1HasStarted] = useState(false);
   const [p2HasStarted, setP2HasStarted] = useState(false);
+
+  // Track when each player reached their current score (for tiebreaker: who got there first)
+  const [p1ScoreReachedRound, setP1ScoreReachedRound] = useState(1);
+  const [p2ScoreReachedRound, setP2ScoreReachedRound] = useState(1);
 
   // Game settings
   const [inMode, setInMode] = useState<'open' | 'master' | 'double'>('open');
@@ -492,6 +497,25 @@ export function O1OnlineGameScreen({
         }
         const willCompleteRound = (currentThrower === 'p1' && p2ThrewThisRound) ||
                                    (currentThrower === 'p2' && p1ThrewThisRound);
+
+        // Round 20 limit: If round 20 completes without a winner, determine by tiebreaker
+        if (willCompleteRound && currentRound === 20 && !gameWinner) {
+          let winner: 'p1' | 'p2';
+          if (p1Score < p2Score) {
+            // P1 has lower score (closer to 0) - P1 wins
+            winner = 'p1';
+          } else if (p2Score < p1Score) {
+            // P2 has lower score (closer to 0) - P2 wins
+            winner = 'p2';
+          } else {
+            // Scores tied - whoever reached that score first wins
+            winner = p1ScoreReachedRound <= p2ScoreReachedRound ? 'p1' : 'p2';
+          }
+          setGameWinner(winner);
+          setTimeout(() => setShowWinnerScreen(true), 500);
+          return;
+        }
+
         if (willCompleteRound) {
           setRoundAnimState('out');
           setTimeout(() => {
@@ -509,7 +533,7 @@ export function O1OnlineGameScreen({
       }, 1500);
       return () => clearTimeout(timer);
     }
-  }, [showPlayerChange, currentThrower, p1ThrewThisRound, p2ThrewThisRound, isOhOneGame, eightyPercentTriggered, p1Score, p2Score, eightyPercentThreshold, p1DartsThrown, p2DartsThrown, startScore]);
+  }, [showPlayerChange, currentThrower, p1ThrewThisRound, p2ThrewThisRound, isOhOneGame, eightyPercentTriggered, p1Score, p2Score, eightyPercentThreshold, p1DartsThrown, p2DartsThrown, startScore, currentRound, gameWinner, p1ScoreReachedRound, p2ScoreReachedRound]);
 
   const throwDart = useCallback((segment: string, score: number, multiplier: number) => {
     if (currentDarts.length >= 3 || showPlayerChange || !introComplete) return;
@@ -559,8 +583,18 @@ export function O1OnlineGameScreen({
     const didWin = potentialNewScore === 0;
     setCurrentDarts(newDarts);
     setRoundScore(newRoundScore);
-    if (currentThrower === 'p1') setP1Score(potentialNewScore);
-    else setP2Score(potentialNewScore);
+    // Update score and track when this score was reached (for tiebreaker)
+    if (currentThrower === 'p1') {
+      if (potentialNewScore !== p1Score) {
+        setP1Score(potentialNewScore);
+        setP1ScoreReachedRound(currentRound);
+      }
+    } else {
+      if (potentialNewScore !== p2Score) {
+        setP2Score(potentialNewScore);
+        setP2ScoreReachedRound(currentRound);
+      }
+    }
     if (playerStartsNow) setHasStarted(true);
     if (newDarts.length === 3 || didWin) {
       const achievement = detectAchievement(newDarts, newRoundScore, false, didWin);
@@ -577,11 +611,26 @@ export function O1OnlineGameScreen({
       setShowDoubleBullEffect(true);
       setDoubleBullEffectKey(prev => prev + 1);
     }
-    if (newDarts.length === 3) setShowPlayerChange(true);
-  }, [currentDarts, currentScore, currentThrower, roundScore, showPlayerChange, introComplete, p1Score, p2Score, p1HasStarted, p2HasStarted, inMode, outMode, detectAchievement, triggerAchievement]);
+    // Add delay before player change to let dart effects complete (button press skips this)
+    if (newDarts.length === 3) {
+      playerChangeTimeoutRef.current = setTimeout(() => {
+        playerChangeTimeoutRef.current = null;
+        setShowPlayerChange(true);
+      }, 7000);
+    }
+  }, [currentDarts, currentScore, currentThrower, roundScore, showPlayerChange, introComplete, p1Score, p2Score, p1HasStarted, p2HasStarted, inMode, outMode, detectAchievement, triggerAchievement, currentRound]);
 
   const endTurnWithMisses = useCallback(() => {
-    if (showPlayerChange || !introComplete || showWinnerScreen || !!activeAnimation) return;
+    if (showPlayerChange || !introComplete || showWinnerScreen) return;
+    // Clear any pending player change timeout (button press = instant change)
+    if (playerChangeTimeoutRef.current) {
+      clearTimeout(playerChangeTimeoutRef.current);
+      playerChangeTimeoutRef.current = null;
+    }
+    // Clear any active animation (button skips it)
+    if (activeAnimation) {
+      setActiveAnimation(null);
+    }
     const remaining = Math.max(0, 3 - currentDarts.length);
     if (remaining === 0) {
       setShowPlayerChange(true);

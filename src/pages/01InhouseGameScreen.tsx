@@ -363,6 +363,10 @@ export function O1InhouseGameScreen({
   const [p1HasStarted, setP1HasStarted] = useState(false);
   const [p2HasStarted, setP2HasStarted] = useState(false);
 
+  // Track when each player reached their current score (for tiebreaker: who got there first)
+  const [p1ScoreReachedRound, setP1ScoreReachedRound] = useState(1);
+  const [p2ScoreReachedRound, setP2ScoreReachedRound] = useState(1);
+
   // Game settings: Separate IN and OUT modes (any combo allowed)
   // Open = any dart, Master = double/triple/any bull, Double = outer double or D25 only
   const [inMode] = useState<'open' | 'master' | 'double'>('open'); // Demo: Open In
@@ -550,6 +554,24 @@ export function O1InhouseGameScreen({
         const willCompleteRound = (currentThrower === 'p1' && p2ThrewThisRound) ||
                                    (currentThrower === 'p2' && p1ThrewThisRound);
 
+        // Round 20 limit: If round 20 completes without a winner, determine by tiebreaker
+        if (willCompleteRound && currentRound === 20 && !gameWinner) {
+          let winner: 'p1' | 'p2';
+          if (p1Score < p2Score) {
+            // P1 has lower score (closer to 0) - P1 wins
+            winner = 'p1';
+          } else if (p2Score < p1Score) {
+            // P2 has lower score (closer to 0) - P2 wins
+            winner = 'p2';
+          } else {
+            // Scores tied - whoever reached that score first wins
+            winner = p1ScoreReachedRound <= p2ScoreReachedRound ? 'p1' : 'p2';
+          }
+          setGameWinner(winner);
+          setTimeout(() => setShowWinnerScreen(true), 500);
+          return;
+        }
+
         if (willCompleteRound) {
           // Start round exit animation
           setRoundAnimState('out');
@@ -569,7 +591,7 @@ export function O1InhouseGameScreen({
       }, 1500);
       return () => clearTimeout(timer);
     }
-  }, [showPlayerChange, currentThrower, p1ThrewThisRound, p2ThrewThisRound, isOhOneGame, eightyPercentTriggered, p1Score, p2Score, eightyPercentThreshold, p1DartsThrown, p2DartsThrown, startScore, isSoloMode]);
+  }, [showPlayerChange, currentThrower, p1ThrewThisRound, p2ThrewThisRound, isOhOneGame, eightyPercentTriggered, p1Score, p2Score, eightyPercentThreshold, p1DartsThrown, p2DartsThrown, startScore, isSoloMode, currentRound, gameWinner, p1ScoreReachedRound, p2ScoreReachedRound]);
 
   const throwDart = useCallback((segment: string, score: number, multiplier: number) => {
     if (currentDarts.length >= 3 || showPlayerChange || !introComplete) return;
@@ -669,8 +691,18 @@ export function O1InhouseGameScreen({
     // Update state
     setCurrentDarts(newDarts);
     setRoundScore(newRoundScore);
-    if (currentThrower === 'p1') setP1Score(potentialNewScore);
-    else setP2Score(potentialNewScore);
+    // Update score and track when this score was reached (for tiebreaker)
+    if (currentThrower === 'p1') {
+      if (potentialNewScore !== p1Score) {
+        setP1Score(potentialNewScore);
+        setP1ScoreReachedRound(currentRound);
+      }
+    } else {
+      if (potentialNewScore !== p2Score) {
+        setP2Score(potentialNewScore);
+        setP2ScoreReachedRound(currentRound);
+      }
+    }
 
     // Mark player as started if they just hit a valid in
     if (playerStartsNow) {
@@ -699,7 +731,7 @@ export function O1InhouseGameScreen({
         setShowPlayerChange(true);
       }, 7000);
     }
-  }, [currentDarts, currentScore, currentThrower, roundScore, showPlayerChange, introComplete, p1Score, p2Score, p1HasStarted, p2HasStarted, inMode, outMode, detectAchievement, triggerAchievement]);
+  }, [currentDarts, currentScore, currentThrower, roundScore, showPlayerChange, introComplete, p1Score, p2Score, p1HasStarted, p2HasStarted, inMode, outMode, detectAchievement, triggerAchievement, currentRound]);
 
   const endTurnWithMisses = useCallback(() => {
     if (showPlayerChange || !introComplete || showWinnerScreen) return;

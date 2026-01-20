@@ -182,6 +182,7 @@ export function CROnlineGameScreen({
   // BLE for throw detection and status
   const { lastThrow, isConnected: bleConnected, connect: bleConnect, disconnect: bleDisconnect, status: bleStatus } = useBLE();
   const lastProcessedThrowRef = useRef<string | null>(null);
+  const playerChangeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
 
   // WebRTC for video - memoize options to prevent infinite re-initialization
@@ -283,6 +284,10 @@ export function CROnlineGameScreen({
   const [p2DartsThrown, setP2DartsThrown] = useState(0);
   const [p1TotalMarks, setP1TotalMarks] = useState(0);
   const [p2TotalMarks, setP2TotalMarks] = useState(0);
+
+  // Track when each player reached their current score (for tiebreaker: who got there first)
+  const [p1ScoreReachedRound, setP1ScoreReachedRound] = useState(1);
+  const [p2ScoreReachedRound, setP2ScoreReachedRound] = useState(1);
 
   // Turn tracking for animations
   const [prevThrower, setPrevThrower] = useState<'p1' | 'p2' | null>(null);
@@ -441,15 +446,19 @@ export function CROnlineGameScreen({
           const value = target === 'B' ? 25 : parseInt(target, 10);
           if (currentThrower === 'p1') {
             setP1Score(s => s + overflow * value);
+            setP1ScoreReachedRound(currentRound);
           } else {
             setP2Score(s => s + overflow * value);
+            setP2ScoreReachedRound(currentRound);
           }
         } else if (currentMarks >= 3 && oppMarks < 3) {
           const value = target === 'B' ? 25 : parseInt(target, 10);
           if (currentThrower === 'p1') {
             setP1Score(s => s + hitMarks * value);
+            setP1ScoreReachedRound(currentRound);
           } else {
             setP2Score(s => s + hitMarks * value);
+            setP2ScoreReachedRound(currentRound);
           }
         }
 
@@ -484,23 +493,35 @@ export function CROnlineGameScreen({
         setActiveAnimation(achievement);
         setTimeout(() => setActiveAnimation(null), 2000);
       }
-      setShowPlayerChange(true);
-
-      // Broadcast turn end if local
-      if (isLocal && throwChannelRef.current) {
-        throwChannelRef.current.send({
-          type: 'broadcast',
-          event: 'turn_end',
-          payload: { playerId: localPlayer.id },
-        });
-      }
+      // Add delay before player change to let dart effects complete (button press skips this)
+      playerChangeTimeoutRef.current = setTimeout(() => {
+        playerChangeTimeoutRef.current = null;
+        setShowPlayerChange(true);
+        // Broadcast turn end if local
+        if (isLocal && throwChannelRef.current) {
+          throwChannelRef.current.send({
+            type: 'broadcast',
+            event: 'turn_end',
+            payload: { playerId: localPlayer.id },
+          });
+        }
+      }, 7000);
     }
-  }, [currentDarts, currentThrower, introComplete, showPlayerChange, showWinnerScreen, p1Score, p2Score, marks, localIsP1, localPlayer.id]);
+  }, [currentDarts, currentThrower, introComplete, showPlayerChange, showWinnerScreen, p1Score, p2Score, marks, localIsP1, localPlayer.id, currentRound]);
 
   const endTurnWithMisses = useCallback(() => {
-    if (showPlayerChange || !introComplete || showWinnerScreen || !!activeAnimation) return;
+    if (showPlayerChange || !introComplete || showWinnerScreen) return;
     const expectedLocal = (localIsP1 && currentThrower === 'p1') || (!localIsP1 && currentThrower === 'p2');
     if (!expectedLocal) return;
+    // Clear any pending player change timeout (button press = instant change)
+    if (playerChangeTimeoutRef.current) {
+      clearTimeout(playerChangeTimeoutRef.current);
+      playerChangeTimeoutRef.current = null;
+    }
+    // Clear any active animation (button skips it)
+    if (activeAnimation) {
+      setActiveAnimation(null);
+    }
     const remaining = Math.max(0, 3 - currentDarts.length);
     if (remaining === 0) {
       setShowPlayerChange(true);
@@ -535,8 +556,10 @@ export function CROnlineGameScreen({
       return;
     }
 
-    // Convert BLE throw to segment string
-    const segment = lastThrow.segment;
+    // Convert BLE segment types to standard format
+    let segment = lastThrow.segment;
+    if (lastThrow.segmentType === 'BULL') segment = 'S25';
+    else if (lastThrow.segmentType === 'DBL_BULL') segment = 'D25';
     const multiplier = lastThrow.multiplier;
 
     applyThrow(segment, multiplier, true);
@@ -555,6 +578,30 @@ export function CROnlineGameScreen({
         const willCompleteRound = (currentThrower === 'p1' && p2ThrewThisRound) ||
                                    (currentThrower === 'p2' && p1ThrewThisRound);
 
+        // Round 20 limit: If round 20 completes without a winner, determine by tiebreaker
+        if (willCompleteRound && currentRound === 20 && !gameWinner) {
+          let winner: 'p1' | 'p2';
+          if (p1Score > p2Score) {
+            // P1 has more points - P1 wins
+            winner = 'p1';
+          } else if (p2Score > p1Score) {
+            // P2 has more points - P2 wins
+            winner = 'p2';
+          } else if (p1TotalMarks > p2TotalMarks) {
+            // Points tied, P1 has more marks - P1 wins
+            winner = 'p1';
+          } else if (p2TotalMarks > p1TotalMarks) {
+            // Points tied, P2 has more marks - P2 wins
+            winner = 'p2';
+          } else {
+            // Points and marks both tied - whoever reached that point total first wins
+            winner = p1ScoreReachedRound <= p2ScoreReachedRound ? 'p1' : 'p2';
+          }
+          setGameWinner(winner);
+          setTimeout(() => setShowWinnerScreen(true), 500);
+          return;
+        }
+
         if (willCompleteRound) {
           setRoundAnimState('out');
           setTimeout(() => {
@@ -572,7 +619,7 @@ export function CROnlineGameScreen({
       }, 1500);
       return () => clearTimeout(timer);
     }
-  }, [showPlayerChange, currentThrower, p1ThrewThisRound, p2ThrewThisRound]);
+  }, [showPlayerChange, currentThrower, p1ThrewThisRound, p2ThrewThisRound, currentRound, gameWinner, p1Score, p2Score, p1TotalMarks, p2TotalMarks, p1ScoreReachedRound, p2ScoreReachedRound]);
 
   const formatDart = (segment: string) => {
     if (segment === 'MISS') return 'MISS';
