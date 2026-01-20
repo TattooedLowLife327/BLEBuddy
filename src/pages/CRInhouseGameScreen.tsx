@@ -374,7 +374,8 @@ export function CRInhouseGameScreen({
       const achievement = detectAchievement(newDarts);
       if (achievement) {
         setActiveAnimation(achievement);
-        setTimeout(() => setActiveAnimation(null), 2000);
+        // 7 seconds to let award videos play fully (button can skip)
+        setTimeout(() => setActiveAnimation(null), 7000);
       }
       // Add delay before player change to let dart effects complete (button press skips this)
       playerChangeTimeoutRef.current = setTimeout(() => {

@@ -434,17 +434,18 @@ export function O1OnlineGameScreen({
     return null;
   }, [isOhOneGame, isCricketGame]);
 
-  // Trigger achievement animation
+  // Trigger achievement animation (7 seconds to let award videos play fully)
   const triggerAchievement = useCallback((achievement: AchievementType, winner?: 'p1' | 'p2') => {
     if (!achievement) return;
     setActiveAnimation(achievement);
+    // Clear animation after 7 seconds (matches player change delay, button can skip both)
     setTimeout(() => {
       setActiveAnimation(null);
       if (achievement === 'win' && winner) {
         setGameWinner(winner);
         setTimeout(() => setShowWinnerScreen(true), 300);
       }
-    }, 2000);
+    }, 7000);
   }, []);
 
   // Undo last dart
@@ -577,7 +578,11 @@ export function O1OnlineGameScreen({
       setCurrentDarts(newDarts);
       const achievement = detectAchievement(newDarts, newRoundScore, true, false);
       triggerAchievement(achievement);
-      setTimeout(() => setShowPlayerChange(true), 2000);
+      // Use timeout ref so button can cancel it
+      playerChangeTimeoutRef.current = setTimeout(() => {
+        playerChangeTimeoutRef.current = null;
+        setShowPlayerChange(true);
+      }, 7000);
       return;
     }
     const didWin = potentialNewScore === 0;
@@ -602,7 +607,13 @@ export function O1OnlineGameScreen({
         setShowDoubleBullEffect(false);
         const winner = didWin ? currentThrower : undefined;
         triggerAchievement(achievement, winner);
-        if (!didWin) setTimeout(() => setShowPlayerChange(true), 2000);
+        if (!didWin) {
+          // Use timeout ref so button can cancel it
+          playerChangeTimeoutRef.current = setTimeout(() => {
+            playerChangeTimeoutRef.current = null;
+            setShowPlayerChange(true);
+          }, 7000);
+        }
         return;
       }
     }
