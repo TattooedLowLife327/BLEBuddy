@@ -602,40 +602,79 @@ class BLEConnection {
   }
 
   /**
-   * EXPERIMENTAL: Light up specific segments
-   * This uses a bitmap approach - may or may not work on your board
-   * @param segments - Array of segment numbers to light (1-20, 25 for bull)
+   * Convert hex color string to RGB values
+   * @param hexColor - Color in format '#RRGGBB' or 'RRGGBB'
+   * @returns Object with r, g, b values (0-255)
    */
-  async setLEDs(segments: number[]): Promise<boolean> {
+  private hexToRGB(hexColor: string): { r: number; g: number; b: number } {
+    const hex = hexColor.replace('#', '');
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+    return { r, g, b };
+  }
+
+  /**
+   * Trigger LED animation with player color
+   * Sends custom LED animation to board based on player's profile color
+   * @param profileColor - Player's profile color in hex format (e.g., '5b21b6' from player.profilecolor)
+   * @param animationType - Type of animation (pulse, wave, spin, rainbow, flash)
+   */
+  async triggerDartLED(profileColor: string, animationType: string = 'pulse'): Promise<boolean> {
     if (!this.txCharacteristic) {
       console.warn('❌ LED control not available');
       return false;
     }
 
-    // Create a 32-bit bitmap for segments 1-25
-    let bitmap = 0;
-    segments.forEach(segmentNum => {
-      if (segmentNum >= 1 && segmentNum <= 25) {
-        bitmap |= (1 << (segmentNum - 1));
+    try {
+      const { r, g, b } = this.hexToRGB(profileColor);
+      
+      // Map animation types to Granboard hex codes from reverse engineering
+      let animationCode = '14'; // Default: pulse
+      
+      switch (animationType.toLowerCase()) {
+        case 'wave':
+          animationCode = '11111'; // Yellow wave
+          break;
+        case 'spin':
+          animationCode = '21'; // Red spin
+          break;
+        case 'rainbow':
+          animationCode = '10'; // Rainbow spin
+          break;
+        case 'flash':
+          animationCode = '1b'; // White shake (fast flash)
+          break;
+        case 'pulse':
+        default:
+          animationCode = '14'; // Pulse
+          break;
       }
-    });
 
-    // Try different command formats - the correct one is unknown
-    // Format 1: 'P' (0x50) + bitmap (little endian)
-    const command = new Uint8Array([
-      0x50, // Command byte 'P' for Pattern?
-      (bitmap >> 0) & 0xFF,
-      (bitmap >> 8) & 0xFF,
-      (bitmap >> 16) & 0xFF,
-      (bitmap >> 24) & 0xFF
-    ]);
+      // Build command: animation code + RGB values
+      const commandStr = animationCode;
+      const bytes = new Uint8Array(commandStr.length / 2 + 3);
+      
+      // Convert hex string to bytes
+      for (let i = 0; i < commandStr.length; i += 2) {
+        bytes[i / 2] = parseInt(commandStr.substr(i, 2), 16);
+      }
+      
+      // Append RGB values
+      bytes[bytes.length - 3] = r;
+      bytes[bytes.length - 2] = g;
+      bytes[bytes.length - 1] = b;
 
-    console.log('💡 Attempting to set LEDs for segments:', segments);
-    return this.sendRawCommand(command);
+      console.log(`💡 Triggering dart LED: color=${profileColor}, animation=${animationType}, RGB(${r},${g},${b})`);
+      return this.sendRawCommand(bytes);
+    } catch (error) {
+      console.error('❌ Error triggering dart LED:', error);
+      return false;
+    }
   }
 
   /**
-   * EXPERIMENTAL: Turn off all LEDs
+   * Turn off all LEDs
    */
   async clearLEDs(): Promise<boolean> {
     if (!this.txCharacteristic) {
@@ -643,24 +682,7 @@ class BLEConnection {
     }
 
     const command = new Uint8Array([0x50, 0x00, 0x00, 0x00, 0x00]);
-    console.log('💡 Attempting to clear LEDs');
-    return this.sendRawCommand(command);
-  }
-
-  /**
-   * EXPERIMENTAL: Set LED color (if board supports RGB)
-   * @param r - Red (0-255)
-   * @param g - Green (0-255)
-   * @param b - Blue (0-255)
-   */
-  async setLEDColor(r: number, g: number, b: number): Promise<boolean> {
-    if (!this.txCharacteristic) {
-      return false;
-    }
-
-    // Try common BLE LED color format
-    const command = new Uint8Array([0x56, r, g, b, 0x00, 0xF0, 0xAA]);
-    console.log(`💡 Attempting to set LED color: RGB(${r}, ${g}, ${b})`);
+    console.log('💡 Clearing all LEDs');
     return this.sendRawCommand(command);
   }
 

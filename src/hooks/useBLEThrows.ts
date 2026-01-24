@@ -20,12 +20,14 @@ interface UseBLEThrowsReturn {
   error: string | null;
   saveThrow: (throwData: DartThrowData) => Promise<ThrowRecord | null>;
   reloadThrows: () => Promise<void>;
+  setPlayerProfileColor: (color: string) => void;
 }
 
 export function useBLEThrows(matchId?: string, playerId?: string): UseBLEThrowsReturn {
   const [throws, setThrows] = useState<ThrowRecord[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [playerColor, setPlayerColor] = useState<string>('5b21b6'); // Default purple
   const supabase = createClient();
 
   // Save throw to Supabase
@@ -101,6 +103,11 @@ export function useBLEThrows(matchId?: string, playerId?: string): UseBLEThrowsR
     const handleThrow = async (throwData: DartThrowData) => {
       console.log('🎯 New throw detected:', throwData);
       await saveThrowToDatabase(throwData);
+      
+      // Trigger LED animation with player color
+      if (playerId && playerColor) {
+        bleConnection.triggerDartLED(playerColor, 'pulse');
+      }
     };
 
     bleConnection.onThrow(handleThrow);
@@ -114,7 +121,7 @@ export function useBLEThrows(matchId?: string, playerId?: string): UseBLEThrowsR
     return () => {
       bleConnection.offThrow(handleThrow);
     };
-  }, [matchId, playerId, saveThrowToDatabase, loadMatchThrows]);
+  }, [matchId, playerId, playerColor, saveThrowToDatabase, loadMatchThrows]);
 
   // Get throws for current player only
   const playerThrows = throws.filter(t => t.player_id === playerId);
@@ -129,7 +136,8 @@ export function useBLEThrows(matchId?: string, playerId?: string): UseBLEThrowsR
     isProcessing,
     error,
     saveThrow: saveThrowToDatabase,
-    reloadThrows: loadMatchThrows
+    reloadThrows: loadMatchThrows,
+    setPlayerProfileColor: setPlayerColor
   };
 }
 
