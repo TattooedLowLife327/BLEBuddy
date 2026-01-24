@@ -125,11 +125,15 @@ const goodLuckKeyframes = `
   100% { transform: translateX(-100%); }
 }
 @keyframes achievementPulse {
-  0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
-  20% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
-  40% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-  80% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-  100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
+  0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0; }
+  15% { transform: translate(-50%, -50%) scale(1.05); opacity: 1; }
+  30% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+@keyframes achievementFadeIn {
+  0% { opacity: 0; }
+  15% { opacity: 1; }
+  100% { opacity: 1; }
 }
 @keyframes achievementGlow {
   0%, 100% { filter: drop-shadow(0 0 20px currentColor) drop-shadow(0 0 40px currentColor); }
@@ -1271,6 +1275,7 @@ export function CROnlineGameScreen({
           position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
           zIndex: 200, pointerEvents: 'none',
         }}>
+          {/* Award video - full screen, plays for full 7 seconds */}
           {AWARD_VIDEOS[activeAnimation] && (
             <video
               key={activeAnimation}
@@ -1284,14 +1289,18 @@ export function CROnlineGameScreen({
                 width: '100%',
                 height: '100%',
                 objectFit: 'cover',
+                zIndex: 201,
+                animation: 'achievementFadeIn 7s ease-out forwards',
               }}
             />
           )}
+          {/* Backdrop glow */}
           <div style={{
             position: 'absolute', inset: 0,
             background: `radial-gradient(circle, ${currentThrower === 'p1' ? p1.accentColor : p2.accentColor}33 0%, transparent 70%)`,
-            animation: 'achievementPulse 2s ease-out forwards',
+            animation: 'achievementFadeIn 7s ease-out forwards',
           }} />
+          {/* Achievement text - only show if no video */}
           {!AWARD_VIDEOS[activeAnimation] && (
             <div style={{
               position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
@@ -1299,7 +1308,7 @@ export function CROnlineGameScreen({
               color: currentThrower === 'p1' ? p1.accentColor : p2.accentColor,
               textShadow: `0 0 30px ${currentThrower === 'p1' ? p1.accentColor : p2.accentColor}, 0 0 60px ${currentThrower === 'p1' ? p1.accentColor : p2.accentColor}, -4px 4px 8px rgba(0, 0, 0, 0.8)`,
               whiteSpace: 'nowrap',
-              animation: 'achievementPulse 2s ease-out forwards, achievementGlow 0.5s ease-in-out infinite',
+              animation: 'achievementPulse 7s ease-out forwards, achievementGlow 0.5s ease-in-out infinite',
             }}>
               {ACHIEVEMENT_LABELS[activeAnimation]}
             </div>

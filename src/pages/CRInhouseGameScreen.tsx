@@ -120,11 +120,15 @@ const goodLuckKeyframes = `
   100% { transform: translateX(-100%); }
 }
 @keyframes achievementPulse {
-  0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
-  20% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
-  40% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-  80% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-  100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
+  0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0; }
+  15% { transform: translate(-50%, -50%) scale(1.05); opacity: 1; }
+  30% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+@keyframes achievementFadeIn {
+  0% { opacity: 0; }
+  15% { opacity: 1; }
+  100% { opacity: 1; }
 }
 @keyframes achievementGlow {
   0%, 100% { filter: drop-shadow(0 0 20px currentColor) drop-shadow(0 0 40px currentColor); }
@@ -1004,9 +1008,9 @@ export function CRInhouseGameScreen({
           <div style={{
             position: 'absolute', inset: 0,
             background: `radial-gradient(circle, ${PLAYERS[currentThrower]!.profilecolor}33 0%, transparent 70%)`,
-            animation: 'achievementPulse 2s ease-out forwards',
+            animation: 'achievementFadeIn 7s ease-out forwards',
           }} />
-          {/* Award video if available */}
+          {/* Award video if available - full screen, plays for full 7 seconds */}
           {AWARD_VIDEOS[activeAnimation] && (
             <video
               autoPlay
@@ -1014,13 +1018,12 @@ export function CRInhouseGameScreen({
               playsInline
               style={{
                 position: 'absolute',
-                left: '50%',
-                top: '50%',
-                transform: 'translate(-50%, -50%)',
-                width: '80%',
-                maxWidth: '600px',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
                 zIndex: 201,
-                animation: 'achievementPulse 2s ease-out forwards',
+                animation: 'achievementFadeIn 7s ease-out forwards',
               }}
             >
               <source src={AWARD_VIDEOS[activeAnimation]} type="video/mp4" />
@@ -1034,7 +1037,7 @@ export function CRInhouseGameScreen({
               color: PLAYERS[currentThrower]!.profilecolor,
               textShadow: `0 0 30px ${PLAYERS[currentThrower]!.profilecolor}, 0 0 60px ${PLAYERS[currentThrower]!.profilecolor}, -4px 4px 8px rgba(0, 0, 0, 0.8)`,
               whiteSpace: 'nowrap',
-              animation: 'achievementPulse 2s ease-out forwards, achievementGlow 0.5s ease-in-out infinite',
+              animation: 'achievementPulse 7s ease-out forwards, achievementGlow 0.5s ease-in-out infinite',
             }}>
               {ACHIEVEMENT_LABELS[activeAnimation]}
             </div>
