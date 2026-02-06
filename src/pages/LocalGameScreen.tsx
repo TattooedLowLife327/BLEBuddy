@@ -674,14 +674,15 @@ export function LocalGameScreen({ onLeaveMatch }: LocalGameScreenProps) {
     setUndosRemaining(prev => prev - 1);
   }, [dartHistory, undosRemaining]);
 
-  // Intro animation timer
+  // Intro animation timer - re-runs when showGoodLuck changes (e.g., Play Again)
   useEffect(() => {
+    if (!showGoodLuck) return; // Only run when showGoodLuck is true
     const timer = setTimeout(() => {
       setShowGoodLuck(false);
       setIntroComplete(true);
-    }, 4000); // Animation duration
+    }, 2500); // Animation duration
     return () => clearTimeout(timer);
-  }, []);
+  }, [showGoodLuck]);
 
   useEffect(() => {
     if (showPlayerChange) {
@@ -1190,7 +1191,7 @@ export function LocalGameScreen({ onLeaveMatch }: LocalGameScreenProps) {
           <div key={`p1-bar-${turnKey}`} style={{
             position: 'absolute',
             inset: 0,
-            background: 'linear-gradient(179.4deg, rgba(102, 0, 255, 0.2) 0.52%, rgba(0, 0, 0, 0.2) 95.46%)',
+            background: `linear-gradient(179.4deg, ${PLAYERS.p1.profilecolor}33 0.52%, rgba(0, 0, 0, 0.2) 95.46%)`,
             animation: p1Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
           }} />
         )}
@@ -1317,7 +1318,7 @@ export function LocalGameScreen({ onLeaveMatch }: LocalGameScreenProps) {
           <div key={`p2-bar-${turnKey}`} style={{
             position: 'absolute',
             inset: 0,
-            background: 'linear-gradient(179.4deg, rgba(251, 0, 255, 0.2) 0.52%, rgba(0, 0, 0, 0.2) 95.46%)',
+            background: `linear-gradient(179.4deg, ${PLAYERS.p2.profilecolor}33 0.52%, rgba(0, 0, 0, 0.2) 95.46%)`,
             animation: p2Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
           }} />
         )}

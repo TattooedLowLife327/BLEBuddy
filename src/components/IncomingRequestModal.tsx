@@ -197,7 +197,7 @@ export function IncomingRequestModal({ request, onAccept, onDecline, onTimeout }
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xl flex items-center justify-center p-6 animate-in fade-in duration-300">
       <div
-        className="rounded-lg border bg-zinc-900/90 overflow-hidden w-[420px] max-w-full"
+        className="rounded-lg border bg-zinc-900/90 overflow-hidden w-[360px] max-w-full"
         style={{
           borderColor: profileColor,
           boxShadow: `0 0 30px ${hexToRgba(profileColor, 0.5)}`,
@@ -228,9 +228,9 @@ export function IncomingRequestModal({ request, onAccept, onDecline, onTimeout }
         </div>
 
         {/* Header */}
-        <div className="flex items-center gap-4 px-5 py-4 border-b" style={{ borderColor: profileColor }}>
+        <div className="flex items-center gap-3 px-4 py-3 border-b" style={{ borderColor: profileColor }}>
           <Avatar
-            className="w-16 h-16 border-2"
+            className="w-14 h-14 border-2"
             style={{
               borderColor: profileColor,
               boxShadow: `0 0 20px ${hexToRgba(profileColor, 0.6)}`,
@@ -260,7 +260,7 @@ export function IncomingRequestModal({ request, onAccept, onDecline, onTimeout }
         </div>
 
         {/* Stats Section */}
-        <div className="px-5 py-4 border-b" style={{ borderColor: profileColor }}>
+        <div className="px-4 py-3 border-b" style={{ borderColor: profileColor }}>
           {loading ? (
             <div className="text-gray-400 text-sm text-center" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
               Loading stats...
@@ -351,7 +351,7 @@ export function IncomingRequestModal({ request, onAccept, onDecline, onTimeout }
         </div>
 
         {/* Game Format Section */}
-        <div className="px-5 py-4 border-b" style={{ borderColor: profileColor }}>
+        <div className="px-4 py-3 border-b" style={{ borderColor: profileColor }}>
           <div className="text-xs uppercase tracking-wider text-gray-500 mb-2" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
             Requested Format
           </div>
@@ -384,7 +384,7 @@ export function IncomingRequestModal({ request, onAccept, onDecline, onTimeout }
         </div>
 
         {/* Action Buttons */}
-        <div className="flex gap-3 p-5">
+        <div className="flex gap-3 p-4">
           <button
             onClick={onDecline}
             className="flex-1 py-3 rounded-lg text-white transition-all hover:scale-[1.02]"

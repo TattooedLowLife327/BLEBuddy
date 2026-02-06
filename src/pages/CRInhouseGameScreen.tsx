@@ -2,6 +2,29 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useBLE } from '../contexts/BLEContext';
 import { isDevMode } from '../utils/devMode';
 
+// Resolve profile pic URL from various formats
+const resolveProfilePicUrl = (profilepic: string | undefined): string | undefined => {
+  if (!profilepic) return undefined;
+
+  // Already a full URL
+  if (profilepic.startsWith('http')) return profilepic;
+
+  // LowLifeStore assets are served from the main PWA domain
+  if (profilepic.includes('LowLifeStore')) {
+    const path = profilepic.startsWith('/') ? profilepic : `/${profilepic}`;
+    return `https://www.lowlifesofgranboard.com${path}`;
+  }
+
+  // Local asset path (defaults only)
+  if (profilepic.startsWith('/assets') || profilepic.startsWith('assets') || profilepic === 'default-pfp.png') {
+    return profilepic.startsWith('/') ? profilepic : `/${profilepic}`;
+  }
+
+  // Storage path - construct Supabase public URL
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://sndsyxxcnuwjmjgikzgg.supabase.co';
+  return `${supabaseUrl}/storage/v1/object/public/profilepic/${profilepic}`;
+};
+
 type Target = '20' | '19' | '18' | '17' | '16' | '15' | 'B';
 type PlayerId = 'p1' | 'p2';
 
@@ -243,14 +266,15 @@ export function CRInhouseGameScreen({
   const p1MPR = p1DartsThrown >= 3 ? (p1TotalMarks / (p1DartsThrown / 3)).toFixed(2) : '0.00';
   const p2MPR = p2DartsThrown >= 3 ? (p2TotalMarks / (p2DartsThrown / 3)).toFixed(2) : '0.00';
 
-  // Intro animation
+  // Intro animation - re-runs when showGoodLuck changes (e.g., Play Again)
   useEffect(() => {
+    if (!showGoodLuck) return; // Only run when showGoodLuck is true
     const timer = setTimeout(() => {
       setShowGoodLuck(false);
       setIntroComplete(true);
-    }, 4000);
+    }, 2500);
     return () => clearTimeout(timer);
-  }, []);
+  }, [showGoodLuck]);
 
   // Track turn changes
   useEffect(() => {
@@ -379,17 +403,17 @@ export function CRInhouseGameScreen({
       const achievement = detectAchievement(newDarts);
       if (achievement) {
         setActiveAnimation(achievement);
-        // 7 seconds to let award videos play fully (button can skip via animationTimeoutRef)
+        // 3 seconds to let award videos play fully (button can skip via animationTimeoutRef)
         animationTimeoutRef.current = setTimeout(() => {
           animationTimeoutRef.current = null;
           setActiveAnimation(null);
-        }, 7000);
+        }, 3000);
       }
       // Add delay before player change to let dart effects complete (button press skips this)
       playerChangeTimeoutRef.current = setTimeout(() => {
         playerChangeTimeoutRef.current = null;
         setShowPlayerChange(true);
-      }, 7000);
+      }, 3000);
     }
   }, [currentDarts, currentThrower, introComplete, showPlayerChange, showWinnerScreen, p1Score, p2Score, marks, currentRound]);
 
@@ -509,7 +533,7 @@ export function CRInhouseGameScreen({
         setShowPlayerChange(false);
         setCurrentThrower(t => t === 'p1' ? 'p2' : 'p1');
         setCurrentDarts([]);
-      }, 1500);
+      }, 800);
       return () => clearTimeout(timer);
     }
   }, [showPlayerChange, currentThrower, p1ThrewThisRound, p2ThrewThisRound, isSoloMode, currentRound, gameWinner, p1Score, p2Score, p1TotalMarks, p2TotalMarks, p1ScoreReachedRound, p2ScoreReachedRound]);
@@ -736,7 +760,7 @@ export function CRInhouseGameScreen({
           key={`round-${roundKey}`}
           style={{
             position: 'absolute',
-            top: `calc(20 * ${scale})`,
+            top: `calc(80 * ${scale})`,
             left: 0,
             display: 'flex',
             alignItems: 'center',
@@ -840,14 +864,20 @@ export function CRInhouseGameScreen({
           position: 'absolute',
           width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
           left: `calc(${FIGMA.avatarLeft} * ${scale})`, top: '50%', transform: 'translateY(-50%)',
-          background: '#000', border: `3px solid ${INACTIVE}`, borderRadius: '50%', zIndex: 1,
+          backgroundImage: resolveProfilePicUrl(PLAYERS.p1.profilePic) ? `url(${resolveProfilePicUrl(PLAYERS.p1.profilePic)})` : 'none',
+          backgroundColor: '#000',
+          backgroundSize: 'cover', backgroundPosition: 'center',
+          border: `3px solid ${INACTIVE}`, borderRadius: '50%', zIndex: 1,
         }} />
         {introComplete && (p1Active || p1Exiting) && (
           <div key={`p1-avatar-${turnKey}`} style={{
             position: 'absolute',
             width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
             left: `calc(${FIGMA.avatarLeft} * ${scale})`, top: '50%', transform: 'translateY(-50%)',
-            background: '#000', border: `3px solid ${PLAYERS.p1.profilecolor}`, borderRadius: '50%', zIndex: 2,
+            backgroundImage: resolveProfilePicUrl(PLAYERS.p1.profilePic) ? `url(${resolveProfilePicUrl(PLAYERS.p1.profilePic)})` : 'none',
+            backgroundColor: '#000',
+            backgroundSize: 'cover', backgroundPosition: 'center',
+            border: `3px solid ${PLAYERS.p1.profilecolor}`, borderRadius: '50%', zIndex: 2,
             animation: p1Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
           }} />
         )}
@@ -948,14 +978,20 @@ export function CRInhouseGameScreen({
             position: 'absolute',
             width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
             right: `calc(${FIGMA.avatarLeft} * ${scale})`, top: '50%', transform: 'translateY(-50%)',
-            background: '#000', border: `3px solid ${INACTIVE}`, borderRadius: '50%', zIndex: 1,
+            backgroundImage: resolveProfilePicUrl(PLAYERS.p2?.profilePic) ? `url(${resolveProfilePicUrl(PLAYERS.p2?.profilePic)})` : 'none',
+            backgroundColor: '#000',
+            backgroundSize: 'cover', backgroundPosition: 'center',
+            border: `3px solid ${INACTIVE}`, borderRadius: '50%', zIndex: 1,
           }} />
           {introComplete && (p2Active || p2Exiting) && (
             <div key={`p2-avatar-${turnKey}`} style={{
               position: 'absolute',
               width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
               right: `calc(${FIGMA.avatarLeft} * ${scale})`, top: '50%', transform: 'translateY(-50%)',
-              background: '#000', border: `3px solid ${PLAYERS.p2.profilecolor}`, borderRadius: '50%', zIndex: 2,
+              backgroundImage: resolveProfilePicUrl(PLAYERS.p2?.profilePic) ? `url(${resolveProfilePicUrl(PLAYERS.p2?.profilePic)})` : 'none',
+              backgroundColor: '#000',
+              backgroundSize: 'cover', backgroundPosition: 'center',
+              border: `3px solid ${PLAYERS.p2.profilecolor}`, borderRadius: '50%', zIndex: 2,
               animation: p2Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
             }} />
           )}
@@ -1010,7 +1046,7 @@ export function CRInhouseGameScreen({
             background: `radial-gradient(circle, ${PLAYERS[currentThrower]!.profilecolor}33 0%, transparent 70%)`,
             animation: 'achievementFadeIn 7s ease-out forwards',
           }} />
-          {/* Award video if available - full screen, plays for full 7 seconds */}
+          {/* Award video if available - full screen, plays for full 3 seconds */}
           {AWARD_VIDEOS[activeAnimation] && (
             <video
               autoPlay
@@ -1107,17 +1143,51 @@ export function CRInhouseGameScreen({
                   Continue
                 </button>
               ) : (
-                <button
-                  onClick={onLeaveMatch}
-                  style={{
-                    padding: `calc(16 * ${scale}) calc(48 * ${scale})`,
-                    fontFamily: FONT_NAME, fontSize: `calc(24 * ${scale})`, fontWeight: 500,
-                    color: 'rgba(255, 255, 255, 0.7)', background: 'transparent',
-                    border: '2px solid rgba(255, 255, 255, 0.3)', borderRadius: `calc(12 * ${scale})`, cursor: 'pointer',
-                  }}
-                >
-                  Exit
-                </button>
+                <>
+                  <button
+                    onClick={() => {
+                      setShowWinnerScreen(false);
+                      setGameWinner(null);
+                      setP1Score(0);
+                      setP2Score(0);
+                      setMarks({
+                        p1: { '20': 0, '19': 0, '18': 0, '17': 0, '16': 0, '15': 0, 'B': 0 },
+                        p2: { '20': 0, '19': 0, '18': 0, '17': 0, '16': 0, '15': 0, 'B': 0 },
+                      });
+                      setCurrentDarts([]);
+                      setCurrentRound(1);
+                      setP1ThrewThisRound(false);
+                      setP2ThrewThisRound(false);
+                      setCurrentThrower(startingPlayer || 'p1');
+                      setShowGoodLuck(true);
+                      setIntroComplete(false);
+                    }}
+                    style={{
+                      padding: `calc(16 * ${scale}) calc(48 * ${scale})`,
+                      fontFamily: FONT_NAME, fontSize: `calc(24 * ${scale})`, fontWeight: 500,
+                      color: '#FFFFFF', background: winnerPlayer.profilecolor,
+                      border: 'none', borderRadius: `calc(12 * ${scale})`, cursor: 'pointer',
+                      boxShadow: `0 0 30px ${winnerPlayer.profilecolor}80`,
+                    }}
+                  >
+                    {isSoloMode ? 'Play Again' : 'Rematch'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowWinnerScreen(false);
+                      setGameWinner(null);
+                      onLeaveMatch?.();
+                    }}
+                    style={{
+                      padding: `calc(16 * ${scale}) calc(48 * ${scale})`,
+                      fontFamily: FONT_NAME, fontSize: `calc(24 * ${scale})`, fontWeight: 500,
+                      color: 'rgba(255, 255, 255, 0.7)', background: 'transparent',
+                      border: '2px solid rgba(255, 255, 255, 0.3)', borderRadius: `calc(12 * ${scale})`, cursor: 'pointer',
+                    }}
+                  >
+                    Exit
+                  </button>
+                </>
               )}
             </div>
           </div>

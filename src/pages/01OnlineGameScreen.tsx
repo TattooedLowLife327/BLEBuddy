@@ -6,6 +6,29 @@ import type { DartThrowData } from '../utils/ble/bleConnection';
 import type { GameConfiguration, GameInOut } from '../types/game';
 import { getCheckoutSuggestion } from '../utils/checkoutSolver';
 
+// Resolve profile pic URL from various formats
+const resolveProfilePicUrl = (profilepic: string | undefined): string | undefined => {
+  if (!profilepic) return undefined;
+
+  // Already a full URL
+  if (profilepic.startsWith('http')) return profilepic;
+
+  // LowLifeStore assets are served from the main PWA domain
+  if (profilepic.includes('LowLifeStore')) {
+    const path = profilepic.startsWith('/') ? profilepic : `/${profilepic}`;
+    return `https://www.lowlifesofgranboard.com${path}`;
+  }
+
+  // Local asset path (defaults only)
+  if (profilepic.startsWith('/assets') || profilepic.startsWith('assets') || profilepic === 'default-pfp.png') {
+    return profilepic.startsWith('/') ? profilepic : `/${profilepic}`;
+  }
+
+  // Storage path - construct Supabase public URL
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://sndsyxxcnuwjmjgikzgg.supabase.co';
+  return `${supabaseUrl}/storage/v1/object/public/profilepic/${profilepic}`;
+};
+
 interface DartThrow {
   segment: string;
   score: number;
@@ -54,9 +77,6 @@ type AchievementType =
   | 'lowTon'
   | null;
 
-// Figma exact colors
-const P1_ACTIVE = '#6600FF';
-const P2_ACTIVE = '#FB00FF';
 const INACTIVE = '#7E7E7E';
 
 // Figma fonts (loaded via @font-face in globals.css)
@@ -437,11 +457,11 @@ export function O1OnlineGameScreen({
     return null;
   }, [isOhOneGame, isCricketGame]);
 
-  // Trigger achievement animation (7 seconds to let award videos play fully, button can cancel)
+  // Trigger achievement animation (3 seconds to let award videos play fully, button can cancel)
   const triggerAchievement = useCallback((achievement: AchievementType, winner?: 'p1' | 'p2') => {
     if (!achievement) return;
     setActiveAnimation(achievement);
-    // Clear animation after 7 seconds (use ref so button can cancel)
+    // Clear animation after 3 seconds (use ref so button can cancel)
     animationTimeoutRef.current = setTimeout(() => {
       animationTimeoutRef.current = null;
       setActiveAnimation(null);
@@ -449,7 +469,7 @@ export function O1OnlineGameScreen({
         setGameWinner(winner);
         setTimeout(() => setShowWinnerScreen(true), 300);
       }
-    }, 7000);
+    }, 3000);
   }, []);
 
   // Undo last dart
@@ -467,14 +487,15 @@ export function O1OnlineGameScreen({
     setUndosRemaining(prev => prev - 1);
   }, [dartHistory, undosRemaining]);
 
-  // Intro animation timer
+  // Intro animation timer - re-runs when showGoodLuck changes (e.g., Play Again)
   useEffect(() => {
+    if (!showGoodLuck) return; // Only run when showGoodLuck is true
     const timer = setTimeout(() => {
       setShowGoodLuck(false);
       setIntroComplete(true);
-    }, 4000);
+    }, 2500);
     return () => clearTimeout(timer);
-  }, []);
+  }, [showGoodLuck]);
 
   // Double bull effect auto-hide
   useEffect(() => {
@@ -535,7 +556,7 @@ export function O1OnlineGameScreen({
         setCurrentThrower(currentThrower === 'p1' ? 'p2' : 'p1');
         setCurrentDarts([]);
         setRoundScore(0);
-      }, 1500);
+      }, 800);
       return () => clearTimeout(timer);
     }
   }, [showPlayerChange, currentThrower, p1ThrewThisRound, p2ThrewThisRound, isOhOneGame, eightyPercentTriggered, p1Score, p2Score, eightyPercentThreshold, p1DartsThrown, p2DartsThrown, startScore, currentRound, gameWinner, p1ScoreReachedRound, p2ScoreReachedRound]);
@@ -586,7 +607,7 @@ export function O1OnlineGameScreen({
       playerChangeTimeoutRef.current = setTimeout(() => {
         playerChangeTimeoutRef.current = null;
         setShowPlayerChange(true);
-      }, 7000);
+      }, 3000);
       return;
     }
     const didWin = potentialNewScore === 0;
@@ -616,7 +637,7 @@ export function O1OnlineGameScreen({
           playerChangeTimeoutRef.current = setTimeout(() => {
             playerChangeTimeoutRef.current = null;
             setShowPlayerChange(true);
-          }, 7000);
+          }, 3000);
         }
         return;
       }
@@ -631,7 +652,7 @@ export function O1OnlineGameScreen({
       playerChangeTimeoutRef.current = setTimeout(() => {
         playerChangeTimeoutRef.current = null;
         setShowPlayerChange(true);
-      }, 7000);
+      }, 3000);
     }
   }, [currentDarts, currentScore, currentThrower, roundScore, showPlayerChange, introComplete, p1Score, p2Score, p1HasStarted, p2HasStarted, inMode, outMode, detectAchievement, triggerAchievement, currentRound]);
 
@@ -678,7 +699,14 @@ export function O1OnlineGameScreen({
     let segment = lastThrow.segment;
     if (lastThrow.segmentType === 'BULL') segment = 'S25';
     else if (lastThrow.segmentType === 'DBL_BULL') segment = 'D25';
-    throwDart(segment, lastThrow.score, lastThrow.multiplier);
+
+    // In Full Bull mode, single bull scores 50 (same as double bull)
+    let score = lastThrow.score;
+    if (!splitBull && segment === 'S25') {
+      score = 50;
+    }
+
+    throwDart(segment, score, lastThrow.multiplier);
   }, [lastThrow, throwDart, endTurnWithMisses]);
 
   // Dev mode throw simulator
@@ -1042,7 +1070,7 @@ export function O1OnlineGameScreen({
           key={`round-${roundKey}`}
           style={{
             position: 'absolute',
-            top: `calc(20 * ${scale})`,
+            top: `calc(80 * ${scale})`,
             left: 0,
             display: 'flex',
             alignItems: 'center',
@@ -1127,19 +1155,19 @@ export function O1OnlineGameScreen({
           <div style={{
             position: 'absolute', top: 0, left: 0, height: '3px',
             width: `${(currentDarts.length / 3) * 100}%`,
-            background: P1_ACTIVE, transition: 'width 0.2s ease-out', zIndex: 5,
+            background: p1.accentColor, transition: 'width 0.2s ease-out', zIndex: 5,
           }} />
         )}
         {introComplete && p1Exiting && (
           <div key={`p1-progress-exit-${turnKey}`} style={{
             position: 'absolute', top: 0, left: 0, height: '3px', width: '100%',
-            background: P1_ACTIVE, zIndex: 5, animation: 'borderDrainDown 0.5s ease-out forwards',
+            background: p1.accentColor, zIndex: 5, animation: 'borderDrainDown 0.5s ease-out forwards',
           }} />
         )}
         {introComplete && (p1Active || p1Exiting) && (
           <div key={`p1-bar-${turnKey}`} style={{
             position: 'absolute', inset: 0,
-            background: 'linear-gradient(179.4deg, rgba(102, 0, 255, 0.2) 0.52%, rgba(0, 0, 0, 0.2) 95.46%)',
+            background: `linear-gradient(179.4deg, ${p1.accentColor}33 0.52%, rgba(0, 0, 0, 0.2) 95.46%)`,
             animation: p1Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
           }} />
         )}
@@ -1147,14 +1175,20 @@ export function O1OnlineGameScreen({
           position: 'absolute',
           width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
           left: `calc(${FIGMA.avatarLeft} * ${scale})`, top: '50%', transform: 'translateY(-50%)',
-          background: '#000000', border: `3px solid ${INACTIVE}`, borderRadius: '50%', zIndex: 1,
+          backgroundImage: resolveProfilePicUrl(p1.profilePic) ? `url(${resolveProfilePicUrl(p1.profilePic)})` : 'none',
+          backgroundColor: '#000000',
+          backgroundSize: 'cover', backgroundPosition: 'center',
+          border: `3px solid ${INACTIVE}`, borderRadius: '50%', zIndex: 1,
         }} />
         {introComplete && (p1Active || p1Exiting) && (
           <div key={`p1-avatar-${turnKey}`} style={{
             position: 'absolute',
             width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
             left: `calc(${FIGMA.avatarLeft} * ${scale})`, top: '50%', transform: 'translateY(-50%)',
-            background: '#000000', border: `3px solid ${P1_ACTIVE}`, borderRadius: '50%', zIndex: 2,
+            backgroundImage: resolveProfilePicUrl(p1.profilePic) ? `url(${resolveProfilePicUrl(p1.profilePic)})` : 'none',
+            backgroundColor: '#000000',
+            backgroundSize: 'cover', backgroundPosition: 'center',
+            border: `3px solid ${p1.accentColor}`, borderRadius: '50%', zIndex: 2,
             animation: p1Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
           }} />
         )}
@@ -1204,19 +1238,19 @@ export function O1OnlineGameScreen({
           <div style={{
             position: 'absolute', top: 0, right: 0, height: '3px',
             width: `${(currentDarts.length / 3) * 100}%`,
-            background: P2_ACTIVE, transition: 'width 0.2s ease-out', zIndex: 5,
+            background: p2.accentColor, transition: 'width 0.2s ease-out', zIndex: 5,
           }} />
         )}
         {introComplete && p2Exiting && (
           <div key={`p2-progress-exit-${turnKey}`} style={{
             position: 'absolute', top: 0, right: 0, height: '3px', width: '100%',
-            background: P2_ACTIVE, zIndex: 5, animation: 'borderDrainDown 0.5s ease-out forwards',
+            background: p2.accentColor, zIndex: 5, animation: 'borderDrainDown 0.5s ease-out forwards',
           }} />
         )}
         {introComplete && (p2Active || p2Exiting) && (
           <div key={`p2-bar-${turnKey}`} style={{
             position: 'absolute', inset: 0,
-            background: 'linear-gradient(179.4deg, rgba(251, 0, 255, 0.2) 0.52%, rgba(0, 0, 0, 0.2) 95.46%)',
+            background: `linear-gradient(179.4deg, ${p2.accentColor}33 0.52%, rgba(0, 0, 0, 0.2) 95.46%)`,
             animation: p2Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
           }} />
         )}
@@ -1254,14 +1288,20 @@ export function O1OnlineGameScreen({
           position: 'absolute',
           width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
           right: `calc(${FIGMA.avatarLeft} * ${scale})`, top: '50%', transform: 'translateY(-50%)',
-          background: '#000000', border: `3px solid ${INACTIVE}`, borderRadius: '50%', zIndex: 1,
+          backgroundImage: resolveProfilePicUrl(p2.profilePic) ? `url(${resolveProfilePicUrl(p2.profilePic)})` : 'none',
+          backgroundColor: '#000000',
+          backgroundSize: 'cover', backgroundPosition: 'center',
+          border: `3px solid ${INACTIVE}`, borderRadius: '50%', zIndex: 1,
         }} />
         {introComplete && (p2Active || p2Exiting) && (
           <div key={`p2-avatar-${turnKey}`} style={{
             position: 'absolute',
             width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
             right: `calc(${FIGMA.avatarLeft} * ${scale})`, top: '50%', transform: 'translateY(-50%)',
-            background: '#000000', border: `3px solid ${P2_ACTIVE}`, borderRadius: '50%', zIndex: 2,
+            backgroundImage: resolveProfilePicUrl(p2.profilePic) ? `url(${resolveProfilePicUrl(p2.profilePic)})` : 'none',
+            backgroundColor: '#000000',
+            backgroundSize: 'cover', backgroundPosition: 'center',
+            border: `3px solid ${p2.accentColor}`, borderRadius: '50%', zIndex: 2,
             animation: p2Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
           }} />
         )}
@@ -1339,7 +1379,7 @@ export function O1OnlineGameScreen({
           position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
           zIndex: 200, pointerEvents: 'none',
         }}>
-          {/* Award video - full screen, plays for full 7 seconds */}
+          {/* Award video - full screen, plays for full 3 seconds */}
           {AWARD_VIDEOS[activeAnimation] && (
             <video
               key={activeAnimation}

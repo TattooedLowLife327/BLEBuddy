@@ -8,6 +8,29 @@ import { isDevMode } from '../utils/devMode';
 import type { DartThrowData } from '../utils/ble/bleConnection';
 import { RefreshCw, DoorOpen } from 'lucide-react';
 
+// Resolve profile pic URL from various formats
+const resolveProfilePicUrl = (profilepic: string | undefined): string | undefined => {
+  if (!profilepic) return undefined;
+
+  // Already a full URL
+  if (profilepic.startsWith('http')) return profilepic;
+
+  // LowLifeStore assets are served from the main PWA domain
+  if (profilepic.includes('LowLifeStore')) {
+    const path = profilepic.startsWith('/') ? profilepic : `/${profilepic}`;
+    return `https://www.lowlifesofgranboard.com${path}`;
+  }
+
+  // Local asset path (defaults only)
+  if (profilepic.startsWith('/assets') || profilepic.startsWith('assets') || profilepic === 'default-pfp.png') {
+    return profilepic.startsWith('/') ? profilepic : `/${profilepic}`;
+  }
+
+  // Storage path - construct Supabase public URL
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://sndsyxxcnuwjmjgikzgg.supabase.co';
+  return `${supabaseUrl}/storage/v1/object/public/profilepic/${profilepic}`;
+};
+
 type Target = '20' | '19' | '18' | '17' | '16' | '15' | 'B';
 type PlayerId = 'p1' | 'p2';
 
@@ -53,8 +76,6 @@ interface CROnlineGameScreenProps {
   onGameComplete?: (winner: PlayerId) => void;
 }
 
-const P1_ACTIVE = '#6600FF';
-const P2_ACTIVE = '#FB00FF';
 const INACTIVE = '#7E7E7E';
 
 const FONT_SCORE = "'Helvetica Compressed', sans-serif";
@@ -319,26 +340,18 @@ export function CROnlineGameScreen({
   const p1MPR = p1DartsThrown >= 3 ? (p1TotalMarks / (p1DartsThrown / 3)).toFixed(2) : '0.00';
   const p2MPR = p2DartsThrown >= 3 ? (p2TotalMarks / (p2DartsThrown / 3)).toFixed(2) : '0.00';
 
-  // Map p1/p2 to local/remote for display (video layout: local=left, remote=right)
-  const localScore = localIsP1 ? p1Score : p2Score;
-  const remoteScore = localIsP1 ? p2Score : p1Score;
-  const localMPRDisplay = localIsP1 ? p1MPR : p2MPR;
-  const remoteMPRDisplay = localIsP1 ? p2MPR : p1MPR;
-  const localMarks = localIsP1 ? marks.p1 : marks.p2;
-  const remoteMarks = localIsP1 ? marks.p2 : marks.p1;
-  const localActive = isLocalTurn;
-  const remoteActive = !isLocalTurn;
-  const localExiting = localIsP1 ? p1Exiting : p2Exiting;
-  const remoteExiting = localIsP1 ? p2Exiting : p1Exiting;
+  // Display layout: p1 (starting player) always on LEFT, p2 always on RIGHT for both players
+  // This ensures both players see the same consistent layout
 
-  // Intro animation
+  // Intro animation - re-runs when showGoodLuck changes (e.g., Play Again)
   useEffect(() => {
+    if (!showGoodLuck) return; // Only run when showGoodLuck is true
     const timer = setTimeout(() => {
       setShowGoodLuck(false);
       setIntroComplete(true);
-    }, 4000);
+    }, 2500);
     return () => clearTimeout(timer);
-  }, []);
+  }, [showGoodLuck]);
 
   // Track turn changes
   useEffect(() => {
@@ -508,11 +521,11 @@ export function CROnlineGameScreen({
       const achievement = detectAchievement(newDarts);
       if (achievement) {
         setActiveAnimation(achievement);
-        // 7 seconds to let award videos play fully (button can skip via animationTimeoutRef)
+        // 3 seconds to let award videos play fully (button can skip via animationTimeoutRef)
         animationTimeoutRef.current = setTimeout(() => {
           animationTimeoutRef.current = null;
           setActiveAnimation(null);
-        }, 7000);
+        }, 3000);
       }
       // Add delay before player change to let dart effects complete (button press skips this)
       playerChangeTimeoutRef.current = setTimeout(() => {
@@ -526,7 +539,7 @@ export function CROnlineGameScreen({
             payload: { playerId: localPlayer.id },
           });
         }
-      }, 7000);
+      }, 3000);
     }
   }, [currentDarts, currentThrower, introComplete, showPlayerChange, showWinnerScreen, p1Score, p2Score, marks, localIsP1, localPlayer.id, currentRound]);
 
@@ -654,7 +667,7 @@ export function CROnlineGameScreen({
         setShowPlayerChange(false);
         setCurrentThrower(t => t === 'p1' ? 'p2' : 'p1');
         setCurrentDarts([]);
-      }, 1500);
+      }, 800);
       return () => clearTimeout(timer);
     }
   }, [showPlayerChange, currentThrower, p1ThrewThisRound, p2ThrewThisRound, currentRound, gameWinner, p1Score, p2Score, p1TotalMarks, p2TotalMarks, p1ScoreReachedRound, p2ScoreReachedRound]);
@@ -666,9 +679,9 @@ export function CROnlineGameScreen({
     return segment;
   };
 
-  // Render mark icon - uses 'local' or 'remote' to match video layout
-  const renderMarkIcon = (side: 'local' | 'remote', target: Target) => {
-    const marksData = side === 'local' ? localMarks : remoteMarks;
+  // Render mark icon - p1 on left, p2 on right (same view for both players)
+  const renderMarkIcon = (player: 'p1' | 'p2', target: Target) => {
+    const marksData = marks[player];
     const count = marksData[target];
     if (count === 0) return null;
     const cappedCount = Math.min(3, count) as 1 | 2 | 3;
@@ -676,7 +689,7 @@ export function CROnlineGameScreen({
 
     return (
       <div
-        key={`${side}-${target}-${cappedCount}`}
+        key={`${player}-${target}-${cappedCount}`}
         style={{
           position: 'relative',
           display: 'flex',
@@ -788,13 +801,13 @@ export function CROnlineGameScreen({
         </div>
       )}
 
-      {/* SPLIT SCREEN VIDEO BACKGROUND */}
+      {/* SPLIT SCREEN VIDEO BACKGROUND - P1 always on left, P2 always on right */}
       <div style={{
         position: 'absolute',
         inset: 0,
         display: 'flex',
       }}>
-        {/* Left half - Local player camera */}
+        {/* Left half - P1's camera (starting player) */}
         <div style={{
           flex: 1,
           position: 'relative',
@@ -802,18 +815,18 @@ export function CROnlineGameScreen({
           borderRight: '2px solid #333',
         }}>
           <video
-            ref={localVideoRef}
+            ref={localIsP1 ? localVideoRef : remoteVideoRef}
             autoPlay
             playsInline
-            muted
+            muted={localIsP1}
             style={{
               width: '100%',
               height: '100%',
               objectFit: 'cover',
-              transform: 'scaleX(-1)', // Mirror local video
+              transform: localIsP1 ? 'scaleX(-1)' : 'none', // Mirror only if it's local player's camera
             }}
           />
-          {/* Local player label */}
+          {/* P1 label */}
           <div style={{
             position: 'absolute',
             bottom: `calc(100 * ${scale})`,
@@ -822,35 +835,37 @@ export function CROnlineGameScreen({
             background: 'rgba(0, 0, 0, 0.7)',
             padding: `calc(8 * ${scale}) calc(16 * ${scale})`,
             borderRadius: `calc(8 * ${scale})`,
-            border: `2px solid ${localPlayer.accentColor}`,
+            border: `2px solid ${p1.accentColor}`,
           }}>
             <span style={{
               fontFamily: FONT_NAME,
               fontSize: `calc(20 * ${scale})`,
               color: '#fff',
             }}>
-              {localPlayer.name} (YOU)
+              {p1.name}{localIsP1 ? ' (YOU)' : ''}
             </span>
           </div>
         </div>
 
-        {/* Right half - Remote player camera */}
+        {/* Right half - P2's camera */}
         <div style={{
           flex: 1,
           position: 'relative',
           background: '#111',
         }}>
           <video
-            ref={remoteVideoRef}
+            ref={localIsP1 ? remoteVideoRef : localVideoRef}
             autoPlay
             playsInline
+            muted={!localIsP1}
             style={{
               width: '100%',
               height: '100%',
               objectFit: 'cover',
+              transform: !localIsP1 ? 'scaleX(-1)' : 'none', // Mirror only if it's local player's camera
             }}
           />
-          {/* Remote player label */}
+          {/* P2 label */}
           <div style={{
             position: 'absolute',
             bottom: `calc(100 * ${scale})`,
@@ -859,14 +874,14 @@ export function CROnlineGameScreen({
             background: 'rgba(0, 0, 0, 0.7)',
             padding: `calc(8 * ${scale}) calc(16 * ${scale})`,
             borderRadius: `calc(8 * ${scale})`,
-            border: `2px solid ${remotePlayer.accentColor}`,
+            border: `2px solid ${p2.accentColor}`,
           }}>
             <span style={{
               fontFamily: FONT_NAME,
               fontSize: `calc(20 * ${scale})`,
               color: '#fff',
             }}>
-              {remotePlayer.name}
+              {p2.name}{!localIsP1 ? ' (YOU)' : ''}
             </span>
           </div>
           {/* Connection status indicator */}
@@ -945,7 +960,7 @@ export function CROnlineGameScreen({
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                  {renderMarkIcon('local', target)}
+                  {renderMarkIcon('p1', target)}
                 </div>
                 <div style={{
                   display: 'flex',
@@ -960,7 +975,7 @@ export function CROnlineGameScreen({
                   {target === 'B' ? 'B' : target}
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                  {renderMarkIcon('remote', target)}
+                  {renderMarkIcon('p2', target)}
                 </div>
               </div>
             );
@@ -1011,7 +1026,7 @@ export function CROnlineGameScreen({
           key={`round-${roundKey}`}
           style={{
             position: 'absolute',
-            top: `calc(20 * ${scale})`,
+            top: `calc(80 * ${scale})`,
             left: 0,
             display: 'flex',
             flexDirection: 'column',
@@ -1046,23 +1061,7 @@ export function CROnlineGameScreen({
               ROUND {ROUND_WORDS[currentRound - 1] || currentRound}
             </span>
           </div>
-          {/* Turn indicator */}
-          <div style={{
-            padding: `calc(8 * ${scale}) calc(16 * ${scale})`,
-            background: isLocalTurn ? 'rgba(16, 185, 129, 0.8)' : 'rgba(239, 68, 68, 0.8)',
-            backdropFilter: 'blur(12px)',
-            borderRadius: `0 calc(8 * ${scale}) calc(8 * ${scale}) 0`,
-          }}>
-            <span style={{
-              fontFamily: FONT_NAME,
-              fontWeight: 600,
-              fontSize: `calc(18 * ${scale})`,
-              color: '#FFFFFF',
-            }}>
-              {isLocalTurn ? 'YOUR TURN' : 'WAITING...'}
-            </span>
-          </div>
-        </div>
+                  </div>
       )}
 
       {/* Darts display */}
@@ -1077,7 +1076,7 @@ export function CROnlineGameScreen({
                 style={{
                   position: 'absolute',
                   bottom: `calc(${FIGMA.bar.h - 4} * ${scale})`,
-                  ...(localActive
+                  ...(p1Active
                     ? { left: `calc(${centerPos} * ${scale})`, transform: 'translateX(-50%)' }
                     : { right: `calc(${centerPos} * ${scale})`, transform: 'translateX(50%)' }
                   ),
@@ -1098,7 +1097,7 @@ export function CROnlineGameScreen({
         </>
       )}
 
-      {/* Local Player Bar - Left (matches left video) */}
+      {/* Player 1 Bar - Left (starting player, same for both views) */}
       <div style={{
         position: 'absolute',
         width: `calc(${FIGMA.bar.w} * ${scale})`,
@@ -1109,39 +1108,45 @@ export function CROnlineGameScreen({
         overflow: 'hidden',
       }}>
         <div style={{ position: 'absolute', inset: 0, background: greyGradient }} />
-        {introComplete && localActive && (
+        {introComplete && p1Active && (
           <div style={{
             position: 'absolute', top: 0, left: 0, height: '3px',
             width: `${(currentDarts.length / 3) * 100}%`,
-            background: P1_ACTIVE, transition: 'width 0.2s ease-out', zIndex: 5,
+            background: p1.accentColor, transition: 'width 0.2s ease-out', zIndex: 5,
           }} />
         )}
-        {introComplete && localExiting && (
-          <div key={`local-exit-${turnKey}`} style={{
+        {introComplete && p1Exiting && (
+          <div key={`p1-exit-${turnKey}`} style={{
             position: 'absolute', top: 0, left: 0, height: '3px', width: '100%',
-            background: P1_ACTIVE, zIndex: 5, animation: 'borderDrainDown 0.5s ease-out forwards',
+            background: p1.accentColor, zIndex: 5, animation: 'borderDrainDown 0.5s ease-out forwards',
           }} />
         )}
-        {introComplete && (localActive || localExiting) && (
-          <div key={`local-bar-${turnKey}`} style={{
+        {introComplete && (p1Active || p1Exiting) && (
+          <div key={`p1-bar-${turnKey}`} style={{
             position: 'absolute', inset: 0,
-            background: `linear-gradient(179.4deg, ${localPlayer.accentColor}33 0.52%, rgba(0, 0, 0, 0.2) 95.46%)`,
-            animation: localActive ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
+            background: `linear-gradient(179.4deg, ${p1.accentColor}33 0.52%, rgba(0, 0, 0, 0.2) 95.46%)`,
+            animation: p1Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
           }} />
         )}
         <div style={{
           position: 'absolute',
           width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
           left: `calc(${FIGMA.avatarLeft} * ${scale})`, top: '50%', transform: 'translateY(-50%)',
-          background: '#000', border: `3px solid ${INACTIVE}`, borderRadius: '50%', zIndex: 1,
+          backgroundImage: resolveProfilePicUrl(p1.profilePic) ? `url(${resolveProfilePicUrl(p1.profilePic)})` : 'none',
+          backgroundColor: '#000',
+          backgroundSize: 'cover', backgroundPosition: 'center',
+          border: `3px solid ${INACTIVE}`, borderRadius: '50%', zIndex: 1,
         }} />
-        {introComplete && (localActive || localExiting) && (
-          <div key={`local-avatar-${turnKey}`} style={{
+        {introComplete && (p1Active || p1Exiting) && (
+          <div key={`p1-avatar-${turnKey}`} style={{
             position: 'absolute',
             width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
             left: `calc(${FIGMA.avatarLeft} * ${scale})`, top: '50%', transform: 'translateY(-50%)',
-            background: '#000', border: `3px solid ${localPlayer.accentColor}`, borderRadius: '50%', zIndex: 2,
-            animation: localActive ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
+            backgroundImage: resolveProfilePicUrl(p1.profilePic) ? `url(${resolveProfilePicUrl(p1.profilePic)})` : 'none',
+            backgroundColor: '#000',
+            backgroundSize: 'cover', backgroundPosition: 'center',
+            border: `3px solid ${p1.accentColor}`, borderRadius: '50%', zIndex: 2,
+            animation: p1Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
           }} />
         )}
         <div style={{
@@ -1150,17 +1155,17 @@ export function CROnlineGameScreen({
         }}>
           <span style={{
             fontFamily: FONT_NAME, fontWeight: 400, fontSize: `calc(${FIGMA.nameSize} * ${scale})`,
-            color: localActive ? '#FFFFFF' : INACTIVE,
+            color: p1Active ? '#FFFFFF' : INACTIVE,
           }}>
-            {localPlayer.name}
+            {p1.name}
           </span>
           {introComplete && (
             <span style={{
               fontFamily: FONT_NAME, fontWeight: 400, fontSize: `calc(16 * ${scale})`,
-              color: localActive ? 'rgba(255, 255, 255, 0.6)' : 'rgba(126, 126, 126, 0.6)',
+              color: p1Active ? 'rgba(255, 255, 255, 0.6)' : 'rgba(126, 126, 126, 0.6)',
               marginTop: `calc(-4 * ${scale})`,
             }}>
-              MPR: {localMPRDisplay}
+              MPR: {p1MPR}
             </span>
           )}
         </div>
@@ -1168,14 +1173,14 @@ export function CROnlineGameScreen({
           position: 'absolute', left: `calc(${FIGMA.scoreLeft} * ${scale})`,
           top: '50%', transform: 'translateY(-50%)',
           fontFamily: FONT_SCORE, fontWeight: 300, fontSize: `calc(${FIGMA.scoreSize} * ${scale})`,
-          lineHeight: 1, color: localActive ? '#FFFFFF' : INACTIVE,
-          textShadow: localActive ? '-6px 6px 9.7px rgba(0, 0, 0, 0.78)' : 'none', zIndex: 3,
+          lineHeight: 1, color: p1Active ? '#FFFFFF' : INACTIVE,
+          textShadow: p1Active ? '-6px 6px 9.7px rgba(0, 0, 0, 0.78)' : 'none', zIndex: 3,
         }}>
-          {localScore}
+          {p1Score}
         </span>
       </div>
 
-      {/* Remote Player Bar - Right (matches right video) */}
+      {/* Player 2 Bar - Right (second player, same for both views) */}
       <div style={{
         position: 'absolute',
         width: `calc(${FIGMA.bar.w} * ${scale})`,
@@ -1186,34 +1191,34 @@ export function CROnlineGameScreen({
         overflow: 'hidden',
       }}>
         <div style={{ position: 'absolute', inset: 0, background: greyGradient }} />
-        {introComplete && remoteActive && (
+        {introComplete && p2Active && (
           <div style={{
             position: 'absolute', top: 0, right: 0, height: '3px',
             width: `${(currentDarts.length / 3) * 100}%`,
-            background: P2_ACTIVE, transition: 'width 0.2s ease-out', zIndex: 5,
+            background: p2.accentColor, transition: 'width 0.2s ease-out', zIndex: 5,
           }} />
         )}
-        {introComplete && remoteExiting && (
-          <div key={`remote-exit-${turnKey}`} style={{
+        {introComplete && p2Exiting && (
+          <div key={`p2-exit-${turnKey}`} style={{
             position: 'absolute', top: 0, right: 0, height: '3px', width: '100%',
-            background: P2_ACTIVE, zIndex: 5, animation: 'borderDrainDown 0.5s ease-out forwards',
+            background: p2.accentColor, zIndex: 5, animation: 'borderDrainDown 0.5s ease-out forwards',
           }} />
         )}
-        {introComplete && (remoteActive || remoteExiting) && (
-          <div key={`remote-bar-${turnKey}`} style={{
+        {introComplete && (p2Active || p2Exiting) && (
+          <div key={`p2-bar-${turnKey}`} style={{
             position: 'absolute', inset: 0,
-            background: `linear-gradient(179.4deg, ${remotePlayer.accentColor}33 0.52%, rgba(0, 0, 0, 0.2) 95.46%)`,
-            animation: remoteActive ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
+            background: `linear-gradient(179.4deg, ${p2.accentColor}33 0.52%, rgba(0, 0, 0, 0.2) 95.46%)`,
+            animation: p2Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
           }} />
         )}
         <span style={{
           position: 'absolute', left: `calc(20 * ${scale})`,
           top: '50%', transform: 'translateY(-50%)',
           fontFamily: FONT_SCORE, fontWeight: 300, fontSize: `calc(${FIGMA.scoreSize} * ${scale})`,
-          lineHeight: 1, color: remoteActive ? '#FFFFFF' : INACTIVE,
-          textShadow: remoteActive ? '-6px 6px 9.7px rgba(0, 0, 0, 0.78)' : 'none', zIndex: 3,
+          lineHeight: 1, color: p2Active ? '#FFFFFF' : INACTIVE,
+          textShadow: p2Active ? '-6px 6px 9.7px rgba(0, 0, 0, 0.78)' : 'none', zIndex: 3,
         }}>
-          {remoteScore}
+          {p2Score}
         </span>
         <div style={{
           position: 'absolute', right: `calc(${FIGMA.nameLeft} * ${scale})`,
@@ -1222,17 +1227,17 @@ export function CROnlineGameScreen({
         }}>
           <span style={{
             fontFamily: FONT_NAME, fontWeight: 400, fontSize: `calc(${FIGMA.nameSize} * ${scale})`,
-            color: remoteActive ? '#FFFFFF' : INACTIVE,
+            color: p2Active ? '#FFFFFF' : INACTIVE,
           }}>
-            {remotePlayer.name}
+            {p2.name}
           </span>
           {introComplete && (
             <span style={{
               fontFamily: FONT_NAME, fontWeight: 400, fontSize: `calc(16 * ${scale})`,
-              color: remoteActive ? 'rgba(255, 255, 255, 0.6)' : 'rgba(126, 126, 126, 0.6)',
+              color: p2Active ? 'rgba(255, 255, 255, 0.6)' : 'rgba(126, 126, 126, 0.6)',
               marginTop: `calc(-4 * ${scale})`,
             }}>
-              MPR: {remoteMPRDisplay}
+              MPR: {p2MPR}
             </span>
           )}
         </div>
@@ -1240,15 +1245,21 @@ export function CROnlineGameScreen({
           position: 'absolute',
           width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
           right: `calc(${FIGMA.avatarLeft} * ${scale})`, top: '50%', transform: 'translateY(-50%)',
-          background: '#000', border: `3px solid ${INACTIVE}`, borderRadius: '50%', zIndex: 1,
+          backgroundImage: resolveProfilePicUrl(p2.profilePic) ? `url(${resolveProfilePicUrl(p2.profilePic)})` : 'none',
+          backgroundColor: '#000',
+          backgroundSize: 'cover', backgroundPosition: 'center',
+          border: `3px solid ${INACTIVE}`, borderRadius: '50%', zIndex: 1,
         }} />
-        {introComplete && (remoteActive || remoteExiting) && (
-          <div key={`remote-avatar-${turnKey}`} style={{
+        {introComplete && (p2Active || p2Exiting) && (
+          <div key={`p2-avatar-${turnKey}`} style={{
             position: 'absolute',
             width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
             right: `calc(${FIGMA.avatarLeft} * ${scale})`, top: '50%', transform: 'translateY(-50%)',
-            background: '#000', border: `3px solid ${remotePlayer.accentColor}`, borderRadius: '50%', zIndex: 2,
-            animation: remoteActive ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
+            backgroundImage: resolveProfilePicUrl(p2.profilePic) ? `url(${resolveProfilePicUrl(p2.profilePic)})` : 'none',
+            backgroundColor: '#000',
+            backgroundSize: 'cover', backgroundPosition: 'center',
+            border: `3px solid ${p2.accentColor}`, borderRadius: '50%', zIndex: 2,
+            animation: p2Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
           }} />
         )}
       </div>
@@ -1292,13 +1303,13 @@ export function CROnlineGameScreen({
 
       {/* Achievement Animation */}
       {activeAnimation && (() => {
-        const activeAccentColor = localActive ? localPlayer.accentColor : remotePlayer.accentColor;
+        const activeAccentColor = currentThrower === 'p1' ? p1.accentColor : p2.accentColor;
         return (
           <div style={{
             position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
             zIndex: 200, pointerEvents: 'none',
           }}>
-            {/* Award video - full screen, plays for full 7 seconds */}
+            {/* Award video - full screen, plays for full 3 seconds */}
             {AWARD_VIDEOS[activeAnimation] && (
               <video
                 key={activeAnimation}
@@ -1342,11 +1353,10 @@ export function CROnlineGameScreen({
 
       {/* Winner Screen */}
       {showWinnerScreen && gameWinner && (() => {
-        const winnerIsLocal = (gameWinner === 'p1' && localIsP1) || (gameWinner === 'p2' && !localIsP1);
-        const winnerAccentColor = winnerIsLocal ? localPlayer.accentColor : remotePlayer.accentColor;
-        const winnerName = winnerIsLocal ? localPlayer.name : remotePlayer.name;
-        const winnerFinalScore = winnerIsLocal ? localScore : remoteScore;
-        const loserFinalScore = winnerIsLocal ? remoteScore : localScore;
+        const winnerAccentColor = gameWinner === 'p1' ? p1.accentColor : p2.accentColor;
+        const winnerName = gameWinner === 'p1' ? p1.name : p2.name;
+        const winnerFinalScore = gameWinner === 'p1' ? p1Score : p2Score;
+        const loserFinalScore = gameWinner === 'p1' ? p2Score : p1Score;
         return (
           <div style={{
             position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',

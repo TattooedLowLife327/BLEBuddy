@@ -109,6 +109,7 @@ export function PlayerGameSetup({
   const [flight, setFlight] = useState<FlightAnimation | null>(null);
   const [modalScale, setModalScale] = useState(1);
   const [fetchedProfilePic, setFetchedProfilePic] = useState<string | null>(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   const supabase = createClient();
   
@@ -331,6 +332,10 @@ export function PlayerGameSetup({
   }, [player.player_id, player.isDoublesTeam, player.partnerId]);
 
   const handleStartGame = () => {
+    setShowConfirmModal(true);
+  };
+
+  const confirmAndSendRequest = () => {
     // Determine format
     let inOut: 'do' | 'mo' | 'mimo' | 'dido' | null = null;
     if (do_) inOut = 'do';
@@ -351,7 +356,20 @@ export function PlayerGameSetup({
         bull,
       },
     };
+    setShowConfirmModal(false);
     onStartGame(config);
+  };
+
+  // Format descriptions for display
+  const getFormatDescription = () => {
+    const parts: string[] = [];
+    if (do_) parts.push('Double Out');
+    else if (mo) parts.push('Master Out');
+    else if (mimo) parts.push('Master In/Master Out');
+    else if (dido) parts.push('Double In/Double Out');
+    if (full) parts.push('Full Bull (50pts)');
+    else if (split) parts.push('Split Bull (25/50)');
+    return parts.join(' | ');
   };
 
   const addGame = (gameLabel: string) => {
@@ -703,7 +721,7 @@ export function PlayerGameSetup({
                     addGame('501');
                   }}
                   disabled={allFilled}
-                  className={`rounded-lg px-4 py-2 border transition-colors ${
+                  className={`rounded-lg px-6 py-3 text-lg border transition-colors ${
                     allFilled
                       ? 'border-white/15 bg-zinc-900/40 text-zinc-500 opacity-60 cursor-not-allowed'
                       : 'border-white/15 bg-zinc-900/40 hover:border-primary/60 hover:bg-primary/10 text-white'
@@ -730,7 +748,7 @@ export function PlayerGameSetup({
                     addGame('CR');
                   }}
                   disabled={allFilled}
-                  className={`rounded-lg px-4 py-2 border transition-colors ${
+                  className={`rounded-lg px-6 py-3 text-lg border transition-colors ${
                     allFilled
                       ? 'border-white/15 bg-zinc-900/40 text-zinc-500 opacity-60 cursor-not-allowed'
                       : 'border-white/15 bg-zinc-900/40 hover:border-primary/60 hover:bg-primary/10 text-white'
@@ -758,7 +776,7 @@ export function PlayerGameSetup({
                   }}
                   disabled={legs <= 1 || !isPickingLast || allFilled}
                   title={legs <= 1 ? 'Choice only available for 3 or 5 leg matches' : !isPickingLast ? 'Choice unlocks for the last leg' : ''}
-                  className={`rounded-lg px-4 py-2 border transition-colors ${
+                  className={`rounded-lg px-6 py-3 text-lg border transition-colors ${
                     legs <= 1 || !isPickingLast || allFilled
                       ? 'border-white/15 bg-zinc-900/40 text-zinc-500 opacity-40 cursor-not-allowed'
                       : 'border-white/15 bg-zinc-900/40 hover:border-primary/60 hover:bg-primary/10 text-white'
@@ -867,11 +885,17 @@ export function PlayerGameSetup({
                       Split
                     </button>
                   </div>
+                  {/* Format description */}
+                  {(do_ || mo || mimo || dido || full || split) && (
+                    <div className="text-center text-xs text-zinc-400 mt-1">
+                      {getFormatDescription()}
+                    </div>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>
 
-            {/* Start Game Button */}
+            {/* Send Request Button */}
             <button
               onClick={handleStartGame}
               disabled={!hasGameSelected}
@@ -885,11 +909,74 @@ export function PlayerGameSetup({
                 boxShadow: hasGameSelected ? `0 0 20px ${hexToRgba(player.accentColor, 0.5)}` : 'none',
               }}
             >
-              {hasGameSelected ? 'Start Game' : 'Select a Game'}
+              {hasGameSelected ? 'Send Request' : 'Select a Game'}
             </button>
           </div>
         </div>
       </div>
+
+      {/* Confirmation Modal */}
+      <AnimatePresence>
+        {showConfirmModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center p-6"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-zinc-900 rounded-lg border p-6 max-w-sm w-full"
+              style={{ borderColor: player.accentColor }}
+            >
+              <h3 className="text-lg font-bold text-white mb-4 text-center">Confirm Game Request</h3>
+              <div className="text-sm text-zinc-300 mb-4 space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-zinc-400">Opponent:</span>
+                  <span className="font-medium">{player.granboardName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-400">Legs:</span>
+                  <span className="font-medium">{legs}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-400">Games:</span>
+                  <span className="font-medium">{games.filter(g => g).join(', ')}</span>
+                </div>
+                {getFormatDescription() && (
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">Format:</span>
+                    <span className="font-medium text-right">{getFormatDescription()}</span>
+                  </div>
+                )}
+                {handicap && (
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">Handicap:</span>
+                    <span className="font-medium">Enabled</span>
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowConfirmModal(false)}
+                  className="flex-1 py-2 rounded-lg border border-zinc-600 text-zinc-300 hover:bg-zinc-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmAndSendRequest}
+                  className="flex-1 py-2 rounded-lg text-white font-bold transition-colors"
+                  style={{ backgroundColor: player.accentColor }}
+                >
+                  Send
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
