@@ -572,12 +572,24 @@ export function CROnlineGameScreen({
 
   // Handle BLE throws
   useEffect(() => {
-    if (!lastThrow || !isLocalTurn) return;
+    if (!lastThrow) return;
+
+    // Debug logging
+    console.log('[CROnlineGame] BLE throw received:', lastThrow.segment, 'isLocalTurn:', isLocalTurn, 'localIsP1:', localIsP1, 'currentThrower:', currentThrower);
+
+    if (!isLocalTurn) {
+      console.log('[CROnlineGame] Ignoring throw - not local turn');
+      return;
+    }
 
     const throwKey = `${lastThrow.segment}-${lastThrow.timestamp}`;
     if (throwKey === lastProcessedThrowRef.current) return;
     lastProcessedThrowRef.current = throwKey;
+
+    console.log('[CROnlineGame] Processing throw:', lastThrow.segment);
+
     if (lastThrow.segmentType === 'BUTTON' || lastThrow.segment === 'BTN') {
+      console.log('[CROnlineGame] Button press detected, ending turn');
       endTurnWithMisses();
       return;
     }
@@ -589,7 +601,7 @@ export function CROnlineGameScreen({
     const multiplier = lastThrow.multiplier;
 
     applyThrow(segment, multiplier, true);
-  }, [lastThrow, isLocalTurn, applyThrow, endTurnWithMisses]);
+  }, [lastThrow, isLocalTurn, localIsP1, currentThrower, applyThrow, endTurnWithMisses]);
 
   // Handle player change
   useEffect(() => {
@@ -1002,7 +1014,9 @@ export function CROnlineGameScreen({
             top: `calc(20 * ${scale})`,
             left: 0,
             display: 'flex',
-            alignItems: 'center',
+            flexDirection: 'column',
+            alignItems: 'flex-start',
+            gap: `calc(8 * ${scale})`,
             zIndex: 50,
             animation: roundAnimState === 'out'
               ? 'slideOutToLeft 0.5s ease-in forwards'
@@ -1030,6 +1044,22 @@ export function CROnlineGameScreen({
               whiteSpace: 'nowrap',
             }}>
               ROUND {ROUND_WORDS[currentRound - 1] || currentRound}
+            </span>
+          </div>
+          {/* Turn indicator */}
+          <div style={{
+            padding: `calc(8 * ${scale}) calc(16 * ${scale})`,
+            background: isLocalTurn ? 'rgba(16, 185, 129, 0.8)' : 'rgba(239, 68, 68, 0.8)',
+            backdropFilter: 'blur(12px)',
+            borderRadius: `0 calc(8 * ${scale}) calc(8 * ${scale}) 0`,
+          }}>
+            <span style={{
+              fontFamily: FONT_NAME,
+              fontWeight: 600,
+              fontSize: `calc(18 * ${scale})`,
+              color: '#FFFFFF',
+            }}>
+              {isLocalTurn ? 'YOUR TURN' : 'WAITING...'}
             </span>
           </div>
         </div>
