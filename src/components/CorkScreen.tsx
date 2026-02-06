@@ -348,11 +348,12 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
     }, 1000);
   }, [p1State, p2State, winner, player1.id, player2.id, onCorkComplete]);
 
-  // Score display logic - hide opponent until both thrown
+  // Score display logic - show ? for opponent until both thrown
   const getScoreDisplay = (state: PlayerCorkState, playerId: string): string => {
     if (state.status === 'waiting') return '-';
     if (revealed) return state.display;
-    return playerId === visiblePlayerId ? state.display : '-';
+    // Show own score, but ? for opponent until both have thrown
+    return playerId === visiblePlayerId ? state.display : '?';
   };
 
   // Score color - profile color when shown, white dash otherwise
