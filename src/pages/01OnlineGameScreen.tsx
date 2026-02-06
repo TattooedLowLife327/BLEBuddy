@@ -346,6 +346,7 @@ export function O1OnlineGameScreen({
   // Determine which player is p1/p2 based on initiator
   const p1 = isInitiator ? localPlayer : remotePlayer;
   const p2 = isInitiator ? remotePlayer : localPlayer;
+  const localIsP1 = isInitiator;
 
   const resolvedGameType = useMemo(() => {
     const raw = gameType || gameConfig?.games?.find(entry => entry) || '501';
@@ -815,7 +816,7 @@ export function O1OnlineGameScreen({
         inset: 0,
         display: 'flex',
       }}>
-        {/* P1 Camera - Left Half */}
+        {/* P1 Camera - Left Half (starting player, same for both views) */}
         <div style={{
           flex: 1,
           position: 'relative',
@@ -824,19 +825,19 @@ export function O1OnlineGameScreen({
           transition: 'border-color 0.3s ease-out',
         }}>
           <video
-            ref={localVideoRef}
+            ref={localIsP1 ? localVideoRef : remoteVideoRef}
             autoPlay
-            muted
+            muted={localIsP1}
             playsInline
             style={{
               width: '100%',
               height: '100%',
               objectFit: 'cover',
-              transform: 'scaleX(-1)',
-              display: localStream ? 'block' : 'none',
+              transform: localIsP1 ? 'scaleX(-1)' : 'none',
+              display: (localIsP1 ? localStream : remoteStream) ? 'block' : 'none',
             }}
           />
-          {!localStream && (
+          {!(localIsP1 ? localStream : remoteStream) && (
             <div style={{
               position: 'absolute',
               inset: 0,
@@ -848,7 +849,7 @@ export function O1OnlineGameScreen({
               color: 'rgba(255, 255, 255, 0.2)',
               pointerEvents: 'none',
             }}>
-              You
+              {p1.name}
             </div>
           )}
           {p1Active && (
@@ -861,7 +862,7 @@ export function O1OnlineGameScreen({
           )}
         </div>
 
-        {/* P2 Camera - Right Half */}
+        {/* P2 Camera - Right Half (second player, same for both views) */}
         <div style={{
           flex: 1,
           position: 'relative',
@@ -870,17 +871,19 @@ export function O1OnlineGameScreen({
           transition: 'border-color 0.3s ease-out',
         }}>
           <video
-            ref={remoteVideoRef}
+            ref={localIsP1 ? remoteVideoRef : localVideoRef}
             autoPlay
+            muted={!localIsP1}
             playsInline
             style={{
               width: '100%',
               height: '100%',
               objectFit: 'cover',
-              display: remoteStream ? 'block' : 'none',
+              transform: !localIsP1 ? 'scaleX(-1)' : 'none',
+              display: (localIsP1 ? remoteStream : localStream) ? 'block' : 'none',
             }}
           />
-          {!remoteStream && (
+          {!(localIsP1 ? remoteStream : localStream) && (
             <div style={{
               position: 'absolute',
               inset: 0,
@@ -892,7 +895,7 @@ export function O1OnlineGameScreen({
               color: 'rgba(255, 255, 255, 0.2)',
               pointerEvents: 'none',
             }}>
-              Opponent
+              {p2.name}
             </div>
           )}
           {p2Active && (

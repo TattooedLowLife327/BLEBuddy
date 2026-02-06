@@ -323,28 +323,31 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
   useEffect(() => {
     if (p1State.status !== 'thrown' || p2State.status !== 'thrown' || p1State.score === null || p2State.score === null || winner) return;
 
-    setRevealed(true);
+    // Show "?" for opponent for 1 second before revealing both scores
     setTimeout(() => {
-      if (p1State.score! > p2State.score!) {
-        setWinner(player1.id);
-        setTimeout(() => onCorkComplete(player1.id), 2500);
-      } else if (p2State.score! > p1State.score!) {
-        setWinner(player2.id);
-        setTimeout(() => onCorkComplete(player2.id), 2500);
-      } else {
-        setTieAlert(true);
-        setTimeout(() => {
-          setTieAlert(false);
-          setRevealed(false);
-          setP1State({ status: 'waiting', score: null, wasValid: false, display: '-' });
-          setP2State({ status: 'waiting', score: null, wasValid: false, display: '-' });
-          setP1CamPopped(false);
-          setP2CamPopped(false);
-          setCorkRound(r => r + 1);
-          setTurnKey(k => k + 1);
-          setMyThrowSent(false);
-        }, 2500);
-      }
+      setRevealed(true);
+      setTimeout(() => {
+        if (p1State.score! > p2State.score!) {
+          setWinner(player1.id);
+          setTimeout(() => onCorkComplete(player1.id), 2500);
+        } else if (p2State.score! > p1State.score!) {
+          setWinner(player2.id);
+          setTimeout(() => onCorkComplete(player2.id), 2500);
+        } else {
+          setTieAlert(true);
+          setTimeout(() => {
+            setTieAlert(false);
+            setRevealed(false);
+            setP1State({ status: 'waiting', score: null, wasValid: false, display: '-' });
+            setP2State({ status: 'waiting', score: null, wasValid: false, display: '-' });
+            setP1CamPopped(false);
+            setP2CamPopped(false);
+            setCorkRound(r => r + 1);
+            setTurnKey(k => k + 1);
+            setMyThrowSent(false);
+          }, 2500);
+        }
+      }, 1000);
     }, 1000);
   }, [p1State, p2State, winner, player1.id, player2.id, onCorkComplete]);
 
@@ -488,6 +491,20 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
         <button onClick={() => setShowLeaveConfirm(true)} style={{ color: '#fff', background: 'none', border: 'none', cursor: 'pointer' }}>
           <ChevronLeft size={24} />
         </button>
+        <h1 style={{
+          position: 'absolute',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          color: '#fff',
+          fontFamily: FONT_NAME,
+          fontSize: '18px',
+          fontWeight: 700,
+          textTransform: 'uppercase',
+          letterSpacing: '0.1em',
+          margin: 0,
+        }}>
+          THROW CORK{corkRound > 1 ? ` R${corkRound}` : ''}
+        </h1>
         <UserMenu
           profilepic={resolveProfilePicUrl(localPlayerPic)}
           profilecolor={localPlayerColor}
@@ -497,23 +514,6 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
           size="sm"
         />
       </div>
-
-      {/* Title - centered below header */}
-      <h1 style={{
-        position: 'absolute',
-        top: `calc(80 * ${scale})`,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        color: '#fff',
-        fontFamily: FONT_NAME,
-        fontSize: `calc(48 * ${scale})`,
-        fontWeight: 700,
-        textTransform: 'uppercase',
-        letterSpacing: '0.1em',
-        zIndex: 20,
-      }}>
-        THROW CORK{corkRound > 1 ? ` R${corkRound}` : ''}
-      </h1>
 
       {/* Opponent offline indicator */}
       {!isOpponentOnline && disconnectCountdown === null && (
@@ -564,8 +564,8 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
           left: 0,
           top: '50%',
           transform: phase >= 1 ? 'translateY(-50%) translateX(0)' : 'translateY(-50%) translateX(-100%)',
-          width: `min(calc(${FIGMA.bar.w + 50} * ${scale}), 45vh * 16 / 9)`,
-          height: `min(calc(${FIGMA.bar.w + 50} * ${scale} * 9 / 16), 45vh)`,
+          width: `calc(${FIGMA.bar.w + 50} * ${scale})`,
+          height: `calc((${FIGMA.bar.w + 50} * ${scale}) * 9 / 16)`,
           zIndex: 10,
           transition: 'transform 0.6s ease-out',
         }}
@@ -641,8 +641,8 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
           right: 0,
           top: '50%',
           transform: phase >= 1 ? 'translateY(-50%) translateX(0)' : 'translateY(-50%) translateX(100%)',
-          width: `min(calc(${FIGMA.bar.w + 50} * ${scale}), 45vh * 16 / 9)`,
-          height: `min(calc(${FIGMA.bar.w + 50} * ${scale} * 9 / 16), 45vh)`,
+          width: `calc(${FIGMA.bar.w + 50} * ${scale})`,
+          height: `calc((${FIGMA.bar.w + 50} * ${scale}) * 9 / 16)`,
           zIndex: 10,
           transition: 'transform 0.6s ease-out',
         }}
