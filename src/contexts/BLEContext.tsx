@@ -15,6 +15,7 @@ interface BLEContextType {
   lastDeviceName: string | null;
   disconnect: () => Promise<void>;
   simulateThrow: (segment?: string, score?: number) => DartThrowData;
+  clearLEDs: () => Promise<boolean>;
   isSupported: boolean;
 }
 
@@ -115,6 +116,10 @@ export function BLEProvider({ children }: BLEProviderProps) {
     return bleConnection.simulateThrow(segment, score);
   };
 
+  const clearLEDs = (): Promise<boolean> => {
+    return bleConnection.clearLEDs();
+  };
+
   const value: BLEContextType = {
     status,
     isConnected: status === 'connected',
@@ -126,6 +131,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
     lastDeviceName,
     disconnect,
     simulateThrow,
+    clearLEDs,
     isSupported
   };
 

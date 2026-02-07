@@ -328,7 +328,7 @@ export function O1InhouseGameScreen({
   playerMode = 'guest',
 }: GameScreenProps) {
   // BLE integration
-  const { lastThrow, isConnected, simulateThrow: bleSimulateThrow } = useBLE();
+  const { lastThrow, simulateThrow: bleSimulateThrow, clearLEDs } = useBLE();
   const devMode = isDevMode();
   const lastProcessedThrowRef = useRef<string | null>(null);
   const playerChangeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -540,6 +540,8 @@ export function O1InhouseGameScreen({
 
   useEffect(() => {
     if (showPlayerChange) {
+      // Turn ended - clear board LEDs
+      clearLEDs();
       const timer = setTimeout(() => {
         // Track who threw this round
         if (currentThrower === 'p1') {

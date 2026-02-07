@@ -325,7 +325,7 @@ export function O1OnlineGameScreen({
   onGameComplete,
 }: GameScreenProps) {
   // BLE integration
-  const { lastThrow, isConnected, simulateThrow: bleSimulateThrow, status: bleStatus, connect: bleConnect, disconnect: bleDisconnect } = useBLE();
+  const { lastThrow, isConnected, simulateThrow: bleSimulateThrow, status: bleStatus, connect: bleConnect, disconnect: bleDisconnect, clearLEDs } = useBLE();
   const devMode = isDevMode();
   const lastProcessedThrowRef = useRef<string | null>(null);
   const playerChangeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -512,6 +512,7 @@ export function O1OnlineGameScreen({
 
   useEffect(() => {
     if (showPlayerChange) {
+      clearLEDs();
       const timer = setTimeout(() => {
         if (currentThrower === 'p1') setP1ThrewThisRound(true);
         else setP2ThrewThisRound(true);
@@ -711,7 +712,7 @@ export function O1OnlineGameScreen({
     }
 
     throwDart(segment, score, lastThrow.multiplier);
-  }, [lastThrow, throwDart, endTurnWithMisses]);
+  }, [lastThrow, throwDart, endTurnWithMisses, splitBull]);
 
   // Dev mode throw simulator
   const handleDevSimulateThrow = useCallback(() => {
@@ -773,10 +774,8 @@ export function O1OnlineGameScreen({
 
   const formatDart = (segment: string) => {
     if (segment === 'MISS') return 'MISS';
-    if (segment === 'S25' || segment === 'D25') {
-      if (!splitBull) return 'BULL';
-      return segment === 'D25' ? 'DBULL' : 'BULL';
-    }
+    if (segment === 'D25') return 'DBULL';
+    if (segment === 'S25') return 'BULL';
     return segment;
   };
 
