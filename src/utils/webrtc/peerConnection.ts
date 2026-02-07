@@ -51,32 +51,24 @@ export async function getAvailableCameras(): Promise<CameraDevice[]> {
   }
 }
 
-// Check if a camera is available - required for online play
+// Silent check if a camera device exists - no permission prompt
 export async function checkCameraAvailable(): Promise<{ available: boolean; error?: string }> {
   try {
-    // Check if mediaDevices API is supported
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
       return { available: false, error: 'Your browser does not support camera access. Please use Chrome, Edge, or Safari.' };
     }
 
-    // Try to access the camera
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    stream.getTracks().forEach(track => track.stop());
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const hasCamera = devices.some(d => d.kind === 'videoinput');
+
+    if (!hasCamera) {
+      return { available: false, error: 'No camera detected. A webcam is required for online play.' };
+    }
+
     return { available: true };
   } catch (err: any) {
     console.error('Camera check failed:', err);
-
-    if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-      return { available: false, error: 'No camera detected. A webcam is required for online play.' };
-    }
-    if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-      return { available: false, error: 'Camera access denied. Please allow camera access in your browser settings to play online.' };
-    }
-    if (err.name === 'NotReadableError') {
-      return { available: false, error: 'Camera is in use by another application. Please close other apps using the camera.' };
-    }
-
-    return { available: false, error: 'Could not access camera. Please check your camera connection and try again.' };
+    return { available: false, error: 'Could not check for camera. Please check your camera connection and try again.' };
   }
 }
 

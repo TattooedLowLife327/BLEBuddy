@@ -820,7 +820,7 @@ export function O1InhouseGameScreen({
     }
 
     throwDart(segment, score, lastThrow.multiplier);
-  }, [lastThrow, throwDart, endTurnWithMisses]);
+  }, [lastThrow, throwDart, endTurnWithMisses, splitBull]);
 
   const handleDevSimulateThrow = useCallback(() => {
     if (!devMode) return;
@@ -829,10 +829,8 @@ export function O1InhouseGameScreen({
 
   const formatDart = (segment: string) => {
     if (segment === 'MISS') return 'MISS';
-    if (segment === 'S25' || segment === 'D25') {
-      if (!splitBull) return 'BULL';
-      return segment === 'D25' ? 'DBULL' : 'BULL';
-    }
+    if (segment === 'D25') return 'DBULL';
+    if (segment === 'S25') return 'BULL';
     return segment;
   };
 
