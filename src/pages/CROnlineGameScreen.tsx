@@ -199,10 +199,12 @@ export function CROnlineGameScreen({
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
 
-  // Determine which player is p1/p2
-  const p1 = isInitiator ? localPlayer : remotePlayer;
-  const p2 = isInitiator ? remotePlayer : localPlayer;
-  const localIsP1 = isInitiator;
+  // Determine which player is p1/p2 based on startingPlayer (cork winner)
+  // P1 (LEFT) = whoever goes first (cork winner)
+  // P2 (RIGHT) = whoever goes second
+  const localIsP1 = startingPlayer === localPlayer.id;
+  const p1 = localIsP1 ? localPlayer : remotePlayer;
+  const p2 = localIsP1 ? remotePlayer : localPlayer;
 
   // BLE for throw detection and status
   const { lastThrow, isConnected: bleConnected, connect: bleConnect, disconnect: bleDisconnect, status: bleStatus } = useBLE();
@@ -255,6 +257,35 @@ export function CROnlineGameScreen({
       webrtcDisconnect();
     };
   }, [webrtcInit, webrtcDisconnect]);
+
+  // Prevent browser back button and refresh during game
+  useEffect(() => {
+    // Block back button by pushing state and handling popstate
+    const blockBackButton = () => {
+      window.history.pushState(null, '', window.location.href);
+    };
+
+    const handlePopState = () => {
+      blockBackButton();
+    };
+
+    // Warn on refresh/close
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+      return '';
+    };
+
+    // Initialize
+    blockBackButton();
+    window.addEventListener('popstate', handlePopState);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
 
   // Custom menu items for AppHeader
   const customMenuItems = useMemo(() => [
@@ -823,7 +854,7 @@ export function CROnlineGameScreen({
               width: '100%',
               height: '100%',
               objectFit: 'cover',
-              transform: localIsP1 ? 'scaleX(-1)' : 'none', // Mirror only if it's local player's camera
+              transform: 'none',
             }}
           />
           {/* P1 label */}
@@ -862,7 +893,7 @@ export function CROnlineGameScreen({
               width: '100%',
               height: '100%',
               objectFit: 'cover',
-              transform: !localIsP1 ? 'scaleX(-1)' : 'none', // Mirror only if it's local player's camera
+              transform: 'none',
             }}
           />
           {/* P2 label */}

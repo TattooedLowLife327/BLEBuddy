@@ -12,15 +12,83 @@ export interface SignalMessage {
   gameId: string;
 }
 
+// Camera preference types
+export type CameraFacing = 'user' | 'environment';
+
+export interface CameraDevice {
+  deviceId: string;
+  label: string;
+}
+
+// Get camera preference from localStorage
+// Returns either a facingMode ('user'/'environment') or a specific deviceId
+export function getCameraPreference(): string {
+  return localStorage.getItem('cameraPreference') || 'user';
+}
+
+// Set camera preference in localStorage
+export function setCameraPreference(preference: string): void {
+  localStorage.setItem('cameraPreference', preference);
+}
+
+// Get list of available video input devices
+export async function getAvailableCameras(): Promise<CameraDevice[]> {
+  try {
+    // Need to request permission first to get device labels
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    stream.getTracks().forEach(track => track.stop());
+
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices
+      .filter(device => device.kind === 'videoinput')
+      .map((device, index) => ({
+        deviceId: device.deviceId,
+        label: device.label || `Camera ${index + 1}`,
+      }));
+  } catch (err) {
+    console.error('Failed to enumerate cameras:', err);
+    return [];
+  }
+}
+
+// Check if a camera is available - required for online play
+export async function checkCameraAvailable(): Promise<{ available: boolean; error?: string }> {
+  try {
+    // Check if mediaDevices API is supported
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      return { available: false, error: 'Your browser does not support camera access. Please use Chrome, Edge, or Safari.' };
+    }
+
+    // Try to access the camera
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    stream.getTracks().forEach(track => track.stop());
+    return { available: true };
+  } catch (err: any) {
+    console.error('Camera check failed:', err);
+
+    if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+      return { available: false, error: 'No camera detected. A webcam is required for online play.' };
+    }
+    if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+      return { available: false, error: 'Camera access denied. Please allow camera access in your browser settings to play online.' };
+    }
+    if (err.name === 'NotReadableError') {
+      return { available: false, error: 'Camera is in use by another application. Please close other apps using the camera.' };
+    }
+
+    return { available: false, error: 'Could not access camera. Please check your camera connection and try again.' };
+  }
+}
+
 class WebRTCManager {
   private peerConnection: RTCPeerConnection | null = null;
   private localStream: MediaStream | null = null;
   private remoteStream: MediaStream | null = null;
   private signalChannel: ReturnType<typeof supabase.channel> | null = null;
-  
+
   private onRemoteStreamCallbacks: ((stream: MediaStream) => void)[] = [];
   private onConnectionStateCallbacks: ((state: RTCPeerConnectionState) => void)[] = [];
-  
+
   private localPlayerId: string = '';
   private remotePlayerId: string = '';
   private gameId: string = '';
@@ -56,18 +124,33 @@ class WebRTCManager {
       this.localStream = null;
     }
 
+    // Get user's camera preference
+    const preference = getCameraPreference();
+    console.log(`[WebRTC] Camera preference: ${preference}`);
+
+    // Build video constraints based on preference type
+    let videoConstraints: MediaTrackConstraints;
+
+    if (preference === 'user' || preference === 'environment') {
+      // Mobile-style: use facingMode
+      videoConstraints = { facingMode: preference, width: { ideal: 640 }, height: { ideal: 480 } };
+    } else {
+      // Desktop-style: use specific deviceId
+      videoConstraints = { deviceId: { exact: preference }, width: { ideal: 640 }, height: { ideal: 480 } };
+    }
+
     try {
       // Try with preferred constraints first
       this.localStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+        video: videoConstraints,
         audio: false,
       });
       return this.localStream;
     } catch (err: any) {
       console.error('Failed to get camera with constraints:', err);
 
-      // If NotReadableError, try with minimal constraints as fallback
-      if (err.name === 'NotReadableError' || err.name === 'AbortError') {
+      // If device not found or facingMode not supported, try with minimal constraints
+      if (err.name === 'NotReadableError' || err.name === 'AbortError' || err.name === 'OverconstrainedError' || err.name === 'NotFoundError') {
         console.log('Retrying with minimal video constraints...');
         try {
           this.localStream = await navigator.mediaDevices.getUserMedia({

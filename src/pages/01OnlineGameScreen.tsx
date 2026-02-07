@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { Bluetooth } from 'lucide-react';
 import { useBLE } from '../contexts/BLEContext';
 import { useWebRTC } from '../hooks/useWebRTC';
 import { isDevMode } from '../utils/devMode';
@@ -324,7 +325,7 @@ export function O1OnlineGameScreen({
   onGameComplete,
 }: GameScreenProps) {
   // BLE integration
-  const { lastThrow, isConnected, simulateThrow: bleSimulateThrow } = useBLE();
+  const { lastThrow, isConnected, simulateThrow: bleSimulateThrow, status: bleStatus, connect: bleConnect, disconnect: bleDisconnect } = useBLE();
   const devMode = isDevMode();
   const lastProcessedThrowRef = useRef<string | null>(null);
   const playerChangeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -343,10 +344,12 @@ export function O1OnlineGameScreen({
 
   const { localStream, remoteStream, initialize: webrtcInit, disconnect: webrtcDisconnect } = useWebRTC(webRTCOptions);
 
-  // Determine which player is p1/p2 based on initiator
-  const p1 = isInitiator ? localPlayer : remotePlayer;
-  const p2 = isInitiator ? remotePlayer : localPlayer;
-  const localIsP1 = isInitiator;
+  // Determine which player is p1/p2 based on startingPlayer (cork winner)
+  // P1 (LEFT) = whoever goes first (cork winner)
+  // P2 (RIGHT) = whoever goes second
+  const localIsP1 = startingPlayer === localPlayer.id;
+  const p1 = localIsP1 ? localPlayer : remotePlayer;
+  const p2 = localIsP1 ? remotePlayer : localPlayer;
 
   const resolvedGameType = useMemo(() => {
     const raw = gameType || gameConfig?.games?.find(entry => entry) || '501';
@@ -733,6 +736,41 @@ export function O1OnlineGameScreen({
     };
   }, [webrtcInit, webrtcDisconnect]);
 
+  // Prevent browser back button and refresh during game
+  useEffect(() => {
+    // Block back button by pushing state and handling popstate
+    const blockBackButton = () => {
+      window.history.pushState(null, '', window.location.href);
+    };
+
+    const handlePopState = () => {
+      blockBackButton();
+    };
+
+    // Warn on refresh/close
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+      return '';
+    };
+
+    // Initialize
+    blockBackButton();
+    window.addEventListener('popstate', handlePopState);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
+
+  // Refresh video handler
+  const handleRefreshVideo = useCallback(async () => {
+    await webrtcDisconnect();
+    await webrtcInit();
+  }, [webrtcDisconnect, webrtcInit]);
+
   const formatDart = (segment: string) => {
     if (segment === 'MISS') return 'MISS';
     if (segment === 'S25' || segment === 'D25') {
@@ -833,7 +871,7 @@ export function O1OnlineGameScreen({
               width: '100%',
               height: '100%',
               objectFit: 'cover',
-              transform: localIsP1 ? 'scaleX(-1)' : 'none',
+              transform: 'none',
               display: (localIsP1 ? localStream : remoteStream) ? 'block' : 'none',
             }}
           />
@@ -879,7 +917,7 @@ export function O1OnlineGameScreen({
               width: '100%',
               height: '100%',
               objectFit: 'cover',
-              transform: !localIsP1 ? 'scaleX(-1)' : 'none',
+              transform: 'none',
               display: (localIsP1 ? remoteStream : localStream) ? 'block' : 'none',
             }}
           />
@@ -1310,6 +1348,48 @@ export function O1OnlineGameScreen({
         )}
       </div>
 
+      {/* BLE Status - Top Left */}
+      <button
+        onClick={async () => {
+          if (isConnected) {
+            await bleDisconnect();
+          } else {
+            await bleConnect();
+          }
+        }}
+        disabled={bleStatus === 'connecting' || bleStatus === 'scanning'}
+        style={{
+          position: 'absolute',
+          top: `calc(20 * ${scale})`,
+          left: `calc(20 * ${scale})`,
+          zIndex: 100,
+          display: 'flex',
+          alignItems: 'center',
+          gap: `calc(6 * ${scale})`,
+          background: 'rgba(0, 0, 0, 0.5)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          border: 'none',
+          borderRadius: `calc(8 * ${scale})`,
+          padding: `calc(8 * ${scale}) calc(12 * ${scale})`,
+          cursor: bleStatus === 'connecting' || bleStatus === 'scanning' ? 'default' : 'pointer',
+        }}
+      >
+        <Bluetooth
+          size={16}
+          style={{
+            color: isConnected ? '#10b981' : bleStatus === 'connecting' || bleStatus === 'scanning' ? '#f59e0b' : '#ef4444',
+          }}
+        />
+        <span style={{
+          fontFamily: 'Helvetica, Arial, sans-serif',
+          fontSize: `calc(12 * ${scale})`,
+          color: isConnected ? '#10b981' : bleStatus === 'connecting' || bleStatus === 'scanning' ? '#f59e0b' : '#ef4444',
+        }}>
+          {isConnected ? 'Connected' : bleStatus === 'connecting' ? 'Connecting...' : bleStatus === 'scanning' ? 'Scanning...' : 'Disconnected'}
+        </span>
+      </button>
+
       {/* Hamburger Menu */}
       <div style={{ position: 'absolute', top: `calc(20 * ${scale})`, right: `calc(20 * ${scale})`, zIndex: 100 }}>
         <button
@@ -1346,12 +1426,25 @@ export function O1OnlineGameScreen({
               </button>
             )}
             <button
+              onClick={() => { handleRefreshVideo(); setMenuOpen(false); }}
+              style={{
+                width: '100%', padding: `calc(14 * ${scale}) calc(20 * ${scale})`,
+                background: 'transparent', border: 'none',
+                borderTop: devMode ? '1px solid rgba(255, 255, 255, 0.1)' : 'none',
+                color: '#FFFFFF',
+                fontFamily: FONT_NAME, fontSize: `calc(18 * ${scale})`, fontWeight: 500,
+                textAlign: 'left', cursor: 'pointer',
+              }}
+            >
+              Refresh Video
+            </button>
+            <button
               onClick={() => { handleUndo(); setMenuOpen(false); }}
               disabled={dartHistory.length === 0 || undosRemaining <= 0}
               style={{
                 width: '100%', padding: `calc(14 * ${scale}) calc(20 * ${scale})`,
                 background: 'transparent', border: 'none',
-                borderTop: devMode ? '1px solid rgba(255, 255, 255, 0.1)' : 'none',
+                borderTop: '1px solid rgba(255, 255, 255, 0.1)',
                 color: (dartHistory.length === 0 || undosRemaining <= 0) ? '#555' : '#FFFFFF',
                 fontFamily: FONT_NAME, fontSize: `calc(18 * ${scale})`, fontWeight: 500,
                 textAlign: 'left', cursor: (dartHistory.length === 0 || undosRemaining <= 0) ? 'not-allowed' : 'pointer',

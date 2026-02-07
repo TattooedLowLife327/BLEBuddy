@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Clock } from 'lucide-react';
+import { Clock, Camera } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '../components/ui/avatar';
 import { createClient } from '../utils/supabase/client';
 import { PlayerGameSetup } from '../components/PlayerGameSetup';
@@ -7,6 +7,7 @@ import { IncomingRequestModal } from '../components/IncomingRequestModal';
 import { AppHeader } from '../components/AppHeader';
 import { type GameData } from '../contexts/GameContext';
 import type { GameConfiguration } from '../types/game';
+import { checkCameraAvailable } from '../utils/webrtc/peerConnection';
 
 // Resolve profile pic URL from various formats
 const resolveProfilePicUrl = (profilepic: string | undefined): string | undefined => {
@@ -128,6 +129,8 @@ export function OnlineLobby({
   const [cardScale, setCardScale] = useState(1);
   const [blockingGame, setBlockingGame] = useState<{ id: string; status: string; created_at: string; completed_at: string | null } | null>(null);
   const [requestResultMessage, setRequestResultMessage] = useState<{ type: 'timeout' | 'declined'; name: string } | null>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [checkingCamera, setCheckingCamera] = useState(true);
   const outgoingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const supabase = createClient();
 
@@ -268,7 +271,7 @@ export function OnlineLobby({
 
   // Idle detection effect
   useEffect(() => {
-    if (!canAccess) return;
+    if (!canAccess || cameraError || checkingCamera) return;
 
     // Check for idle every 30 seconds
     idleCheckIntervalRef.current = setInterval(() => {
@@ -305,11 +308,29 @@ export function OnlineLobby({
       window.removeEventListener('keydown', handleActivity);
       window.removeEventListener('scroll', handleActivity, true);
     };
-  }, [canAccess, showIdleWarning, resetActivity, startIdleCountdown, supabase, userId]);
+  }, [canAccess, cameraError, checkingCamera, showIdleWarning, resetActivity, startIdleCountdown, supabase, userId]);
 
-  // Join lobby on mount
+  // Check camera availability on mount - required for online play
   useEffect(() => {
     if (!canAccess) return;
+
+    async function verifyCameraAccess() {
+      setCheckingCamera(true);
+      const result = await checkCameraAvailable();
+      if (!result.available) {
+        setCameraError(result.error || 'Camera access required for online play.');
+      } else {
+        setCameraError(null);
+      }
+      setCheckingCamera(false);
+    }
+
+    verifyCameraAccess();
+  }, [canAccess]);
+
+  // Join lobby on mount (only if camera is available)
+  useEffect(() => {
+    if (!canAccess || cameraError || checkingCamera) return;
 
     async function joinLobby() {
       try {
@@ -385,11 +406,11 @@ export function OnlineLobby({
           }
         });
     };
-  }, [canAccess, userId, userName, isYouthPlayer, isDoublesTeam, partnerId, partnerName]);
+  }, [canAccess, cameraError, checkingCamera, userId, userName, isYouthPlayer, isDoublesTeam, partnerId, partnerName]);
 
   // Heartbeat: update last_seen every 30 seconds
   useEffect(() => {
-    if (!canAccess) return;
+    if (!canAccess || cameraError || checkingCamera) return;
 
     const heartbeatInterval = setInterval(async () => {
       const { error } = await (supabase as any)
@@ -404,7 +425,7 @@ export function OnlineLobby({
     }, 30000); // 30 seconds
 
     return () => clearInterval(heartbeatInterval);
-  }, [canAccess, userId]);
+  }, [canAccess, cameraError, checkingCamera, userId]);
 
   // Sort players by status priority: waiting -> idle -> in_match
   const sortByStatus = (players: AvailablePlayer[]) => {
@@ -570,13 +591,13 @@ export function OnlineLobby({
 
   // Initial fetch only - no auto-polling
   useEffect(() => {
-    if (!canAccess) return;
+    if (!canAccess || cameraError || checkingCamera) return;
     fetchAvailablePlayers();
-  }, [canAccess]);
+  }, [canAccess, cameraError, checkingCamera]);
 
   // Listen for incoming game requests
   useEffect(() => {
-    if (!canAccess) return;
+    if (!canAccess || cameraError || checkingCamera) return;
 
     const supabaseAny = supabase as any;
     const gameChannel = supabaseAny
@@ -599,7 +620,7 @@ export function OnlineLobby({
     return () => {
       supabaseAny.removeChannel(gameChannel);
     };
-  }, [canAccess, supabase, userId]);
+  }, [canAccess, cameraError, checkingCamera, supabase, userId]);
 
   // Listen for response to our outgoing game request
   useEffect(() => {
@@ -963,6 +984,94 @@ export function OnlineLobby({
             >
               Go Back
             </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show camera check loading
+  if (checkingCamera) {
+    return (
+      <div className="h-screen w-full overflow-hidden bg-black flex items-center justify-center p-6">
+        <div className="max-w-md w-full">
+          <div
+            className="rounded-lg border p-8 text-center backdrop-blur-sm bg-white/5"
+            style={{
+              borderColor: accentColor,
+              boxShadow: `0 0 20px rgba(168, 85, 247, 0.3)`,
+            }}
+          >
+            <Camera className="w-12 h-12 mx-auto mb-4 text-white animate-pulse" />
+            <h2
+              className="text-2xl mb-4 text-white"
+              style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
+            >
+              Checking Camera...
+            </h2>
+            <p className="text-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+              Verifying camera access for online play.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show camera error if no camera available
+  if (cameraError) {
+    return (
+      <div className="h-screen w-full overflow-hidden bg-black flex items-center justify-center p-6">
+        <div className="max-w-md w-full">
+          <div
+            className="rounded-lg border p-8 text-center backdrop-blur-sm bg-white/5"
+            style={{
+              borderColor: '#dc2626',
+              boxShadow: `0 0 20px rgba(220, 38, 38, 0.3)`,
+            }}
+          >
+            <Camera className="w-12 h-12 mx-auto mb-4 text-red-500" />
+            <h2
+              className="text-2xl mb-4 text-white"
+              style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
+            >
+              Camera Required
+            </h2>
+            <p className="text-gray-300 mb-6" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+              {cameraError}
+            </p>
+            <div className="flex gap-3 justify-center">
+              <button
+                onClick={async () => {
+                  setCheckingCamera(true);
+                  const result = await checkCameraAvailable();
+                  if (!result.available) {
+                    setCameraError(result.error || 'Camera access required for online play.');
+                  } else {
+                    setCameraError(null);
+                  }
+                  setCheckingCamera(false);
+                }}
+                className="px-6 py-3 rounded-lg text-white transition-colors bg-zinc-700 hover:bg-zinc-600"
+                style={{
+                  fontFamily: 'Helvetica, Arial, sans-serif',
+                  fontWeight: 'bold',
+                }}
+              >
+                Try Again
+              </button>
+              <button
+                onClick={onBack}
+                className="px-6 py-3 rounded-lg text-white transition-colors"
+                style={{
+                  backgroundColor: '#dc2626',
+                  fontFamily: 'Helvetica, Arial, sans-serif',
+                  fontWeight: 'bold',
+                }}
+              >
+                Go Back
+              </button>
+            </div>
           </div>
         </div>
       </div>

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { getCameraPreference, setCameraPreference, getAvailableCameras, type CameraDevice } from '../utils/webrtc/peerConnection';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -8,6 +9,26 @@ interface SettingsModalProps {
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [cleared, setCleared] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [cameras, setCameras] = useState<CameraDevice[]>([]);
+  const [selectedCamera, setSelectedCamera] = useState<string>(getCameraPreference());
+  const [loadingCameras, setLoadingCameras] = useState(false);
+
+  // Load available cameras when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setLoadingCameras(true);
+      getAvailableCameras().then(devices => {
+        setCameras(devices);
+        setLoadingCameras(false);
+      });
+      setSelectedCamera(getCameraPreference());
+    }
+  }, [isOpen]);
+
+  const handleCameraChange = (value: string) => {
+    setSelectedCamera(value);
+    setCameraPreference(value);
+  };
 
   if (!isOpen) return null;
 
@@ -54,6 +75,43 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
         {/* Content */}
         <div className="p-4 space-y-4">
+          {/* Camera Selection Section */}
+          <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4">
+            <h3 className="text-white font-semibold mb-1">Camera Selection</h3>
+            <p className="text-zinc-400 text-sm mb-3">
+              Choose which camera to use for video calls.
+            </p>
+
+            {loadingCameras ? (
+              <div className="text-zinc-400 text-sm">Loading cameras...</div>
+            ) : (
+              <select
+                value={selectedCamera}
+                onChange={(e) => handleCameraChange(e.target.value)}
+                className="w-full px-3 py-2 bg-zinc-700 border border-zinc-600 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500"
+              >
+                {/* Mobile-friendly options */}
+                <option value="user">Front Camera (Selfie)</option>
+                <option value="environment">Back Camera (Rear)</option>
+
+                {/* Specific device options for desktop */}
+                {cameras.length > 0 && (
+                  <optgroup label="Available Devices">
+                    {cameras.map((camera) => (
+                      <option key={camera.deviceId} value={camera.deviceId}>
+                        {camera.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+            )}
+
+            <p className="text-zinc-500 text-xs mt-2">
+              On mobile: use Front/Back. On desktop: select your webcam.
+            </p>
+          </div>
+
           {/* Clear App Data Section */}
           <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4">
             <h3 className="text-white font-semibold mb-1">Clear App Data</h3>

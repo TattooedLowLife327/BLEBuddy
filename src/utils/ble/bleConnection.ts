@@ -177,6 +177,11 @@ class BLEConnection {
   private connectionTime: number = 0;  // For warmup period
   private readonly WARMUP_MS = 2000;   // Ignore events for 2 seconds after connection
   private readonly STORAGE_KEY = 'bb_last_ble_device';
+  private autoReconnectEnabled: boolean = true;  // Auto-reconnect on disconnect
+  private reconnectAttempts: number = 0;
+  private readonly MAX_RECONNECT_ATTEMPTS = 3;
+  private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+  private onConnectCallbacks: (() => void)[] = [];  // Called when connection starts (for camera check)
 
   onThrow(callback: ThrowCallback): void {
     this.onThrowCallbacks.push(callback);
@@ -194,8 +199,31 @@ class BLEConnection {
     this.onStatusChangeCallbacks = this.onStatusChangeCallbacks.filter(cb => cb !== callback);
   }
 
+  /**
+   * Register a callback to be called when connection process starts
+   * Use this for silent camera checks during pairing
+   */
+  onConnect(callback: () => void): void {
+    this.onConnectCallbacks.push(callback);
+  }
+
+  offConnect(callback: () => void): void {
+    this.onConnectCallbacks = this.onConnectCallbacks.filter(cb => cb !== callback);
+  }
+
+  private notifyConnect(): void {
+    this.onConnectCallbacks.forEach(cb => cb());
+  }
+
   private notifyStatusChange(status: BLEStatus): void {
     this.onStatusChangeCallbacks.forEach(cb => cb(status));
+  }
+
+  /**
+   * Enable or disable auto-reconnect on disconnection
+   */
+  setAutoReconnect(enabled: boolean): void {
+    this.autoReconnectEnabled = enabled;
   }
 
   resetDartCount(): void {
@@ -315,6 +343,7 @@ class BLEConnection {
       this.isConnected = true;
       this.dartCount = 0;
       this.connectionTime = Date.now();
+      this.reconnectAttempts = 0;  // Reset reconnect attempts on successful connection
       this.notifyStatusChange('connected');
 
       // Save device name for auto-reconnect
@@ -358,6 +387,9 @@ class BLEConnection {
         this.notifyStatusChange('error');
         return { success: false, error };
       }
+
+      // Notify that connection process is starting (for silent camera check)
+      this.notifyConnect();
 
       this.notifyStatusChange('scanning');
 
@@ -546,20 +578,66 @@ class BLEConnection {
   private handleDisconnection(): void {
     console.log('📴 Granboard disconnected');
     this.isConnected = false;
-    this.device = null;
     this.server = null;
     this.service = null;
     this.rxCharacteristic = null;
     this.txCharacteristic = null;
     this.dartCount = 0;
     this.notifyStatusChange('disconnected');
+
+    // Attempt auto-reconnect if enabled and we have a saved device
+    if (this.autoReconnectEnabled && this.reconnectAttempts < this.MAX_RECONNECT_ATTEMPTS) {
+      const savedName = localStorage.getItem(this.STORAGE_KEY);
+      if (savedName) {
+        this.reconnectAttempts++;
+        const delay = Math.min(1000 * this.reconnectAttempts, 5000); // 1s, 2s, 3s max 5s
+        console.log(`🔄 Auto-reconnect attempt ${this.reconnectAttempts}/${this.MAX_RECONNECT_ATTEMPTS} in ${delay}ms...`);
+
+        this.reconnectTimeout = setTimeout(async () => {
+          const result = await this.autoReconnect();
+          if (result.success) {
+            console.log('✅ Auto-reconnect successful');
+            this.reconnectAttempts = 0; // Reset on success
+          } else {
+            console.log('❌ Auto-reconnect failed:', result.error);
+            // handleDisconnection will be called again if still disconnected
+          }
+        }, delay);
+      }
+    } else if (this.reconnectAttempts >= this.MAX_RECONNECT_ATTEMPTS) {
+      console.log('❌ Max auto-reconnect attempts reached. Manual reconnection required.');
+      this.reconnectAttempts = 0;
+      this.device = null;
+    }
   }
 
   async disconnect(): Promise<void> {
+    // Disable auto-reconnect for intentional disconnection
+    this.autoReconnectEnabled = false;
+
+    // Clear any pending reconnect
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+    this.reconnectAttempts = 0;
+
     if (this.device?.gatt?.connected) {
       await this.device.gatt.disconnect();
     }
-    this.handleDisconnection();
+
+    // Reset auto-reconnect after intentional disconnect (for next session)
+    this.device = null;
+    this.isConnected = false;
+    this.server = null;
+    this.service = null;
+    this.rxCharacteristic = null;
+    this.txCharacteristic = null;
+    this.dartCount = 0;
+    this.notifyStatusChange('disconnected');
+
+    // Re-enable auto-reconnect for future connections
+    this.autoReconnectEnabled = true;
   }
 
   // ============================================================================

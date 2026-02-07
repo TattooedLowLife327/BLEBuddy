@@ -168,12 +168,35 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
 
   // Determine if local player is P1 or P2
   const amP1 = visiblePlayerId === player1.id;
-  const isP1Local = amP1;
+
+  // WHO SENT THE REQUEST (isInitiator) is ALWAYS on LEFT
+  // WHO ACCEPTED THE REQUEST is ALWAYS on RIGHT
+  // If I sent request (isInitiator=true): my camera on left, opponent on right
+  // If I accepted request (isInitiator=false): opponent camera on left (they sent it), my camera on right
+  const localIsLeft = isInitiator;
+
+  // Determine which player data goes on which side
+  const myPlayerData = amP1 ? player1 : player2;
+  const opponentData = amP1 ? player2 : player1;
+  const myPlayerName = amP1 ? player1Name : player2Name;
+  const opponentName = amP1 ? player2Name : player1Name;
+
+  // Left = request sender (initiator), Right = request accepter
+  const leftPlayerData = isInitiator ? myPlayerData : opponentData;
+  const rightPlayerData = isInitiator ? opponentData : myPlayerData;
+  const leftPlayerName = isInitiator ? myPlayerName : opponentName;
+  const rightPlayerName = isInitiator ? opponentName : myPlayerName;
+
+  // Map states to left/right based on which player is where
+  const getLeftState = () => leftPlayerData.id === player1.id ? p1State : p2State;
+  const getRightState = () => rightPlayerData.id === player1.id ? p1State : p2State;
+  const leftCamPopped = leftPlayerData.id === player1.id ? p1CamPopped : p2CamPopped;
+  const rightCamPopped = rightPlayerData.id === player1.id ? p1CamPopped : p2CamPopped;
 
   // Local player info for UserMenu
-  const localPlayerName = isP1Local ? player1Name : player2Name;
-  const localPlayerPic = isP1Local ? player1.profilepic : player2.profilepic;
-  const localPlayerColor = isP1Local ? player1.profilecolor : player2.profilecolor;
+  const localPlayerName = myPlayerName;
+  const localPlayerPic = myPlayerData.profilepic;
+  const localPlayerColor = myPlayerData.profilecolor;
 
   // Send cork throw to Supabase channel
   const sendCorkThrow = useCallback(async (score: number, wasValid: boolean, display: string) => {
@@ -290,6 +313,35 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
     };
   }, []);
 
+  // Prevent browser back button and refresh during cork
+  useEffect(() => {
+    // Block back button by pushing state and handling popstate
+    const blockBackButton = () => {
+      window.history.pushState(null, '', window.location.href);
+    };
+
+    const handlePopState = () => {
+      blockBackButton();
+    };
+
+    // Warn on refresh/close
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+      return '';
+    };
+
+    // Initialize
+    blockBackButton();
+    window.addEventListener('popstate', handlePopState);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
+
   // Attach local video stream
   useEffect(() => {
     if (localVideoRef.current && localStream) localVideoRef.current.srcObject = localStream;
@@ -396,16 +448,18 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
 
   // Determine states for UI
   const colorsRevealed = phase >= 2;
-  const p1HasThrown = p1State.status === 'thrown';
-  const p2HasThrown = p2State.status === 'thrown';
-  const p1IsWinner = winner === player1.id;
-  const p2IsWinner = winner === player2.id;
-  const p1IsLoser = winner !== null && !p1IsWinner;
-  const p2IsLoser = winner !== null && !p2IsWinner;
+  const leftState = getLeftState();
+  const rightState = getRightState();
+
+  // Winner/loser based on left/right positions
+  const leftIsWinner = winner === leftPlayerData.id;
+  const rightIsWinner = winner === rightPlayerData.id;
+  const leftIsLoser = winner !== null && !leftIsWinner;
+  const rightIsLoser = winner !== null && !rightIsWinner;
 
   // Active states for bars (colors show when phase >= 2 and not loser)
-  const p1Active = colorsRevealed && !p1IsLoser;
-  const p2Active = colorsRevealed && !p2IsLoser;
+  const leftActive = colorsRevealed && !leftIsLoser;
+  const rightActive = colorsRevealed && !rightIsLoser;
 
   return (
     <div ref={containerRef} className="fixed inset-0 bg-black z-50 flex flex-col overflow-hidden">
@@ -488,9 +542,45 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
 
       {/* Header */}
       <div style={{ position: 'relative', zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', height: '56px' }}>
-        <button onClick={() => setShowLeaveConfirm(true)} style={{ color: '#fff', background: 'none', border: 'none', cursor: 'pointer' }}>
-          <ChevronLeft size={24} />
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button onClick={() => setShowLeaveConfirm(true)} style={{ color: '#fff', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+            <ChevronLeft size={24} />
+          </button>
+          {/* BLE Status */}
+          <button
+            onClick={async () => {
+              if (isConnected) {
+                await bleDisconnect();
+              } else {
+                await connect();
+              }
+            }}
+            disabled={bleStatus === 'connecting' || bleStatus === 'scanning'}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: 'none',
+              border: 'none',
+              cursor: bleStatus === 'connecting' || bleStatus === 'scanning' ? 'default' : 'pointer',
+              padding: 0,
+            }}
+          >
+            <Bluetooth
+              size={16}
+              style={{
+                color: isConnected ? '#10b981' : bleStatus === 'connecting' || bleStatus === 'scanning' ? '#f59e0b' : '#ef4444',
+              }}
+            />
+            <span style={{
+              fontFamily: 'Helvetica, Arial, sans-serif',
+              fontSize: '12px',
+              color: isConnected ? '#10b981' : bleStatus === 'connecting' || bleStatus === 'scanning' ? '#f59e0b' : '#ef4444',
+            }}>
+              {isConnected ? 'Connected' : bleStatus === 'connecting' ? 'Connecting...' : bleStatus === 'scanning' ? 'Scanning...' : 'Disconnected'}
+            </span>
+          </button>
+        </div>
         <h1 style={{
           position: 'absolute',
           left: '50%',
@@ -556,7 +646,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
         </div>
       )}
 
-      {/* CAM 1 - flush left, 16:9 aspect ratio */}
+      {/* CAM 1 - flush left (REQUEST SENDER / INITIATOR) */}
       <div
         key={`cam1-${animKey}`}
         style={{
@@ -571,7 +661,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
         }}
       >
         {/* Winner overlay gradient */}
-        {p1IsWinner && (
+        {leftIsWinner && (
           <div style={{
             position: 'absolute',
             top: 0, right: 0, bottom: 0, left: 0,
@@ -579,15 +669,15 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
             borderTopRightRadius: `calc(10 * ${scale})`,
             borderBottomRightRadius: `calc(10 * ${scale})`,
             pointerEvents: 'none',
-            background: `linear-gradient(180deg, ${player1.profilecolor}BF 0%, ${player1.profilecolor}40 15%, transparent 25%)`,
-            borderTop: `2px solid ${player1.profilecolor}`,
-            borderRight: `2px solid ${player1.profilecolor}`,
-            borderBottom: `2px solid ${player1.profilecolor}`,
+            background: `linear-gradient(180deg, ${leftPlayerData.profilecolor}BF 0%, ${leftPlayerData.profilecolor}40 15%, transparent 25%)`,
+            borderTop: `2px solid ${leftPlayerData.profilecolor}`,
+            borderRight: `2px solid ${leftPlayerData.profilecolor}`,
+            borderBottom: `2px solid ${leftPlayerData.profilecolor}`,
             borderLeft: 'none',
             animation: 'winnerOmbre 0.5s ease-out forwards',
           }} />
         )}
-        {p1IsWinner && (
+        {leftIsWinner && (
           <div style={{ position: 'absolute', top: `calc(12 * ${scale})`, left: `calc(12 * ${scale})`, zIndex: 30 }}>
             <span style={{ color: '#fff', fontFamily: FONT_NAME, fontSize: `calc(28 * ${scale})`, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
               WINNER
@@ -606,18 +696,18 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
           alignItems: 'center',
           justifyContent: 'center',
           overflow: 'hidden',
-          border: `2px solid ${p1IsLoser ? GREY : (p1CamPopped ? player1.profilecolor : GREY)}`,
+          border: `2px solid ${leftIsLoser ? GREY : (leftCamPopped ? leftPlayerData.profilecolor : GREY)}`,
           borderLeft: 'none',
-          opacity: p1IsLoser ? 0.4 : 1,
-          transition: p1IsLoser ? 'opacity 0.15s ease, border-color 0.15s ease' : 'border-color 0.3s ease',
+          opacity: leftIsLoser ? 0.4 : 1,
+          transition: leftIsLoser ? 'opacity 0.15s ease, border-color 0.15s ease' : 'border-color 0.3s ease',
         }}>
-          {isP1Local ? (
+          {localIsLeft ? (
             localStream ? (
-              <video ref={localVideoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }} />
+              <video ref={localVideoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'none' }} />
             ) : (
               <Avatar style={{ width: '80px', height: '80px' }}>
-                <AvatarImage src={resolveProfilePicUrl(player1.profilepic)} />
-                <AvatarFallback className="bg-zinc-800 text-white text-2xl">{player1Name.charAt(0)}</AvatarFallback>
+                <AvatarImage src={resolveProfilePicUrl(leftPlayerData.profilepic)} />
+                <AvatarFallback className="bg-zinc-800 text-white text-2xl">{leftPlayerName.charAt(0)}</AvatarFallback>
               </Avatar>
             )
           ) : (
@@ -625,15 +715,15 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
               <video ref={remoteVideoRef} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : (
               <Avatar style={{ width: '80px', height: '80px' }}>
-                <AvatarImage src={resolveProfilePicUrl(player1.profilepic)} />
-                <AvatarFallback className="bg-zinc-800 text-white text-2xl">{player1Name.charAt(0)}</AvatarFallback>
+                <AvatarImage src={resolveProfilePicUrl(leftPlayerData.profilepic)} />
+                <AvatarFallback className="bg-zinc-800 text-white text-2xl">{leftPlayerName.charAt(0)}</AvatarFallback>
               </Avatar>
             )
           )}
         </div>
       </div>
 
-      {/* CAM 2 - flush right, 16:9 aspect ratio */}
+      {/* CAM 2 - flush right (REQUEST ACCEPTER) */}
       <div
         key={`cam2-${animKey}`}
         style={{
@@ -648,7 +738,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
         }}
       >
         {/* Winner overlay gradient */}
-        {p2IsWinner && (
+        {rightIsWinner && (
           <div style={{
             position: 'absolute',
             top: 0, right: 0, bottom: 0, left: 0,
@@ -656,15 +746,15 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
             borderTopLeftRadius: `calc(10 * ${scale})`,
             borderBottomLeftRadius: `calc(10 * ${scale})`,
             pointerEvents: 'none',
-            background: `linear-gradient(180deg, ${player2.profilecolor}BF 0%, ${player2.profilecolor}40 15%, transparent 25%)`,
-            borderTop: `2px solid ${player2.profilecolor}`,
-            borderLeft: `2px solid ${player2.profilecolor}`,
-            borderBottom: `2px solid ${player2.profilecolor}`,
+            background: `linear-gradient(180deg, ${rightPlayerData.profilecolor}BF 0%, ${rightPlayerData.profilecolor}40 15%, transparent 25%)`,
+            borderTop: `2px solid ${rightPlayerData.profilecolor}`,
+            borderLeft: `2px solid ${rightPlayerData.profilecolor}`,
+            borderBottom: `2px solid ${rightPlayerData.profilecolor}`,
             borderRight: 'none',
             animation: 'winnerOmbre 0.5s ease-out forwards',
           }} />
         )}
-        {p2IsWinner && (
+        {rightIsWinner && (
           <div style={{ position: 'absolute', top: `calc(12 * ${scale})`, right: `calc(12 * ${scale})`, zIndex: 30 }}>
             <span style={{ color: '#fff', fontFamily: FONT_NAME, fontSize: `calc(28 * ${scale})`, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
               WINNER
@@ -683,18 +773,18 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
           alignItems: 'center',
           justifyContent: 'center',
           overflow: 'hidden',
-          border: `2px solid ${p2IsLoser ? GREY : (p2CamPopped ? player2.profilecolor : GREY)}`,
+          border: `2px solid ${rightIsLoser ? GREY : (rightCamPopped ? rightPlayerData.profilecolor : GREY)}`,
           borderRight: 'none',
-          opacity: p2IsLoser ? 0.4 : 1,
-          transition: p2IsLoser ? 'opacity 0.15s ease, border-color 0.15s ease' : 'border-color 0.3s ease',
+          opacity: rightIsLoser ? 0.4 : 1,
+          transition: rightIsLoser ? 'opacity 0.15s ease, border-color 0.15s ease' : 'border-color 0.3s ease',
         }}>
-          {!isP1Local ? (
+          {!localIsLeft ? (
             localStream ? (
-              <video ref={localVideoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }} />
+              <video ref={localVideoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'none' }} />
             ) : (
               <Avatar style={{ width: '80px', height: '80px' }}>
-                <AvatarImage src={resolveProfilePicUrl(player2.profilepic)} />
-                <AvatarFallback className="bg-zinc-800 text-white text-2xl">{player2Name.charAt(0)}</AvatarFallback>
+                <AvatarImage src={resolveProfilePicUrl(rightPlayerData.profilepic)} />
+                <AvatarFallback className="bg-zinc-800 text-white text-2xl">{rightPlayerName.charAt(0)}</AvatarFallback>
               </Avatar>
             )
           ) : (
@@ -702,8 +792,8 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
               <video ref={remoteVideoRef} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : (
               <Avatar style={{ width: '80px', height: '80px' }}>
-                <AvatarImage src={resolveProfilePicUrl(player2.profilepic)} />
-                <AvatarFallback className="bg-zinc-800 text-white text-2xl">{player2Name.charAt(0)}</AvatarFallback>
+                <AvatarImage src={resolveProfilePicUrl(rightPlayerData.profilepic)} />
+                <AvatarFallback className="bg-zinc-800 text-white text-2xl">{rightPlayerName.charAt(0)}</AvatarFallback>
               </Avatar>
             )
           )}
@@ -712,7 +802,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
 
       {/* ===== PLAYER BARS ===== */}
 
-      {/* Player 1 Bar - Left */}
+      {/* Left Bar - REQUEST SENDER (INITIATOR) */}
       <div
         key={`bar1-${animKey}`}
         style={{
@@ -723,18 +813,18 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
           bottom: '0px',
           borderTopRightRadius: `calc(16 * ${scale})`,
           overflow: 'hidden',
-          borderTop: `2px solid ${p1Active ? player1.profilecolor : GREY}`,
-          borderRight: `2px solid ${p1Active ? player1.profilecolor : GREY}`,
+          borderTop: `2px solid ${leftActive ? leftPlayerData.profilecolor : GREY}`,
+          borderRight: `2px solid ${leftActive ? leftPlayerData.profilecolor : GREY}`,
           transform: phase >= 1 ? 'translateY(0)' : 'translateY(100%)',
           transition: 'transform 0.6s ease-out, border-color 0.3s ease',
           zIndex: 20,
         }}
       >
         <div style={{ position: 'absolute', inset: 0, background: greyGradient }} />
-        {colorsRevealed && p1Active && (
-          <div key={`p1-bar-${turnKey}`} style={{
+        {colorsRevealed && leftActive && (
+          <div key={`left-bar-${turnKey}`} style={{
             position: 'absolute', inset: 0,
-            background: `linear-gradient(180deg, ${player1.profilecolor}40 0%, ${player1.profilecolor}20 50%, transparent 100%)`,
+            background: `linear-gradient(180deg, ${leftPlayerData.profilecolor}40 0%, ${leftPlayerData.profilecolor}20 50%, transparent 100%)`,
             animation: 'colorSwipeUp 0.5s ease-out forwards',
           }} />
         )}
@@ -747,23 +837,23 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
           overflow: 'hidden',
         }}>
           <Avatar className="w-full h-full">
-            <AvatarImage src={resolveProfilePicUrl(player1.profilepic)} />
-            <AvatarFallback className="bg-zinc-800 text-white">{player1Name.charAt(0)}</AvatarFallback>
+            <AvatarImage src={resolveProfilePicUrl(leftPlayerData.profilepic)} />
+            <AvatarFallback className="bg-zinc-800 text-white">{leftPlayerName.charAt(0)}</AvatarFallback>
           </Avatar>
         </div>
         {/* Avatar color overlay */}
-        {colorsRevealed && p1Active && (
-          <div key={`p1-avatar-${turnKey}`} style={{
+        {colorsRevealed && leftActive && (
+          <div key={`left-avatar-${turnKey}`} style={{
             position: 'absolute',
             width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
             left: `calc(${FIGMA.avatarLeft} * ${scale})`, top: '50%', transform: 'translateY(-50%)',
-            background: '#000', border: `3px solid ${player1.profilecolor}`, borderRadius: '50%', zIndex: 2,
+            background: '#000', border: `3px solid ${leftPlayerData.profilecolor}`, borderRadius: '50%', zIndex: 2,
             overflow: 'hidden',
             animation: 'colorSwipeUp 0.5s ease-out forwards',
           }}>
             <Avatar className="w-full h-full">
-              <AvatarImage src={resolveProfilePicUrl(player1.profilepic)} />
-              <AvatarFallback className="bg-zinc-800 text-white">{player1Name.charAt(0)}</AvatarFallback>
+              <AvatarImage src={resolveProfilePicUrl(leftPlayerData.profilepic)} />
+              <AvatarFallback className="bg-zinc-800 text-white">{leftPlayerName.charAt(0)}</AvatarFallback>
             </Avatar>
           </div>
         )}
@@ -774,9 +864,9 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
         }}>
           <span style={{
             fontFamily: FONT_NAME, fontWeight: 400, fontSize: `calc(${FIGMA.nameSize} * ${scale})`,
-            color: p1Active ? '#FFFFFF' : GREY,
+            color: leftActive ? '#FFFFFF' : GREY,
           }}>
-            {player1Name}
+            {leftPlayerName}
           </span>
         </div>
         {/* Score */}
@@ -785,14 +875,14 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
           top: '50%', transform: 'translateY(-50%)',
           fontFamily: FONT_SCORE, fontWeight: 300, fontSize: `calc(${FIGMA.scoreSize} * ${scale})`,
           lineHeight: 1,
-          color: p1State.status === 'thrown' && p1Active ? player1.profilecolor : (p1Active ? '#FFFFFF' : GREY),
-          textShadow: p1Active ? '-6px 6px 9.7px rgba(0, 0, 0, 0.78)' : 'none', zIndex: 3,
+          color: leftState.status === 'thrown' && leftActive ? leftPlayerData.profilecolor : (leftActive ? '#FFFFFF' : GREY),
+          textShadow: leftActive ? '-6px 6px 9.7px rgba(0, 0, 0, 0.78)' : 'none', zIndex: 3,
         }}>
-          {getScoreDisplay(p1State, player1.id)}
+          {getScoreDisplay(leftState, leftPlayerData.id)}
         </span>
       </div>
 
-      {/* Player 2 Bar - Right */}
+      {/* Right Bar - REQUEST ACCEPTER */}
       <div
         key={`bar2-${animKey}`}
         style={{
@@ -803,18 +893,18 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
           bottom: '0px',
           borderTopLeftRadius: `calc(16 * ${scale})`,
           overflow: 'hidden',
-          borderTop: `2px solid ${p2Active ? player2.profilecolor : GREY}`,
-          borderLeft: `2px solid ${p2Active ? player2.profilecolor : GREY}`,
+          borderTop: `2px solid ${rightActive ? rightPlayerData.profilecolor : GREY}`,
+          borderLeft: `2px solid ${rightActive ? rightPlayerData.profilecolor : GREY}`,
           transform: phase >= 1 ? 'translateY(0)' : 'translateY(100%)',
           transition: 'transform 0.6s ease-out, border-color 0.3s ease',
           zIndex: 20,
         }}
       >
         <div style={{ position: 'absolute', inset: 0, background: greyGradient }} />
-        {colorsRevealed && p2Active && (
-          <div key={`p2-bar-${turnKey}`} style={{
+        {colorsRevealed && rightActive && (
+          <div key={`right-bar-${turnKey}`} style={{
             position: 'absolute', inset: 0,
-            background: `linear-gradient(180deg, ${player2.profilecolor}40 0%, ${player2.profilecolor}20 50%, transparent 100%)`,
+            background: `linear-gradient(180deg, ${rightPlayerData.profilecolor}40 0%, ${rightPlayerData.profilecolor}20 50%, transparent 100%)`,
             animation: 'colorSwipeUp 0.5s ease-out forwards',
           }} />
         )}
@@ -824,10 +914,10 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
           top: '50%', transform: 'translateY(-50%)',
           fontFamily: FONT_SCORE, fontWeight: 300, fontSize: `calc(${FIGMA.scoreSize} * ${scale})`,
           lineHeight: 1,
-          color: p2State.status === 'thrown' && p2Active ? player2.profilecolor : (p2Active ? '#FFFFFF' : GREY),
-          textShadow: p2Active ? '-6px 6px 9.7px rgba(0, 0, 0, 0.78)' : 'none', zIndex: 3,
+          color: rightState.status === 'thrown' && rightActive ? rightPlayerData.profilecolor : (rightActive ? '#FFFFFF' : GREY),
+          textShadow: rightActive ? '-6px 6px 9.7px rgba(0, 0, 0, 0.78)' : 'none', zIndex: 3,
         }}>
-          {getScoreDisplay(p2State, player2.id)}
+          {getScoreDisplay(rightState, rightPlayerData.id)}
         </span>
         {/* Name */}
         <div style={{
@@ -837,9 +927,9 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
         }}>
           <span style={{
             fontFamily: FONT_NAME, fontWeight: 400, fontSize: `calc(${FIGMA.nameSize} * ${scale})`,
-            color: p2Active ? '#FFFFFF' : GREY,
+            color: rightActive ? '#FFFFFF' : GREY,
           }}>
-            {player2Name}
+            {rightPlayerName}
           </span>
         </div>
         {/* Avatar grey base */}
@@ -851,23 +941,23 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
           overflow: 'hidden',
         }}>
           <Avatar className="w-full h-full">
-            <AvatarImage src={resolveProfilePicUrl(player2.profilepic)} />
-            <AvatarFallback className="bg-zinc-800 text-white">{player2Name.charAt(0)}</AvatarFallback>
+            <AvatarImage src={resolveProfilePicUrl(rightPlayerData.profilepic)} />
+            <AvatarFallback className="bg-zinc-800 text-white">{rightPlayerName.charAt(0)}</AvatarFallback>
           </Avatar>
         </div>
         {/* Avatar color overlay */}
-        {colorsRevealed && p2Active && (
-          <div key={`p2-avatar-${turnKey}`} style={{
+        {colorsRevealed && rightActive && (
+          <div key={`right-avatar-${turnKey}`} style={{
             position: 'absolute',
             width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
             right: `calc(${FIGMA.avatarLeft} * ${scale})`, top: '50%', transform: 'translateY(-50%)',
-            background: '#000', border: `3px solid ${player2.profilecolor}`, borderRadius: '50%', zIndex: 2,
+            background: '#000', border: `3px solid ${rightPlayerData.profilecolor}`, borderRadius: '50%', zIndex: 2,
             overflow: 'hidden',
             animation: 'colorSwipeUp 0.5s ease-out forwards',
           }}>
             <Avatar className="w-full h-full">
-              <AvatarImage src={resolveProfilePicUrl(player2.profilepic)} />
-              <AvatarFallback className="bg-zinc-800 text-white">{player2Name.charAt(0)}</AvatarFallback>
+              <AvatarImage src={resolveProfilePicUrl(rightPlayerData.profilepic)} />
+              <AvatarFallback className="bg-zinc-800 text-white">{rightPlayerName.charAt(0)}</AvatarFallback>
             </Avatar>
           </div>
         )}
