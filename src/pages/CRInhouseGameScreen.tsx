@@ -227,7 +227,6 @@ export function CRInhouseGameScreen({
   const isSoloMode = playerMode === 'solo';
 
   // Build players object from props or defaults
-  console.log('[DEBUG] player1.profileColor raw:', JSON.stringify(player1?.profileColor), 'length:', player1?.profileColor?.length, 'type:', typeof player1?.profileColor);
   const PLAYERS = useMemo(() => ({
     p1: player1 ? {
       id: player1.id,

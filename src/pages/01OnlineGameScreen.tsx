@@ -6,6 +6,7 @@ import { isDevMode } from '../utils/devMode';
 import type { DartThrowData } from '../utils/ble/bleConnection';
 import type { GameConfiguration, GameInOut } from '../types/game';
 import { getCheckoutSuggestion } from '../utils/checkoutSolver';
+import { createClient } from '../utils/supabase/client';
 
 // Resolve profile pic URL from various formats
 const resolveProfilePicUrl = (profilepic: string | undefined): string | undefined => {
@@ -351,6 +352,8 @@ export function O1OnlineGameScreen({
   startingPlayer,
   onGameComplete,
 }: GameScreenProps) {
+  const supabase = createClient();
+
   // BLE integration
   const { lastThrow, isConnected, simulateThrow: bleSimulateThrow, status: bleStatus, connect: bleConnect, disconnect: bleDisconnect, clearLEDs } = useBLE();
   const devMode = isDevMode();
@@ -597,8 +600,21 @@ export function O1OnlineGameScreen({
     }
   }, [showPlayerChange, currentThrower, p1ThrewThisRound, p2ThrewThisRound, isOhOneGame, eightyPercentTriggered, p1Score, p2Score, eightyPercentThreshold, p1DartsThrown, p2DartsThrown, startScore, currentRound, gameWinner, p1ScoreReachedRound, p2ScoreReachedRound]);
 
-  const throwDart = useCallback((segment: string, score: number, multiplier: number) => {
+  // Is it local player's turn?
+  const p1Active = currentThrower === 'p1';
+  const p2Active = currentThrower === 'p2';
+  const isLocalTurn = (localIsP1 && p1Active) || (!localIsP1 && p2Active);
+
+  // Realtime channel for syncing throws
+  const throwChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  const throwDart = useCallback((segment: string, score: number, multiplier: number, isLocal: boolean = true) => {
     if (currentDarts.length >= 3 || showPlayerChange || !introComplete) return;
+
+    // Only allow throws from the current thrower
+    const expectedLocal = (localIsP1 && currentThrower === 'p1') || (!localIsP1 && currentThrower === 'p2');
+    if (isLocal !== expectedLocal) return;
+
     const hasStarted = currentThrower === 'p1' ? p1HasStarted : p2HasStarted;
     const setHasStarted = currentThrower === 'p1' ? setP1HasStarted : setP2HasStarted;
     const snapshot: DartSnapshot = {
@@ -635,6 +651,16 @@ export function O1OnlineGameScreen({
     const newRoundScore = roundScore + effectiveScore;
     if (currentThrower === 'p1') setP1DartsThrown(prev => prev + 1);
     else setP2DartsThrown(prev => prev + 1);
+
+    // Broadcast throw to opponent if local
+    if (isLocal && throwChannelRef.current) {
+      throwChannelRef.current.send({
+        type: 'broadcast',
+        event: 'dart_throw',
+        payload: { playerId: localPlayer.id, segment, score, multiplier },
+      });
+    }
+
     if (isBust) {
       setCurrentDarts(newDarts);
       const achievement = detectAchievement(newDarts, newRoundScore, true, false);
@@ -643,6 +669,14 @@ export function O1OnlineGameScreen({
       playerChangeTimeoutRef.current = setTimeout(() => {
         playerChangeTimeoutRef.current = null;
         setShowPlayerChange(true);
+        // Broadcast turn end if local
+        if (isLocal && throwChannelRef.current) {
+          throwChannelRef.current.send({
+            type: 'broadcast',
+            event: 'turn_end',
+            payload: { playerId: localPlayer.id },
+          });
+        }
       }, 3000);
       return;
     }
@@ -673,6 +707,14 @@ export function O1OnlineGameScreen({
           playerChangeTimeoutRef.current = setTimeout(() => {
             playerChangeTimeoutRef.current = null;
             setShowPlayerChange(true);
+            // Broadcast turn end if local
+            if (isLocal && throwChannelRef.current) {
+              throwChannelRef.current.send({
+                type: 'broadcast',
+                event: 'turn_end',
+                payload: { playerId: localPlayer.id },
+              });
+            }
           }, 3000);
         }
         return;
@@ -688,12 +730,51 @@ export function O1OnlineGameScreen({
       playerChangeTimeoutRef.current = setTimeout(() => {
         playerChangeTimeoutRef.current = null;
         setShowPlayerChange(true);
+        // Broadcast turn end if local
+        if (isLocal && throwChannelRef.current) {
+          throwChannelRef.current.send({
+            type: 'broadcast',
+            event: 'turn_end',
+            payload: { playerId: localPlayer.id },
+          });
+        }
       }, 3000);
     }
-  }, [currentDarts, currentScore, currentThrower, roundScore, showPlayerChange, introComplete, p1Score, p2Score, p1HasStarted, p2HasStarted, inMode, outMode, detectAchievement, triggerAchievement, currentRound]);
+  }, [currentDarts, currentScore, currentThrower, roundScore, showPlayerChange, introComplete, p1Score, p2Score, p1HasStarted, p2HasStarted, inMode, outMode, detectAchievement, triggerAchievement, currentRound, localIsP1, localPlayer.id]);
+
+  // Keep ref in sync for broadcast handler
+  const throwDartRef = useRef(throwDart);
+  useEffect(() => { throwDartRef.current = throwDart; }, [throwDart]);
+
+  // Broadcast channel for syncing throws with opponent
+  useEffect(() => {
+    throwChannelRef.current = supabase.channel(`o1:${gameId}`, {
+      config: { broadcast: { self: false } },
+    });
+
+    throwChannelRef.current
+      .on('broadcast', { event: 'dart_throw' }, ({ payload }) => {
+        if (payload.playerId !== localPlayer.id) {
+          throwDartRef.current(payload.segment, payload.score, payload.multiplier, false);
+        }
+      })
+      .on('broadcast', { event: 'turn_end' }, ({ payload }) => {
+        if (payload.playerId !== localPlayer.id) {
+          setShowPlayerChange(true);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      throwChannelRef.current?.unsubscribe();
+    };
+  }, [gameId, localPlayer.id]);
 
   const endTurnWithMisses = useCallback(() => {
     if (showPlayerChange || !introComplete || showWinnerScreen) return;
+    // Only local player can end turn with misses
+    const expectedLocal = (localIsP1 && currentThrower === 'p1') || (!localIsP1 && currentThrower === 'p2');
+    if (!expectedLocal) return;
     // Clear any pending player change timeout (button press = instant change)
     if (playerChangeTimeoutRef.current) {
       clearTimeout(playerChangeTimeoutRef.current);
@@ -711,21 +792,30 @@ export function O1OnlineGameScreen({
     const remaining = Math.max(0, 3 - currentDarts.length);
     if (remaining === 0) {
       setShowPlayerChange(true);
-      return;
-    }
-    const misses = Array.from({ length: remaining }, () => ({ segment: 'MISS', score: 0, multiplier: 0 }));
-    setCurrentDarts([...currentDarts, ...misses]);
-    if (currentThrower === 'p1') {
-      setP1DartsThrown(prev => prev + remaining);
     } else {
-      setP2DartsThrown(prev => prev + remaining);
+      const misses = Array.from({ length: remaining }, () => ({ segment: 'MISS', score: 0, multiplier: 0 }));
+      setCurrentDarts([...currentDarts, ...misses]);
+      if (currentThrower === 'p1') {
+        setP1DartsThrown(prev => prev + remaining);
+      } else {
+        setP2DartsThrown(prev => prev + remaining);
+      }
+      setShowPlayerChange(true);
     }
-    setShowPlayerChange(true);
-  }, [activeAnimation, currentDarts, currentThrower, introComplete, showPlayerChange, showWinnerScreen]);
+    // Broadcast turn end to opponent
+    if (throwChannelRef.current) {
+      throwChannelRef.current.send({
+        type: 'broadcast',
+        event: 'turn_end',
+        payload: { playerId: localPlayer.id },
+      });
+    }
+  }, [activeAnimation, currentDarts, currentThrower, introComplete, localIsP1, localPlayer.id, showPlayerChange, showWinnerScreen]);
 
   // Handle BLE throws
   useEffect(() => {
     if (!lastThrow) return;
+    if (!isLocalTurn) return;
     if (lastThrow.timestamp === lastProcessedThrowRef.current) return;
     lastProcessedThrowRef.current = lastThrow.timestamp;
     if (lastThrow.segmentType === 'BUTTON' || lastThrow.segment === 'BTN') {
@@ -742,8 +832,8 @@ export function O1OnlineGameScreen({
       score = 50;
     }
 
-    throwDart(segment, score, lastThrow.multiplier);
-  }, [lastThrow, throwDart, endTurnWithMisses, splitBull]);
+    throwDart(segment, score, lastThrow.multiplier, true);
+  }, [lastThrow, throwDart, endTurnWithMisses, splitBull, isLocalTurn]);
 
   // Dev mode throw simulator
   const handleDevSimulateThrow = useCallback(() => {
@@ -810,8 +900,6 @@ export function O1OnlineGameScreen({
     return segment;
   };
 
-  const p1Active = currentThrower === 'p1';
-  const p2Active = currentThrower === 'p2';
   const greyGradient = 'linear-gradient(179.4deg, rgba(126, 126, 126, 0.2) 0.52%, rgba(0, 0, 0, 0.2) 95.46%)';
 
   // Track previous thrower for exit animations

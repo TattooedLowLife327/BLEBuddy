@@ -459,6 +459,7 @@ export function CROnlineGameScreen({
 
   // Realtime channel for syncing throws
   const throwChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const applyThrowRef = useRef<(segment: string, multiplier: number, isLocal: boolean) => void>(() => {});
 
   useEffect(() => {
     throwChannelRef.current = supabase.channel(`cricket:${gameId}`, {
@@ -469,7 +470,7 @@ export function CROnlineGameScreen({
       .on('broadcast', { event: 'dart_throw' }, ({ payload }) => {
         // Opponent threw - apply the throw locally
         if (payload.playerId !== localPlayer.id) {
-          applyThrow(payload.segment, payload.multiplier, false);
+          applyThrowRef.current(payload.segment, payload.multiplier, false);
         }
       })
       .on('broadcast', { event: 'turn_end' }, ({ payload }) => {
@@ -603,6 +604,9 @@ export function CROnlineGameScreen({
       }, 3000);
     }
   }, [currentDarts, currentThrower, introComplete, showPlayerChange, showWinnerScreen, p1Score, p2Score, marks, localIsP1, localPlayer.id, currentRound]);
+
+  // Keep ref in sync so broadcast handler always has latest applyThrow
+  useEffect(() => { applyThrowRef.current = applyThrow; }, [applyThrow]);
 
   const endTurnWithMisses = useCallback(() => {
     if (showPlayerChange || !introComplete || showWinnerScreen) return;
