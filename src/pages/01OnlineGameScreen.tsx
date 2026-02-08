@@ -347,7 +347,11 @@ export function O1OnlineGameScreen({
   // Determine which player is p1/p2 based on startingPlayer (cork winner)
   // P1 (LEFT) = whoever goes first (cork winner)
   // P2 (RIGHT) = whoever goes second
-  const localIsP1 = startingPlayer === localPlayer.id;
+  // startingPlayer is 'p1' or 'p2' where p1=initiator, p2=accepter (from App.tsx mapping)
+  // isInitiator tells us if the local player is the initiator (p1 in App.tsx's convention)
+  const localIsP1 = startingPlayer
+    ? startingPlayer === (isInitiator ? 'p1' : 'p2')
+    : isInitiator;
   const p1 = localIsP1 ? localPlayer : remotePlayer;
   const p2 = localIsP1 ? remotePlayer : localPlayer;
 
@@ -361,7 +365,7 @@ export function O1OnlineGameScreen({
 
   const [p1Score, setP1Score] = useState(startScore);
   const [p2Score, setP2Score] = useState(startScore);
-  const [currentThrower, setCurrentThrower] = useState<'p1' | 'p2'>(() => startingPlayer || 'p1');
+  const [currentThrower, setCurrentThrower] = useState<'p1' | 'p2'>('p1');
   const [currentDarts, setCurrentDarts] = useState<DartThrow[]>([]);
   const [roundScore, setRoundScore] = useState(0);
   const [showPlayerChange, setShowPlayerChange] = useState(false);
@@ -1189,6 +1193,9 @@ export function O1OnlineGameScreen({
         bottom: '0px',
         borderTopRightRadius: `calc(16 * ${scale})`,
         overflow: 'hidden',
+        borderTop: `2px solid ${introComplete && p1Active ? p1.accentColor : INACTIVE}`,
+        borderRight: `2px solid ${introComplete && p1Active ? p1.accentColor : INACTIVE}`,
+        transition: 'border-color 0.3s ease',
       }}>
         <div style={{ position: 'absolute', inset: 0, background: greyGradient }} />
         {introComplete && p1Active && (
@@ -1272,6 +1279,9 @@ export function O1OnlineGameScreen({
         bottom: '0px',
         borderTopLeftRadius: `calc(16 * ${scale})`,
         overflow: 'hidden',
+        borderTop: `2px solid ${introComplete && p2Active ? p2.accentColor : INACTIVE}`,
+        borderLeft: `2px solid ${introComplete && p2Active ? p2.accentColor : INACTIVE}`,
+        transition: 'border-color 0.3s ease',
       }}>
         <div style={{ position: 'absolute', inset: 0, background: greyGradient }} />
         {introComplete && p2Active && (
@@ -1587,7 +1597,7 @@ export function O1OnlineGameScreen({
                     setP2HasStarted(false);
                     setDartHistory([]);
                     setUndosRemaining(3);
-                    setCurrentThrower(startingPlayer || 'p1');
+                    setCurrentThrower('p1');
                     setShowGoodLuck(true);
                     setIntroComplete(false);
                     setP1DartsThrown(0);

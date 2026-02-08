@@ -70,7 +70,7 @@ interface CROnlineGameScreenProps {
     profilePic?: string;
     accentColor: string;
   };
-  isInitiator: boolean; // true = local is p1, false = local is p2
+  isInitiator: boolean; // true = local sent the challenge
   onLeaveMatch: () => void;
   startingPlayer?: PlayerId;
   onGameComplete?: (winner: PlayerId) => void;
@@ -202,7 +202,11 @@ export function CROnlineGameScreen({
   // Determine which player is p1/p2 based on startingPlayer (cork winner)
   // P1 (LEFT) = whoever goes first (cork winner)
   // P2 (RIGHT) = whoever goes second
-  const localIsP1 = startingPlayer === localPlayer.id;
+  // startingPlayer is 'p1' or 'p2' where p1=initiator, p2=accepter (from App.tsx mapping)
+  // isInitiator tells us if the local player is the initiator (p1 in App.tsx's convention)
+  const localIsP1 = startingPlayer
+    ? startingPlayer === (isInitiator ? 'p1' : 'p2')
+    : isInitiator;
   const p1 = localIsP1 ? localPlayer : remotePlayer;
   const p2 = localIsP1 ? remotePlayer : localPlayer;
 
@@ -321,12 +325,11 @@ export function CROnlineGameScreen({
   const [p2Score, setP2Score] = useState(0);
 
   // Game flow state
-  const [currentThrower, setCurrentThrower] = useState<'p1' | 'p2'>(() => startingPlayer || 'p1');
+  const [currentThrower, setCurrentThrower] = useState<'p1' | 'p2'>('p1');
   const [currentDarts, setCurrentDarts] = useState<DartThrow[]>([]);
   const [showPlayerChange, setShowPlayerChange] = useState(false);
   const [introComplete, setIntroComplete] = useState(false);
   const [showGoodLuck, setShowGoodLuck] = useState(true);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [currentRound, setCurrentRound] = useState(1);
   const [roundAnimState, setRoundAnimState] = useState<'in' | 'visible' | 'out'>('in');
   const [roundKey, setRoundKey] = useState(0);
@@ -857,25 +860,6 @@ export function CROnlineGameScreen({
               transform: 'none',
             }}
           />
-          {/* P1 label */}
-          <div style={{
-            position: 'absolute',
-            bottom: `calc(100 * ${scale})`,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            background: 'rgba(0, 0, 0, 0.7)',
-            padding: `calc(8 * ${scale}) calc(16 * ${scale})`,
-            borderRadius: `calc(8 * ${scale})`,
-            border: `2px solid ${p1.accentColor}`,
-          }}>
-            <span style={{
-              fontFamily: FONT_NAME,
-              fontSize: `calc(20 * ${scale})`,
-              color: '#fff',
-            }}>
-              {p1.name}{localIsP1 ? ' (YOU)' : ''}
-            </span>
-          </div>
         </div>
 
         {/* Right half - P2's camera */}
@@ -896,25 +880,6 @@ export function CROnlineGameScreen({
               transform: 'none',
             }}
           />
-          {/* P2 label */}
-          <div style={{
-            position: 'absolute',
-            bottom: `calc(100 * ${scale})`,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            background: 'rgba(0, 0, 0, 0.7)',
-            padding: `calc(8 * ${scale}) calc(16 * ${scale})`,
-            borderRadius: `calc(8 * ${scale})`,
-            border: `2px solid ${p2.accentColor}`,
-          }}>
-            <span style={{
-              fontFamily: FONT_NAME,
-              fontSize: `calc(20 * ${scale})`,
-              color: '#fff',
-            }}>
-              {p2.name}{!localIsP1 ? ' (YOU)' : ''}
-            </span>
-          </div>
           {/* Connection status indicator */}
           {!isOpponentOnline && (
             <div style={{
@@ -1137,6 +1102,9 @@ export function CROnlineGameScreen({
         bottom: '0px',
         borderTopRightRadius: `calc(16 * ${scale})`,
         overflow: 'hidden',
+        borderTop: `2px solid ${introComplete && p1Active ? p1.accentColor : INACTIVE}`,
+        borderRight: `2px solid ${introComplete && p1Active ? p1.accentColor : INACTIVE}`,
+        transition: 'border-color 0.3s ease',
       }}>
         <div style={{ position: 'absolute', inset: 0, background: greyGradient }} />
         {introComplete && p1Active && (
@@ -1220,6 +1188,9 @@ export function CROnlineGameScreen({
         bottom: '0px',
         borderTopLeftRadius: `calc(16 * ${scale})`,
         overflow: 'hidden',
+        borderTop: `2px solid ${introComplete && p2Active ? p2.accentColor : INACTIVE}`,
+        borderLeft: `2px solid ${introComplete && p2Active ? p2.accentColor : INACTIVE}`,
+        transition: 'border-color 0.3s ease',
       }}>
         <div style={{ position: 'absolute', inset: 0, background: greyGradient }} />
         {introComplete && p2Active && (
@@ -1292,43 +1263,6 @@ export function CROnlineGameScreen({
             border: `3px solid ${p2.accentColor}`, borderRadius: '50%', zIndex: 2,
             animation: p2Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
           }} />
-        )}
-      </div>
-
-      {/* Hamburger Menu */}
-      <div style={{ position: 'absolute', top: `calc(20 * ${scale})`, right: `calc(20 * ${scale})`, zIndex: 100 }}>
-        <button
-          onClick={() => setMenuOpen(!menuOpen)}
-          style={{
-            width: `calc(44 * ${scale})`, height: `calc(44 * ${scale})`,
-            background: 'rgba(0, 0, 0, 0.5)', border: 'none', cursor: 'pointer',
-            display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
-            gap: `calc(6 * ${scale})`, padding: `calc(8 * ${scale})`, borderRadius: `calc(8 * ${scale})`,
-          }}
-        >
-          <span style={{ width: `calc(28 * ${scale})`, height: '3px', background: '#FFF', borderRadius: '2px' }} />
-          <span style={{ width: `calc(28 * ${scale})`, height: '3px', background: '#FFF', borderRadius: '2px' }} />
-          <span style={{ width: `calc(28 * ${scale})`, height: '3px', background: '#FFF', borderRadius: '2px' }} />
-        </button>
-        {menuOpen && (
-          <div style={{
-            position: 'absolute', top: `calc(50 * ${scale})`, right: 0,
-            background: 'rgba(0, 0, 0, 0.9)', backdropFilter: 'blur(12px)',
-            borderRadius: `calc(8 * ${scale})`, border: '1px solid rgba(255, 255, 255, 0.1)',
-            overflow: 'hidden', minWidth: `calc(160 * ${scale})`,
-          }}>
-            <button
-              onClick={async () => { setMenuOpen(false); await leaveMatch(); onLeaveMatch(); }}
-              style={{
-                width: '100%', padding: `calc(14 * ${scale}) calc(20 * ${scale})`,
-                background: 'transparent', border: 'none', color: '#FF4444',
-                fontFamily: FONT_NAME, fontSize: `calc(18 * ${scale})`, fontWeight: 500,
-                textAlign: 'left', cursor: 'pointer',
-              }}
-            >
-              Leave Game
-            </button>
-          </div>
         )}
       </div>
 
