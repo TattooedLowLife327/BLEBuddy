@@ -652,17 +652,13 @@ export function CROnlineGameScreen({
   useEffect(() => {
     if (!lastThrow) return;
 
-    // Debug logging
-    console.log('[CROnlineGame] BLE throw received:', lastThrow.segment, 'isLocalTurn:', isLocalTurn, 'localIsP1:', localIsP1, 'currentThrower:', currentThrower);
-
-    if (!isLocalTurn) {
-      console.log('[CROnlineGame] Ignoring throw - not local turn');
-      return;
-    }
-
+    // Dedup check MUST come before isLocalTurn check to prevent stale throws
+    // from re-processing when the turn switches
     const throwKey = `${lastThrow.segment}-${lastThrow.timestamp}`;
     if (throwKey === lastProcessedThrowRef.current) return;
     lastProcessedThrowRef.current = throwKey;
+
+    if (!isLocalTurn) return;
 
     console.log('[CROnlineGame] Processing throw:', lastThrow.segment);
 
@@ -812,8 +808,17 @@ export function CROnlineGameScreen({
     }}>
       <style>{goodLuckKeyframes}</style>
 
+      {/* Background image */}
+      <div style={{
+        position: 'absolute',
+        inset: 0,
+        backgroundImage: "url('/assets/gamescreenbackground.png')",
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }} />
+
       {/* AppHeader with BLE status and profile menu */}
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100, padding: '8px 12px', borderBottom: '1px solid #333' }}>
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100, padding: '8px 12px', background: '#000000', borderBottom: '1px solid #333' }}>
         <AppHeader
           title="CRICKET"
           bleConnected={bleConnected}

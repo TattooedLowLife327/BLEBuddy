@@ -73,8 +73,9 @@ export function AppHeader({
         const session = sessionData?.session;
         if (!session?.user) return;
 
-        // Try player schema first (default schema)
-        const { data: playerProfile } = await supabase
+        // Try player schema first
+        const { data: playerProfile } = await (supabase as any)
+          .schema('player')
           .from('player_profiles')
           .select('profilepic, profilecolor, granboard_name')
           .eq('id', session.user.id)

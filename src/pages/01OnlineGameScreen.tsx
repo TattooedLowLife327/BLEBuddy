@@ -815,9 +815,11 @@ export function O1OnlineGameScreen({
   // Handle BLE throws
   useEffect(() => {
     if (!lastThrow) return;
-    if (!isLocalTurn) return;
+    // Dedup check MUST come before isLocalTurn check to prevent stale throws
+    // from re-processing when the turn switches
     if (lastThrow.timestamp === lastProcessedThrowRef.current) return;
     lastProcessedThrowRef.current = lastThrow.timestamp;
+    if (!isLocalTurn) return;
     if (lastThrow.segmentType === 'BUTTON' || lastThrow.segment === 'BTN') {
       endTurnWithMisses();
       return;
@@ -965,6 +967,15 @@ export function O1OnlineGameScreen({
       overflow: 'hidden',
     }}>
       <style>{goodLuckKeyframes}</style>
+
+      {/* Background image */}
+      <div style={{
+        position: 'absolute',
+        inset: 0,
+        backgroundImage: "url('/assets/gamescreenbackground.png')",
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }} />
 
       {/* Background - Split Screen Video Feeds */}
       <div style={{
