@@ -120,11 +120,30 @@ export function PlayerGameSetup({
   const btnCRRef = useRef<HTMLButtonElement>(null);
   const btnCHRef = useRef<HTMLButtonElement>(null);
 
-  const hexToRgba = (hex: string, alpha: number) => {
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  const hexToRgba = (color: string, alpha: number): string => {
+    if (!color) return `rgba(0, 0, 0, ${alpha})`;
+    const c = color.trim();
+    if (c.startsWith('#')) {
+      const hex = c.slice(1);
+      let r, g, b;
+      if (hex.length === 3 || hex.length === 4) {
+        r = parseInt(hex[0]+hex[0], 16);
+        g = parseInt(hex[1]+hex[1], 16);
+        b = parseInt(hex[2]+hex[2], 16);
+      } else if (hex.length >= 6) {
+        r = parseInt(hex.slice(0, 2), 16);
+        g = parseInt(hex.slice(2, 4), 16);
+        b = parseInt(hex.slice(4, 6), 16);
+      } else {
+        return `rgba(0, 0, 0, ${alpha})`;
+      }
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+    const rgbMatch = c.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+    if (rgbMatch) return `rgba(${rgbMatch[1]}, ${rgbMatch[2]}, ${rgbMatch[3]}, ${alpha})`;
+    const hslMatch = c.match(/hsla?\(([^)]+)\)/);
+    if (hslMatch) return `hsla(${hslMatch[1].replace(/,\s*[\d.]+\s*$/, '')}, ${alpha})`;
+    return `rgba(0, 0, 0, ${alpha})`;
   };
 
   // Calculate hue for toggle filter (base SVG is purple ~270 hue)
@@ -673,7 +692,7 @@ export function PlayerGameSetup({
                       setLastAddedIndex(null);
                     }}
                     style={{
-                      borderColor: games[idx] ? `${player.accentColor}99` : 'rgba(255,255,255,0.15)',
+                      borderColor: games[idx] ? hexToRgba(player.accentColor, 0.6) : 'rgba(255,255,255,0.15)',
                       backgroundColor: games[idx] ? hexToRgba(player.accentColor, 0.1) : 'rgba(24,24,27,0.4)',
                     }}
                     whileHover={games[idx] ? {
@@ -804,7 +823,7 @@ export function PlayerGameSetup({
                       onClick={() => setDo_(prev => { const next = !prev; if (next) { setMo(false); setMimo(false); setDido(false); } return next; })}
                       className="rounded-lg px-3 py-1.5 text-xs border transition-colors"
                       style={{
-                        borderColor: do_ ? `${player.accentColor}99` : 'rgba(255,255,255,0.1)',
+                        borderColor: do_ ? hexToRgba(player.accentColor, 0.6) : 'rgba(255,255,255,0.1)',
                         backgroundColor: do_ ? hexToRgba(player.accentColor, 0.1) : 'rgba(24,24,27,0.6)',
                         color: do_ ? 'white' : 'rgb(212,212,216)',
                         fontFamily: 'Helvetica, Arial, sans-serif',
@@ -818,7 +837,7 @@ export function PlayerGameSetup({
                       onClick={() => setMo(prev => { const next = !prev; if (next) { setDo_(false); setMimo(false); setDido(false); } return next; })}
                       className="rounded-lg px-3 py-1.5 text-xs border transition-colors"
                       style={{
-                        borderColor: mo ? `${player.accentColor}99` : 'rgba(255,255,255,0.1)',
+                        borderColor: mo ? hexToRgba(player.accentColor, 0.6) : 'rgba(255,255,255,0.1)',
                         backgroundColor: mo ? hexToRgba(player.accentColor, 0.1) : 'rgba(24,24,27,0.6)',
                         color: mo ? 'white' : 'rgb(212,212,216)',
                         fontFamily: 'Helvetica, Arial, sans-serif',
@@ -832,7 +851,7 @@ export function PlayerGameSetup({
                       onClick={() => setMimo(prev => { const next = !prev; if (next) { setDo_(false); setMo(false); setDido(false); } return next; })}
                       className="rounded-lg px-3 py-1.5 text-xs border transition-colors"
                       style={{
-                        borderColor: mimo ? `${player.accentColor}99` : 'rgba(255,255,255,0.1)',
+                        borderColor: mimo ? hexToRgba(player.accentColor, 0.6) : 'rgba(255,255,255,0.1)',
                         backgroundColor: mimo ? hexToRgba(player.accentColor, 0.1) : 'rgba(24,24,27,0.6)',
                         color: mimo ? 'white' : 'rgb(212,212,216)',
                         fontFamily: 'Helvetica, Arial, sans-serif',
@@ -846,7 +865,7 @@ export function PlayerGameSetup({
                       onClick={() => setDido(prev => { const next = !prev; if (next) { setMo(false); setMimo(false); setDo_(false); } return next; })}
                       className="rounded-lg px-3 py-1.5 text-xs border transition-colors"
                       style={{
-                        borderColor: dido ? `${player.accentColor}99` : 'rgba(255,255,255,0.1)',
+                        borderColor: dido ? hexToRgba(player.accentColor, 0.6) : 'rgba(255,255,255,0.1)',
                         backgroundColor: dido ? hexToRgba(player.accentColor, 0.1) : 'rgba(24,24,27,0.6)',
                         color: dido ? 'white' : 'rgb(212,212,216)',
                         fontFamily: 'Helvetica, Arial, sans-serif',
@@ -861,7 +880,7 @@ export function PlayerGameSetup({
                       onClick={() => setFull(prev => { const next = !prev; if (next) setSplit(false); return next; })}
                       className="rounded-lg px-3 py-1.5 text-xs border transition-colors"
                       style={{
-                        borderColor: full ? `${player.accentColor}99` : 'rgba(255,255,255,0.1)',
+                        borderColor: full ? hexToRgba(player.accentColor, 0.6) : 'rgba(255,255,255,0.1)',
                         backgroundColor: full ? hexToRgba(player.accentColor, 0.1) : 'rgba(24,24,27,0.6)',
                         color: full ? 'white' : 'rgb(212,212,216)',
                         fontFamily: 'Helvetica, Arial, sans-serif',
@@ -875,7 +894,7 @@ export function PlayerGameSetup({
                       onClick={() => setSplit(prev => { const next = !prev; if (next) setFull(false); return next; })}
                       className="rounded-lg px-3 py-1.5 text-xs border transition-colors"
                       style={{
-                        borderColor: split ? `${player.accentColor}99` : 'rgba(255,255,255,0.1)',
+                        borderColor: split ? hexToRgba(player.accentColor, 0.6) : 'rgba(255,255,255,0.1)',
                         backgroundColor: split ? hexToRgba(player.accentColor, 0.1) : 'rgba(24,24,27,0.6)',
                         color: split ? 'white' : 'rgb(212,212,216)',
                         fontFamily: 'Helvetica, Arial, sans-serif',

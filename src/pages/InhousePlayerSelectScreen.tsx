@@ -15,6 +15,33 @@ interface InhousePlayerSelectScreenProps {
 
 const FONT_NAME = "'Helvetica Condensed', sans-serif";
 
+// Safe color alpha helper - handles hex, rgb(), hsl() formats
+const withAlpha = (color: string, alpha: number): string => {
+  if (!color) return `rgba(0, 0, 0, ${alpha})`;
+  const c = color.trim();
+  if (c.startsWith('#')) {
+    const hex = c.slice(1);
+    let r, g, b;
+    if (hex.length === 3 || hex.length === 4) {
+      r = parseInt(hex[0]+hex[0], 16);
+      g = parseInt(hex[1]+hex[1], 16);
+      b = parseInt(hex[2]+hex[2], 16);
+    } else if (hex.length >= 6) {
+      r = parseInt(hex.slice(0, 2), 16);
+      g = parseInt(hex.slice(2, 4), 16);
+      b = parseInt(hex.slice(4, 6), 16);
+    } else {
+      return `rgba(0, 0, 0, ${alpha})`;
+    }
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  const rgbMatch = c.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  if (rgbMatch) return `rgba(${rgbMatch[1]}, ${rgbMatch[2]}, ${rgbMatch[3]}, ${alpha})`;
+  const hslMatch = c.match(/hsla?\(([^)]+)\)/);
+  if (hslMatch) return `hsla(${hslMatch[1].replace(/,\s*[\d.]+\s*$/, '')}, ${alpha})`;
+  return `rgba(0, 0, 0, ${alpha})`;
+};
+
 export function InhousePlayerSelectScreen({
   player1,
   gameType,
@@ -61,7 +88,7 @@ export function InhousePlayerSelectScreen({
         style={{
           position: 'absolute',
           inset: 0,
-          background: `radial-gradient(circle at center, ${player1.profileColor}15 0%, transparent 60%)`,
+          background: `radial-gradient(circle at center, ${withAlpha(player1.profileColor, 0.08)} 0%, transparent 60%)`,
         }}
       />
 
@@ -106,7 +133,7 @@ export function InhousePlayerSelectScreen({
             background: 'rgba(0, 0, 0, 0.7)',
             backdropFilter: 'blur(12px)',
             borderRadius: 8,
-            border: `1px solid ${player1.profileColor}40`,
+            border: `1px solid ${withAlpha(player1.profileColor, 0.25)}`,
           }}
         >
           <span
@@ -188,7 +215,7 @@ export function InhousePlayerSelectScreen({
             onMouseEnter={(e) => {
               e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
               e.currentTarget.style.borderColor = player1.profileColor;
-              e.currentTarget.style.boxShadow = `0 0 20px ${player1.profileColor}40`;
+              e.currentTarget.style.boxShadow = `0 0 20px ${withAlpha(player1.profileColor, 0.25)}`;
               e.currentTarget.style.transform = 'scale(1.02)';
             }}
             onMouseLeave={(e) => {
@@ -232,7 +259,7 @@ export function InhousePlayerSelectScreen({
             onMouseEnter={(e) => {
               e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
               e.currentTarget.style.borderColor = player1.profileColor;
-              e.currentTarget.style.boxShadow = `0 0 20px ${player1.profileColor}40`;
+              e.currentTarget.style.boxShadow = `0 0 20px ${withAlpha(player1.profileColor, 0.25)}`;
               e.currentTarget.style.transform = 'scale(1.02)';
             }}
             onMouseLeave={(e) => {
@@ -278,7 +305,7 @@ export function InhousePlayerSelectScreen({
             backdropFilter: 'blur(12px)',
             borderRadius: 12,
             border: `2px solid ${player1.profileColor}`,
-            boxShadow: `0 0 30px ${player1.profileColor}40`,
+            boxShadow: `0 0 30px ${withAlpha(player1.profileColor, 0.25)}`,
           }}
         >
           {/* Avatar with pulse animation */}
@@ -331,7 +358,7 @@ export function InhousePlayerSelectScreen({
           <div
             style={{
               padding: '6px 12px',
-              background: `${player1.profileColor}20`,
+              background: withAlpha(player1.profileColor, 0.13),
               border: `1px solid ${player1.profileColor}`,
               borderRadius: 6,
               fontFamily: FONT_NAME,
@@ -383,10 +410,10 @@ export function InhousePlayerSelectScreen({
 
         @keyframes avatarPulse {
           0%, 100% {
-            box-shadow: 0 0 0 0 ${player1.profileColor}40;
+            box-shadow: 0 0 0 0 ${withAlpha(player1.profileColor, 0.25)};
           }
           50% {
-            box-shadow: 0 0 0 8px ${player1.profileColor}00;
+            box-shadow: 0 0 0 8px ${withAlpha(player1.profileColor, 0)};
           }
         }
       `}</style>

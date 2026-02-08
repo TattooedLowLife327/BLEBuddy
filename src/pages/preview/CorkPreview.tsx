@@ -584,14 +584,14 @@ export function CorkPreview({ onLeaveMatch }: CorkPreviewProps) {
           position: 'absolute',
           width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
           left: `calc(${FIGMA.avatarLeft} * ${scale})`, top: '50%', transform: 'translateY(-50%)',
-          background: '#000', border: `3px solid ${INACTIVE}`, borderRadius: '50%', zIndex: 1,
+          background: '#000', border: `2px solid ${INACTIVE}`, borderRadius: '50%', zIndex: 1,
         }} />
         {colorsRevealed && p1Active && (
           <div key={`p1-avatar-${turnKey}`} style={{
             position: 'absolute',
             width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
             left: `calc(${FIGMA.avatarLeft} * ${scale})`, top: '50%', transform: 'translateY(-50%)',
-            background: '#000', border: `3px solid ${MOCK_P1.accentColor}`, borderRadius: '50%', zIndex: 2,
+            background: '#000', border: `2px solid ${MOCK_P1.accentColor}`, borderRadius: '50%', zIndex: 2,
             animation: 'colorSwipeUp 0.5s ease-out forwards',
           }} />
         )}
@@ -670,14 +670,14 @@ export function CorkPreview({ onLeaveMatch }: CorkPreviewProps) {
           position: 'absolute',
           width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
           right: `calc(${FIGMA.avatarLeft} * ${scale})`, top: '50%', transform: 'translateY(-50%)',
-          background: '#000', border: `3px solid ${INACTIVE}`, borderRadius: '50%', zIndex: 1,
+          background: '#000', border: `2px solid ${INACTIVE}`, borderRadius: '50%', zIndex: 1,
         }} />
         {colorsRevealed && p2Active && (
           <div key={`p2-avatar-${turnKey}`} style={{
             position: 'absolute',
             width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
             right: `calc(${FIGMA.avatarLeft} * ${scale})`, top: '50%', transform: 'translateY(-50%)',
-            background: '#000', border: `3px solid ${MOCK_P2.accentColor}`, borderRadius: '50%', zIndex: 2,
+            background: '#000', border: `2px solid ${MOCK_P2.accentColor}`, borderRadius: '50%', zIndex: 2,
             animation: 'colorSwipeUp 0.5s ease-out forwards',
           }} />
         )}

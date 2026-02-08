@@ -4,6 +4,33 @@ import { Avatar, AvatarFallback, AvatarImage } from '../components/ui/avatar';
 import { createClient } from '../utils/supabase/client';
 import { UserMenu } from '../components/UserMenu';
 
+// Safe color alpha helper - handles hex, rgb(), hsl() formats
+const withAlpha = (color: string, alpha: number): string => {
+  if (!color) return `rgba(0, 0, 0, ${alpha})`;
+  const c = color.trim();
+  if (c.startsWith('#')) {
+    const hex = c.slice(1);
+    let r, g, b;
+    if (hex.length === 3 || hex.length === 4) {
+      r = parseInt(hex[0]+hex[0], 16);
+      g = parseInt(hex[1]+hex[1], 16);
+      b = parseInt(hex[2]+hex[2], 16);
+    } else if (hex.length >= 6) {
+      r = parseInt(hex.slice(0, 2), 16);
+      g = parseInt(hex.slice(2, 4), 16);
+      b = parseInt(hex.slice(4, 6), 16);
+    } else {
+      return `rgba(0, 0, 0, ${alpha})`;
+    }
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  const rgbMatch = c.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  if (rgbMatch) return `rgba(${rgbMatch[1]}, ${rgbMatch[2]}, ${rgbMatch[3]}, ${alpha})`;
+  const hslMatch = c.match(/hsla?\(([^)]+)\)/);
+  if (hslMatch) return `hsla(${hslMatch[1].replace(/,\s*[\d.]+\s*$/, '')}, ${alpha})`;
+  return `rgba(0, 0, 0, ${alpha})`;
+};
+
 interface LocalDubsSetupProps {
   onBack: () => void;
   onContinue: (partnerId: string, userGoesFirst: boolean) => void;
@@ -292,7 +319,7 @@ export function LocalDubsSetup({
                 style={{
                   borderColor: selectedPartner?.id === player.id ? profilecolor : '#4b5563',
                   boxShadow:
-                    selectedPartner?.id === player.id ? `0 0 20px ${profilecolor}40` : 'none',
+                    selectedPartner?.id === player.id ? `0 0 20px ${withAlpha(profilecolor, 0.25)}` : 'none',
                 }}
               >
                 <div className="flex items-center gap-4">
@@ -328,7 +355,7 @@ export function LocalDubsSetup({
             backgroundColor: profilecolor,
             fontFamily: 'Helvetica, Arial, sans-serif',
             fontWeight: 'bold',
-            boxShadow: selectedPartner ? `0 0 20px ${profilecolor}60` : 'none',
+            boxShadow: selectedPartner ? `0 0 20px ${withAlpha(profilecolor, 0.38)}` : 'none',
           }}
         >
           Continue to Lobby

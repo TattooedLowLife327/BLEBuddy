@@ -78,6 +78,33 @@ interface CROnlineGameScreenProps {
 
 const INACTIVE = '#7E7E7E';
 
+// Safe color alpha helper - handles any hex length, rgb(), whitespace, null
+const withAlpha = (color: string, alpha: number): string => {
+  if (!color) return `rgba(0, 0, 0, ${alpha})`;
+  const c = color.trim();
+  if (c.startsWith('#')) {
+    const hex = c.slice(1);
+    let r, g, b;
+    if (hex.length === 3 || hex.length === 4) {
+      r = parseInt(hex[0]+hex[0], 16);
+      g = parseInt(hex[1]+hex[1], 16);
+      b = parseInt(hex[2]+hex[2], 16);
+    } else if (hex.length >= 6) {
+      r = parseInt(hex.slice(0, 2), 16);
+      g = parseInt(hex.slice(2, 4), 16);
+      b = parseInt(hex.slice(4, 6), 16);
+    } else {
+      return `rgba(0, 0, 0, ${alpha})`;
+    }
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  const rgbMatch = c.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  if (rgbMatch) return `rgba(${rgbMatch[1]}, ${rgbMatch[2]}, ${rgbMatch[3]}, ${alpha})`;
+  const hslMatch = c.match(/hsla?\(([^)]+)\)/);
+  if (hslMatch) return `hsla(${hslMatch[1].replace(/,\s*[\d.]+\s*$/, '')}, ${alpha})`;
+  return `rgba(0, 0, 0, ${alpha})`;
+};
+
 const FONT_SCORE = "'Helvetica Compressed', sans-serif";
 const FONT_NAME = "'Helvetica Condensed', sans-serif";
 
@@ -1120,11 +1147,18 @@ export function CROnlineGameScreen({
             background: p1.accentColor, zIndex: 5, animation: 'borderDrainDown 0.5s ease-out forwards',
           }} />
         )}
-        {introComplete && (p1Active || p1Exiting) && (
+        {introComplete && p1Active && (
           <div key={`p1-bar-${turnKey}`} style={{
             position: 'absolute', inset: 0,
-            background: `linear-gradient(179.4deg, ${p1.accentColor}33 0.52%, rgba(0, 0, 0, 0.2) 95.46%)`,
-            animation: p1Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
+            background: `linear-gradient(180deg, ${withAlpha(p1.accentColor, 0.25)} 0%, ${withAlpha(p1.accentColor, 0.13)} 50%, transparent 100%)`,
+            animation: 'colorSwipeUp 0.5s ease-out forwards',
+          }} />
+        )}
+        {introComplete && p1Exiting && (
+          <div key={`p1-bar-exit-${turnKey}`} style={{
+            position: 'absolute', inset: 0,
+            background: `linear-gradient(180deg, ${withAlpha(p1.accentColor, 0.25)} 0%, ${withAlpha(p1.accentColor, 0.13)} 50%, transparent 100%)`,
+            animation: 'colorSwipeDown 0.5s ease-out forwards',
           }} />
         )}
         <div style={{
@@ -1134,9 +1168,9 @@ export function CROnlineGameScreen({
           backgroundImage: resolveProfilePicUrl(p1.profilePic) ? `url(${resolveProfilePicUrl(p1.profilePic)})` : 'none',
           backgroundColor: '#000',
           backgroundSize: 'cover', backgroundPosition: 'center',
-          border: `3px solid ${INACTIVE}`, borderRadius: '50%', zIndex: 1,
+          border: `2px solid ${INACTIVE}`, borderRadius: '50%', zIndex: 1,
         }} />
-        {introComplete && (p1Active || p1Exiting) && (
+        {introComplete && p1Active && (
           <div key={`p1-avatar-${turnKey}`} style={{
             position: 'absolute',
             width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
@@ -1144,8 +1178,20 @@ export function CROnlineGameScreen({
             backgroundImage: resolveProfilePicUrl(p1.profilePic) ? `url(${resolveProfilePicUrl(p1.profilePic)})` : 'none',
             backgroundColor: '#000',
             backgroundSize: 'cover', backgroundPosition: 'center',
-            border: `3px solid ${p1.accentColor}`, borderRadius: '50%', zIndex: 2,
-            animation: p1Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
+            border: `2px solid ${p1.accentColor}`, borderRadius: '50%', zIndex: 2,
+            animation: 'colorSwipeUp 0.5s ease-out forwards',
+          }} />
+        )}
+        {introComplete && p1Exiting && (
+          <div key={`p1-avatar-exit-${turnKey}`} style={{
+            position: 'absolute',
+            width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
+            left: `calc(${FIGMA.avatarLeft} * ${scale})`, top: '50%', transform: 'translateY(-50%)',
+            backgroundImage: resolveProfilePicUrl(p1.profilePic) ? `url(${resolveProfilePicUrl(p1.profilePic)})` : 'none',
+            backgroundColor: '#000',
+            backgroundSize: 'cover', backgroundPosition: 'center',
+            border: `2px solid ${p1.accentColor}`, borderRadius: '50%', zIndex: 2,
+            animation: 'colorSwipeDown 0.5s ease-out forwards',
           }} />
         )}
         <div style={{
@@ -1206,11 +1252,18 @@ export function CROnlineGameScreen({
             background: p2.accentColor, zIndex: 5, animation: 'borderDrainDown 0.5s ease-out forwards',
           }} />
         )}
-        {introComplete && (p2Active || p2Exiting) && (
+        {introComplete && p2Active && (
           <div key={`p2-bar-${turnKey}`} style={{
             position: 'absolute', inset: 0,
-            background: `linear-gradient(179.4deg, ${p2.accentColor}33 0.52%, rgba(0, 0, 0, 0.2) 95.46%)`,
-            animation: p2Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
+            background: `linear-gradient(180deg, ${withAlpha(p2.accentColor, 0.25)} 0%, ${withAlpha(p2.accentColor, 0.13)} 50%, transparent 100%)`,
+            animation: 'colorSwipeUp 0.5s ease-out forwards',
+          }} />
+        )}
+        {introComplete && p2Exiting && (
+          <div key={`p2-bar-exit-${turnKey}`} style={{
+            position: 'absolute', inset: 0,
+            background: `linear-gradient(180deg, ${withAlpha(p2.accentColor, 0.25)} 0%, ${withAlpha(p2.accentColor, 0.13)} 50%, transparent 100%)`,
+            animation: 'colorSwipeDown 0.5s ease-out forwards',
           }} />
         )}
         <span style={{
@@ -1250,9 +1303,9 @@ export function CROnlineGameScreen({
           backgroundImage: resolveProfilePicUrl(p2.profilePic) ? `url(${resolveProfilePicUrl(p2.profilePic)})` : 'none',
           backgroundColor: '#000',
           backgroundSize: 'cover', backgroundPosition: 'center',
-          border: `3px solid ${INACTIVE}`, borderRadius: '50%', zIndex: 1,
+          border: `2px solid ${INACTIVE}`, borderRadius: '50%', zIndex: 1,
         }} />
-        {introComplete && (p2Active || p2Exiting) && (
+        {introComplete && p2Active && (
           <div key={`p2-avatar-${turnKey}`} style={{
             position: 'absolute',
             width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
@@ -1260,8 +1313,20 @@ export function CROnlineGameScreen({
             backgroundImage: resolveProfilePicUrl(p2.profilePic) ? `url(${resolveProfilePicUrl(p2.profilePic)})` : 'none',
             backgroundColor: '#000',
             backgroundSize: 'cover', backgroundPosition: 'center',
-            border: `3px solid ${p2.accentColor}`, borderRadius: '50%', zIndex: 2,
-            animation: p2Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
+            border: `2px solid ${p2.accentColor}`, borderRadius: '50%', zIndex: 2,
+            animation: 'colorSwipeUp 0.5s ease-out forwards',
+          }} />
+        )}
+        {introComplete && p2Exiting && (
+          <div key={`p2-avatar-exit-${turnKey}`} style={{
+            position: 'absolute',
+            width: `calc(${FIGMA.avatar} * ${scale})`, height: `calc(${FIGMA.avatar} * ${scale})`,
+            right: `calc(${FIGMA.avatarLeft} * ${scale})`, top: '50%', transform: 'translateY(-50%)',
+            backgroundImage: resolveProfilePicUrl(p2.profilePic) ? `url(${resolveProfilePicUrl(p2.profilePic)})` : 'none',
+            backgroundColor: '#000',
+            backgroundSize: 'cover', backgroundPosition: 'center',
+            border: `2px solid ${p2.accentColor}`, borderRadius: '50%', zIndex: 2,
+            animation: 'colorSwipeDown 0.5s ease-out forwards',
           }} />
         )}
       </div>
@@ -1296,7 +1361,7 @@ export function CROnlineGameScreen({
             {/* Backdrop glow */}
             <div style={{
               position: 'absolute', inset: 0,
-              background: `radial-gradient(circle, ${activeAccentColor}33 0%, transparent 70%)`,
+              background: `radial-gradient(circle, ${withAlpha(activeAccentColor, 0.2)} 0%, transparent 70%)`,
               animation: 'achievementFadeIn 7s ease-out forwards',
             }} />
             {/* Achievement text - only show if no video */}
@@ -1330,7 +1395,7 @@ export function CROnlineGameScreen({
           }}>
             <div style={{
               position: 'absolute', inset: 0,
-              background: `radial-gradient(circle at center, ${winnerAccentColor}40 0%, transparent 60%)`,
+              background: `radial-gradient(circle at center, ${withAlpha(winnerAccentColor, 0.25)} 0%, transparent 60%)`,
             }} />
             <div style={{
               fontFamily: FONT_SCORE, fontWeight: 300, fontSize: `calc(60 * ${scale})`, lineHeight: 1,

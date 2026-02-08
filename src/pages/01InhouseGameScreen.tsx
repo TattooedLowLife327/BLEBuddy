@@ -88,6 +88,33 @@ const FIGMA = {
   scoreSize: 96,
 };
 
+// Safe color alpha helper - handles any hex length, rgb(), whitespace, null
+const withAlpha = (color: string, alpha: number): string => {
+  if (!color) return `rgba(0, 0, 0, ${alpha})`;
+  const c = color.trim();
+  if (c.startsWith('#')) {
+    const hex = c.slice(1);
+    let r, g, b;
+    if (hex.length === 3 || hex.length === 4) {
+      r = parseInt(hex[0]+hex[0], 16);
+      g = parseInt(hex[1]+hex[1], 16);
+      b = parseInt(hex[2]+hex[2], 16);
+    } else if (hex.length >= 6) {
+      r = parseInt(hex.slice(0, 2), 16);
+      g = parseInt(hex.slice(2, 4), 16);
+      b = parseInt(hex.slice(4, 6), 16);
+    } else {
+      return `rgba(0, 0, 0, ${alpha})`;
+    }
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  const rgbMatch = c.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  if (rgbMatch) return `rgba(${rgbMatch[1]}, ${rgbMatch[2]}, ${rgbMatch[3]}, ${alpha})`;
+  const hslMatch = c.match(/hsla?\(([^)]+)\)/);
+  if (hslMatch) return `hsla(${hslMatch[1].replace(/,\s*[\d.]+\s*$/, '')}, ${alpha})`;
+  return `rgba(0, 0, 0, ${alpha})`;
+};
+
 // Default players - will be overridden by props if provided
 const DEFAULT_PLAYERS = {
   p1: { id: 'p1', name: 'PLAYER1', profilecolor: '#6600FF', profilePic: undefined as string | undefined },
@@ -1122,6 +1149,9 @@ export function O1InhouseGameScreen({
         bottom: '0px',
         borderTopRightRadius: `calc(16 * ${scale})`,
         overflow: 'hidden',
+        borderTop: `2px solid ${introComplete && p1Active ? PLAYERS.p1.profilecolor : INACTIVE}`,
+        borderRight: `2px solid ${introComplete && p1Active ? PLAYERS.p1.profilecolor : INACTIVE}`,
+        transition: 'border-color 0.3s ease',
       }}>
         {/* Grey base layer - always visible */}
         <div style={{
@@ -1154,13 +1184,21 @@ export function O1InhouseGameScreen({
             animation: 'borderDrainDown 0.5s ease-out forwards',
           }} />
         )}
-        {/* Colored layer - swipes up when active, swipes down when exiting */}
-        {introComplete && (p1Active || p1Exiting) && (
+        {/* Colored layer - separate overlays for active (swipe up) and exiting (swipe down) */}
+        {introComplete && p1Active && (
           <div key={`p1-bar-${turnKey}`} style={{
             position: 'absolute',
             inset: 0,
-            background: `linear-gradient(179.4deg, ${PLAYERS.p1.profilecolor}33 0.52%, rgba(0, 0, 0, 0.2) 95.46%)`,
-            animation: p1Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
+            background: `linear-gradient(180deg, ${withAlpha(PLAYERS.p1.profilecolor, 0.25)} 0%, ${withAlpha(PLAYERS.p1.profilecolor, 0.13)} 50%, transparent 100%)`,
+            animation: 'colorSwipeUp 0.5s ease-out forwards',
+          }} />
+        )}
+        {introComplete && p1Exiting && (
+          <div key={`p1-bar-exit-${turnKey}`} style={{
+            position: 'absolute',
+            inset: 0,
+            background: `linear-gradient(180deg, ${withAlpha(PLAYERS.p1.profilecolor, 0.25)} 0%, ${withAlpha(PLAYERS.p1.profilecolor, 0.13)} 50%, transparent 100%)`,
+            animation: 'colorSwipeDown 0.5s ease-out forwards',
           }} />
         )}
         {/* Avatar - grey base */}
@@ -1175,12 +1213,12 @@ export function O1InhouseGameScreen({
           backgroundColor: '#000000',
           backgroundSize: 'cover',
           backgroundPosition: 'center',
-          border: `3px solid ${INACTIVE}`,
+          border: `2px solid ${INACTIVE}`,
           borderRadius: '50%',
           zIndex: 1,
         }} />
-        {/* Avatar - colored overlay */}
-        {introComplete && (p1Active || p1Exiting) && (
+        {/* Avatar - colored overlay (separate active + exiting) */}
+        {introComplete && p1Active && (
           <div key={`p1-avatar-${turnKey}`} style={{
             position: 'absolute',
             width: `calc(${FIGMA.avatar} * ${scale})`,
@@ -1192,10 +1230,28 @@ export function O1InhouseGameScreen({
             backgroundColor: '#000000',
             backgroundSize: 'cover',
             backgroundPosition: 'center',
-            border: `3px solid ${PLAYERS.p1.profilecolor}`,
+            border: `2px solid ${PLAYERS.p1.profilecolor}`,
             borderRadius: '50%',
             zIndex: 2,
-            animation: p1Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
+            animation: 'colorSwipeUp 0.5s ease-out forwards',
+          }} />
+        )}
+        {introComplete && p1Exiting && (
+          <div key={`p1-avatar-exit-${turnKey}`} style={{
+            position: 'absolute',
+            width: `calc(${FIGMA.avatar} * ${scale})`,
+            height: `calc(${FIGMA.avatar} * ${scale})`,
+            left: `calc(${FIGMA.avatarLeft} * ${scale})`,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            backgroundImage: resolveProfilePicUrl(PLAYERS.p1.profilePic) ? `url(${resolveProfilePicUrl(PLAYERS.p1.profilePic)})` : 'none',
+            backgroundColor: '#000000',
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            border: `2px solid ${PLAYERS.p1.profilecolor}`,
+            borderRadius: '50%',
+            zIndex: 2,
+            animation: 'colorSwipeDown 0.5s ease-out forwards',
           }} />
         )}
         {/* Name + PPR */}
@@ -1256,6 +1312,9 @@ export function O1InhouseGameScreen({
           bottom: '0px',
           borderTopLeftRadius: `calc(16 * ${scale})`,
           overflow: 'hidden',
+          borderTop: `2px solid ${introComplete && p2Active ? PLAYERS.p2.profilecolor : INACTIVE}`,
+          borderLeft: `2px solid ${introComplete && p2Active ? PLAYERS.p2.profilecolor : INACTIVE}`,
+          transition: 'border-color 0.3s ease',
         }}>
           {/* Grey base layer - always visible */}
           <div style={{
@@ -1288,13 +1347,21 @@ export function O1InhouseGameScreen({
               animation: 'borderDrainDown 0.5s ease-out forwards',
             }} />
           )}
-          {/* Colored layer - swipes up when active, swipes down when exiting */}
-          {introComplete && (p2Active || p2Exiting) && (
+          {/* Colored layer - separate overlays for active (swipe up) and exiting (swipe down) */}
+          {introComplete && p2Active && (
             <div key={`p2-bar-${turnKey}`} style={{
               position: 'absolute',
               inset: 0,
-              background: `linear-gradient(179.4deg, ${PLAYERS.p2.profilecolor}33 0.52%, rgba(0, 0, 0, 0.2) 95.46%)`,
-              animation: p2Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
+              background: `linear-gradient(180deg, ${withAlpha(PLAYERS.p2.profilecolor, 0.25)} 0%, ${withAlpha(PLAYERS.p2.profilecolor, 0.13)} 50%, transparent 100%)`,
+              animation: 'colorSwipeUp 0.5s ease-out forwards',
+            }} />
+          )}
+          {introComplete && p2Exiting && (
+            <div key={`p2-bar-exit-${turnKey}`} style={{
+              position: 'absolute',
+              inset: 0,
+              background: `linear-gradient(180deg, ${withAlpha(PLAYERS.p2.profilecolor, 0.25)} 0%, ${withAlpha(PLAYERS.p2.profilecolor, 0.13)} 50%, transparent 100%)`,
+              animation: 'colorSwipeDown 0.5s ease-out forwards',
             }} />
           )}
           {/* Score - on left for P2 */}
@@ -1356,12 +1423,12 @@ export function O1InhouseGameScreen({
             backgroundColor: '#000000',
             backgroundSize: 'cover',
             backgroundPosition: 'center',
-            border: `3px solid ${INACTIVE}`,
+            border: `2px solid ${INACTIVE}`,
             borderRadius: '50%',
             zIndex: 1,
           }} />
-          {/* Avatar - colored overlay */}
-          {introComplete && (p2Active || p2Exiting) && (
+          {/* Avatar - colored overlay (separate active + exiting) */}
+          {introComplete && p2Active && (
             <div key={`p2-avatar-${turnKey}`} style={{
               position: 'absolute',
               width: `calc(${FIGMA.avatar} * ${scale})`,
@@ -1373,10 +1440,28 @@ export function O1InhouseGameScreen({
               backgroundColor: '#000000',
               backgroundSize: 'cover',
               backgroundPosition: 'center',
-              border: `3px solid ${PLAYERS.p2.profilecolor}`,
+              border: `2px solid ${PLAYERS.p2.profilecolor}`,
               borderRadius: '50%',
               zIndex: 2,
-              animation: p2Active ? 'colorSwipeUp 0.5s ease-out forwards' : 'colorSwipeDown 0.5s ease-out forwards',
+              animation: 'colorSwipeUp 0.5s ease-out forwards',
+            }} />
+          )}
+          {introComplete && p2Exiting && (
+            <div key={`p2-avatar-exit-${turnKey}`} style={{
+              position: 'absolute',
+              width: `calc(${FIGMA.avatar} * ${scale})`,
+              height: `calc(${FIGMA.avatar} * ${scale})`,
+              right: `calc(${FIGMA.avatarLeft} * ${scale})`,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              backgroundImage: resolveProfilePicUrl(PLAYERS.p2?.profilePic) ? `url(${resolveProfilePicUrl(PLAYERS.p2?.profilePic)})` : 'none',
+              backgroundColor: '#000000',
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              border: `2px solid ${PLAYERS.p2.profilecolor}`,
+              borderRadius: '50%',
+              zIndex: 2,
+              animation: 'colorSwipeDown 0.5s ease-out forwards',
             }} />
           )}
         </div>
@@ -1514,7 +1599,7 @@ export function O1InhouseGameScreen({
           <div style={{
             position: 'absolute',
             inset: 0,
-            background: `radial-gradient(circle, ${PLAYERS[currentThrower]!.profilecolor}33 0%, transparent 70%)`,
+            background: `radial-gradient(circle, ${withAlpha(PLAYERS[currentThrower]!.profilecolor, 0.2)} 0%, transparent 70%)`,
             animation: 'achievementFadeIn 7s ease-out forwards',
           }} />
           {/* Award video if available - full screen, plays for full 3 seconds */}
@@ -1603,7 +1688,7 @@ export function O1InhouseGameScreen({
           <div style={{
             position: 'absolute',
             inset: 0,
-            background: `radial-gradient(circle at center, ${PLAYERS[gameWinner]!.profilecolor}40 0%, transparent 60%)`,
+            background: `radial-gradient(circle at center, ${withAlpha(PLAYERS[gameWinner]!.profilecolor, 0.25)} 0%, transparent 60%)`,
           }} />
 
           {/* WINNER label */}
@@ -1679,7 +1764,7 @@ export function O1InhouseGameScreen({
                   border: 'none',
                   borderRadius: `calc(12 * ${scale})`,
                   cursor: 'pointer',
-                  boxShadow: `0 0 30px ${PLAYERS[gameWinner]!.profilecolor}80`,
+                  boxShadow: `0 0 30px ${withAlpha(PLAYERS[gameWinner]!.profilecolor, 0.5)}`,
                 }}
               >
                 Continue
@@ -1720,7 +1805,7 @@ export function O1InhouseGameScreen({
                     border: 'none',
                     borderRadius: `calc(12 * ${scale})`,
                     cursor: 'pointer',
-                    boxShadow: `0 0 30px ${PLAYERS[gameWinner]!.profilecolor}80`,
+                    boxShadow: `0 0 30px ${withAlpha(PLAYERS[gameWinner]!.profilecolor, 0.5)}`,
                   }}
                 >
                   {isSoloMode ? 'Play Again' : 'Rematch'}

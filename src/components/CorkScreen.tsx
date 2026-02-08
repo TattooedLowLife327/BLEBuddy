@@ -36,6 +36,33 @@ interface CorkThrowMessage {
   round: number;
 }
 
+// Safe color alpha helper - handles hex, rgb(), hsl() formats
+const withAlpha = (color: string, alpha: number): string => {
+  if (!color) return `rgba(0, 0, 0, ${alpha})`;
+  const c = color.trim();
+  if (c.startsWith('#')) {
+    const hex = c.slice(1);
+    let r, g, b;
+    if (hex.length === 3 || hex.length === 4) {
+      r = parseInt(hex[0]+hex[0], 16);
+      g = parseInt(hex[1]+hex[1], 16);
+      b = parseInt(hex[2]+hex[2], 16);
+    } else if (hex.length >= 6) {
+      r = parseInt(hex.slice(0, 2), 16);
+      g = parseInt(hex.slice(2, 4), 16);
+      b = parseInt(hex.slice(4, 6), 16);
+    } else {
+      return `rgba(0, 0, 0, ${alpha})`;
+    }
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  const rgbMatch = c.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  if (rgbMatch) return `rgba(${rgbMatch[1]}, ${rgbMatch[2]}, ${rgbMatch[3]}, ${alpha})`;
+  const hslMatch = c.match(/hsla?\(([^)]+)\)/);
+  if (hslMatch) return `hsla(${hslMatch[1].replace(/,\s*[\d.]+\s*$/, '')}, ${alpha})`;
+  return `rgba(0, 0, 0, ${alpha})`;
+};
+
 // CSS keyframes for animations
 const corkKeyframes = `
 @keyframes camSlideFromLeft {
@@ -669,7 +696,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
             borderTopRightRadius: `calc(10 * ${scale})`,
             borderBottomRightRadius: `calc(10 * ${scale})`,
             pointerEvents: 'none',
-            background: `linear-gradient(180deg, ${leftPlayerData.profilecolor}BF 0%, ${leftPlayerData.profilecolor}40 15%, transparent 25%)`,
+            background: `linear-gradient(180deg, ${withAlpha(leftPlayerData.profilecolor, 0.75)} 0%, ${withAlpha(leftPlayerData.profilecolor, 0.25)} 15%, transparent 25%)`,
             borderTop: `2px solid ${leftPlayerData.profilecolor}`,
             borderRight: `2px solid ${leftPlayerData.profilecolor}`,
             borderBottom: `2px solid ${leftPlayerData.profilecolor}`,
@@ -746,7 +773,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
             borderTopLeftRadius: `calc(10 * ${scale})`,
             borderBottomLeftRadius: `calc(10 * ${scale})`,
             pointerEvents: 'none',
-            background: `linear-gradient(180deg, ${rightPlayerData.profilecolor}BF 0%, ${rightPlayerData.profilecolor}40 15%, transparent 25%)`,
+            background: `linear-gradient(180deg, ${withAlpha(rightPlayerData.profilecolor, 0.75)} 0%, ${withAlpha(rightPlayerData.profilecolor, 0.25)} 15%, transparent 25%)`,
             borderTop: `2px solid ${rightPlayerData.profilecolor}`,
             borderLeft: `2px solid ${rightPlayerData.profilecolor}`,
             borderBottom: `2px solid ${rightPlayerData.profilecolor}`,
@@ -824,7 +851,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
         {colorsRevealed && leftActive && (
           <div key={`left-bar-${turnKey}`} style={{
             position: 'absolute', inset: 0,
-            background: `linear-gradient(180deg, ${leftPlayerData.profilecolor}40 0%, ${leftPlayerData.profilecolor}20 50%, transparent 100%)`,
+            background: `linear-gradient(180deg, ${withAlpha(leftPlayerData.profilecolor, 0.25)} 0%, ${withAlpha(leftPlayerData.profilecolor, 0.13)} 50%, transparent 100%)`,
             animation: 'colorSwipeUp 0.5s ease-out forwards',
           }} />
         )}
@@ -904,7 +931,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
         {colorsRevealed && rightActive && (
           <div key={`right-bar-${turnKey}`} style={{
             position: 'absolute', inset: 0,
-            background: `linear-gradient(180deg, ${rightPlayerData.profilecolor}40 0%, ${rightPlayerData.profilecolor}20 50%, transparent 100%)`,
+            background: `linear-gradient(180deg, ${withAlpha(rightPlayerData.profilecolor, 0.25)} 0%, ${withAlpha(rightPlayerData.profilecolor, 0.13)} 50%, transparent 100%)`,
             animation: 'colorSwipeUp 0.5s ease-out forwards',
           }} />
         )}
