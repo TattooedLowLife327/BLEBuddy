@@ -476,60 +476,51 @@ export function PlayerGameSetup({
               )}
             </div>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             {/* Handicap Toggle */}
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-zinc-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                Handicap
-              </span>
-              <button
-                type="button"
-                onClick={() => setHandicap(!handicap)}
-                className="relative inline-flex items-center justify-center transition-all"
+            <span className="text-xs text-zinc-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+              Handicap
+            </span>
+            <button
+              type="button"
+              onClick={() => setHandicap(!handicap)}
+              className="relative inline-flex items-center justify-center transition-all"
+              style={{
+                width: '56px',
+                height: '27px',
+              }}
+            >
+              {/* Base SVG */}
+              <img
+                src={handicap ? '/assets/ontogglebase.svg' : '/assets/offtogglebase.svg'}
+                alt={handicap ? 'On' : 'Off'}
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 transition-opacity"
+                style={
+                  handicap
+                    ? {
+                        filter: `hue-rotate(${profileHue - 270}deg) saturate(1.2) brightness(1.1)`,
+                        width: '47px',
+                        height: '17px',
+                      }
+                    : {
+                        width: '56px',
+                        height: '17px',
+                      }
+                }
+              />
+              {/* Knob SVG */}
+              <img
+                src={handicap ? '/assets/ontoggleknob.svg' : '/assets/offtoggleknob.svg'}
+                alt="Toggle knob"
+                className="absolute transition-all duration-200"
                 style={{
-                  width: '56px',
+                  left: handicap ? '15px' : '-7px',
+                  top: '55%',
+                  transform: 'translateY(-50%)',
+                  width: '26px',
                   height: '27px',
                 }}
-              >
-                {/* Base SVG */}
-                <img
-                  src={handicap ? '/assets/ontogglebase.svg' : '/assets/offtogglebase.svg'}
-                  alt={handicap ? 'On' : 'Off'}
-                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 transition-opacity"
-                  style={
-                    handicap
-                      ? {
-                          filter: `hue-rotate(${profileHue - 270}deg) saturate(1.2) brightness(1.1)`,
-                          width: '47px',
-                          height: '17px',
-                        }
-                      : {
-                          width: '56px',
-                          height: '17px',
-                        }
-                  }
-                />
-                {/* Knob SVG */}
-                <img
-                  src={handicap ? '/assets/ontoggleknob.svg' : '/assets/offtoggleknob.svg'}
-                  alt="Toggle knob"
-                  className="absolute transition-all duration-200"
-                  style={{
-                    left: handicap ? '15px' : '-7px',
-                    top: '55%',
-                    transform: 'translateY(-50%)',
-                    width: '26px',
-                    height: '27px',
-                  }}
-                />
-              </button>
-            </div>
-            <button
-              onClick={onClose}
-              className="hover:opacity-80 transition-opacity"
-              aria-label="Close"
-            >
-              <img src="/icons/closebutton.svg" alt="Close" className="w-7 h-7" />
+              />
             </button>
           </div>
         </div>
@@ -540,6 +531,7 @@ export function PlayerGameSetup({
           <div className="w-1/3 relative overflow-hidden min-w-0">
             <PlayerCardTop
               variant="panel"
+              llogbBadge
               data={{
                 granboardName: player.granboardName,
                 profilePic: player.profilePic,

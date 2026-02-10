@@ -10,6 +10,7 @@ import {
 } from './ui/dropdown-menu';
 import { UserMenu, type CustomMenuItem } from './UserMenu';
 import { createClient } from '../utils/supabase/client';
+import { resolveProfilePicUrl } from '../utils/profile';
 
 const bluetoothIcon = '/assets/dashboardicon.png';
 
@@ -248,9 +249,9 @@ export function AppHeader({
           </DropdownMenu>
         )}
 
-        {/* User menu */}
+        {/* User menu - resolve raw profilepic to full URL for avatar display */}
         <UserMenu
-          profilepic={profilepic}
+          profilepic={resolveProfilePicUrl(profilepic ?? undefined)}
           profilecolor={profilecolor}
           granboard_name={granboard_name}
           onLogout={onLogout}
