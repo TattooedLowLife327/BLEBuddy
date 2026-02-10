@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '../utils/supabase/client';
+import { DISCONNECT_TIMEOUT_SECONDS } from '../utils/constants';
 
 const supabase = createClient();
 
@@ -22,8 +23,6 @@ interface UseGameStatusReturn {
   leaveMatch: () => Promise<void>;
   opponentLeftMessage: string | null;
 }
-
-const DISCONNECT_TIMEOUT_SECONDS = 60;
 
 export function useGameStatus(options: UseGameStatusOptions): UseGameStatusReturn {
   const [isOpponentOnline, setIsOpponentOnline] = useState(false); // Start false until we actually see them

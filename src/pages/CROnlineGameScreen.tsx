@@ -7,29 +7,8 @@ import { createClient } from '../utils/supabase/client';
 import { isDevMode } from '../utils/devMode';
 import type { DartThrowData } from '../utils/ble/bleConnection';
 import { RefreshCw, DoorOpen } from 'lucide-react';
-
-// Resolve profile pic URL from various formats
-const resolveProfilePicUrl = (profilepic: string | undefined): string | undefined => {
-  if (!profilepic) return undefined;
-
-  // Already a full URL
-  if (profilepic.startsWith('http')) return profilepic;
-
-  // LowLifeStore assets are served from the main PWA domain
-  if (profilepic.includes('LowLifeStore')) {
-    const path = profilepic.startsWith('/') ? profilepic : `/${profilepic}`;
-    return `https://www.lowlifesofgranboard.com${path}`;
-  }
-
-  // Local asset path (defaults only)
-  if (profilepic.startsWith('/assets') || profilepic.startsWith('assets') || profilepic === 'default-pfp.png') {
-    return profilepic.startsWith('/') ? profilepic : `/${profilepic}`;
-  }
-
-  // Storage path - construct Supabase public URL
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://sndsyxxcnuwjmjgikzgg.supabase.co';
-  return `${supabaseUrl}/storage/v1/object/public/profilepic/${profilepic}`;
-};
+import { resolveProfilePicUrl } from '../utils/profile';
+import { useOnlineThrowSync } from '../hooks/useOnlineThrowSync';
 
 type Target = '20' | '19' | '18' | '17' | '16' | '15' | 'B';
 type PlayerId = 'p1' | 'p2';
@@ -457,34 +436,18 @@ export function CROnlineGameScreen({
     return null;
   };
 
-  // Realtime channel for syncing throws
-  const throwChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const applyThrowRef = useRef<(segment: string, multiplier: number, isLocal: boolean) => void>(() => {});
 
-  useEffect(() => {
-    throwChannelRef.current = supabase.channel(`cricket:${gameId}`, {
-      config: { broadcast: { self: false } },
-    });
-
-    throwChannelRef.current
-      .on('broadcast', { event: 'dart_throw' }, ({ payload }) => {
-        // Opponent threw - apply the throw locally
-        if (payload.playerId !== localPlayer.id) {
-          applyThrowRef.current(payload.segment, payload.multiplier, false);
-        }
-      })
-      .on('broadcast', { event: 'turn_end' }, ({ payload }) => {
-        // Sync turn state from opponent
-        if (payload.playerId !== localPlayer.id) {
-          setShowPlayerChange(true);
-        }
-      })
-      .subscribe();
-
-    return () => {
-      throwChannelRef.current?.unsubscribe();
-    };
-  }, [gameId, localPlayer.id]);
+  const { sendThrow, sendTurnEnd } = useOnlineThrowSync({
+    channelName: `cricket:${gameId}`,
+    localPlayerId: localPlayer.id,
+    onRemoteThrow: ({ segment, multiplier }) => {
+      applyThrowRef.current(segment, multiplier, false);
+    },
+    onRemoteTurnEnd: () => {
+      setShowPlayerChange(true);
+    },
+  });
 
   // Apply a throw (from BLE or remote)
   const applyThrow = useCallback((segment: string, multiplier: number, isLocal: boolean) => {
@@ -570,12 +533,8 @@ export function CROnlineGameScreen({
     }
 
     // Broadcast throw to opponent if local
-    if (isLocal && throwChannelRef.current) {
-      throwChannelRef.current.send({
-        type: 'broadcast',
-        event: 'dart_throw',
-        payload: { playerId: localPlayer.id, segment, multiplier },
-      });
+    if (isLocal) {
+      sendThrow({ playerId: localPlayer.id, segment, multiplier });
     }
 
     // Check achievements & end turn on 3rd dart
@@ -594,16 +553,12 @@ export function CROnlineGameScreen({
         playerChangeTimeoutRef.current = null;
         setShowPlayerChange(true);
         // Broadcast turn end if local
-        if (isLocal && throwChannelRef.current) {
-          throwChannelRef.current.send({
-            type: 'broadcast',
-            event: 'turn_end',
-            payload: { playerId: localPlayer.id },
-          });
+        if (isLocal) {
+          sendTurnEnd({ playerId: localPlayer.id });
         }
       }, 3000);
     }
-  }, [currentDarts, currentThrower, introComplete, showPlayerChange, showWinnerScreen, p1Score, p2Score, marks, localIsP1, localPlayer.id, currentRound]);
+  }, [currentDarts, currentThrower, introComplete, showPlayerChange, showWinnerScreen, p1Score, p2Score, marks, localIsP1, localPlayer.id, currentRound, sendThrow, sendTurnEnd]);
 
   // Keep ref in sync so broadcast handler always has latest applyThrow
   useEffect(() => { applyThrowRef.current = applyThrow; }, [applyThrow]);
@@ -639,14 +594,8 @@ export function CROnlineGameScreen({
       }
       setShowPlayerChange(true);
     }
-    if (throwChannelRef.current) {
-      throwChannelRef.current.send({
-        type: 'broadcast',
-        event: 'turn_end',
-        payload: { playerId: localPlayer.id },
-      });
-    }
-  }, [activeAnimation, currentDarts, currentThrower, introComplete, localIsP1, localPlayer.id, showPlayerChange, showWinnerScreen]);
+    sendTurnEnd({ playerId: localPlayer.id });
+  }, [activeAnimation, currentDarts, currentThrower, introComplete, localIsP1, localPlayer.id, showPlayerChange, showWinnerScreen, sendTurnEnd]);
 
   // Handle BLE throws
   useEffect(() => {

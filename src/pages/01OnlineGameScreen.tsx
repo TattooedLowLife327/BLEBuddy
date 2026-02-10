@@ -7,29 +7,8 @@ import type { DartThrowData } from '../utils/ble/bleConnection';
 import type { GameConfiguration, GameInOut } from '../types/game';
 import { getCheckoutSuggestion } from '../utils/checkoutSolver';
 import { createClient } from '../utils/supabase/client';
-
-// Resolve profile pic URL from various formats
-const resolveProfilePicUrl = (profilepic: string | undefined): string | undefined => {
-  if (!profilepic) return undefined;
-
-  // Already a full URL
-  if (profilepic.startsWith('http')) return profilepic;
-
-  // LowLifeStore assets are served from the main PWA domain
-  if (profilepic.includes('LowLifeStore')) {
-    const path = profilepic.startsWith('/') ? profilepic : `/${profilepic}`;
-    return `https://www.lowlifesofgranboard.com${path}`;
-  }
-
-  // Local asset path (defaults only)
-  if (profilepic.startsWith('/assets') || profilepic.startsWith('assets') || profilepic === 'default-pfp.png') {
-    return profilepic.startsWith('/') ? profilepic : `/${profilepic}`;
-  }
-
-  // Storage path - construct Supabase public URL
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://sndsyxxcnuwjmjgikzgg.supabase.co';
-  return `${supabaseUrl}/storage/v1/object/public/profilepic/${profilepic}`;
-};
+import { useOnlineThrowSync } from '../hooks/useOnlineThrowSync';
+import { resolveProfilePicUrl } from '../utils/profile';
 
 interface DartThrow {
   segment: string;
@@ -605,9 +584,6 @@ export function O1OnlineGameScreen({
   const p2Active = currentThrower === 'p2';
   const isLocalTurn = (localIsP1 && p1Active) || (!localIsP1 && p2Active);
 
-  // Realtime channel for syncing throws
-  const throwChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-
   const throwDart = useCallback((segment: string, score: number, multiplier: number, isLocal: boolean = true) => {
     if (currentDarts.length >= 3 || showPlayerChange || !introComplete) return;
 
@@ -652,12 +628,13 @@ export function O1OnlineGameScreen({
     if (currentThrower === 'p1') setP1DartsThrown(prev => prev + 1);
     else setP2DartsThrown(prev => prev + 1);
 
-    // Broadcast throw to opponent if local
-    if (isLocal && throwChannelRef.current) {
-      throwChannelRef.current.send({
-        type: 'broadcast',
-        event: 'dart_throw',
-        payload: { playerId: localPlayer.id, segment, score, multiplier },
+    // Broadcast throw to opponent if local (actual send wired via useOnlineThrowSync)
+    if (isLocal) {
+      sendThrow({
+        playerId: localPlayer.id,
+        segment,
+        score,
+        multiplier,
       });
     }
 
@@ -670,12 +647,8 @@ export function O1OnlineGameScreen({
         playerChangeTimeoutRef.current = null;
         setShowPlayerChange(true);
         // Broadcast turn end if local
-        if (isLocal && throwChannelRef.current) {
-          throwChannelRef.current.send({
-            type: 'broadcast',
-            event: 'turn_end',
-            payload: { playerId: localPlayer.id },
-          });
+        if (isLocal) {
+          sendTurnEnd({ playerId: localPlayer.id });
         }
       }, 3000);
       return;
@@ -708,12 +681,8 @@ export function O1OnlineGameScreen({
             playerChangeTimeoutRef.current = null;
             setShowPlayerChange(true);
             // Broadcast turn end if local
-            if (isLocal && throwChannelRef.current) {
-              throwChannelRef.current.send({
-                type: 'broadcast',
-                event: 'turn_end',
-                payload: { playerId: localPlayer.id },
-              });
+            if (isLocal) {
+              sendTurnEnd({ playerId: localPlayer.id });
             }
           }, 3000);
         }
@@ -731,44 +700,28 @@ export function O1OnlineGameScreen({
         playerChangeTimeoutRef.current = null;
         setShowPlayerChange(true);
         // Broadcast turn end if local
-        if (isLocal && throwChannelRef.current) {
-          throwChannelRef.current.send({
-            type: 'broadcast',
-            event: 'turn_end',
-            payload: { playerId: localPlayer.id },
-          });
+        if (isLocal) {
+          sendTurnEnd({ playerId: localPlayer.id });
         }
       }, 3000);
     }
-  }, [currentDarts, currentScore, currentThrower, roundScore, showPlayerChange, introComplete, p1Score, p2Score, p1HasStarted, p2HasStarted, inMode, outMode, detectAchievement, triggerAchievement, currentRound, localIsP1, localPlayer.id]);
+  }, [currentDarts, currentScore, currentThrower, roundScore, showPlayerChange, introComplete, p1Score, p2Score, p1HasStarted, p2HasStarted, inMode, outMode, detectAchievement, triggerAchievement, currentRound, localIsP1, localPlayer.id, sendThrow, sendTurnEnd]);
 
   // Keep ref in sync for broadcast handler
   const throwDartRef = useRef(throwDart);
   useEffect(() => { throwDartRef.current = throwDart; }, [throwDart]);
 
-  // Broadcast channel for syncing throws with opponent
-  useEffect(() => {
-    throwChannelRef.current = supabase.channel(`o1:${gameId}`, {
-      config: { broadcast: { self: false } },
-    });
-
-    throwChannelRef.current
-      .on('broadcast', { event: 'dart_throw' }, ({ payload }) => {
-        if (payload.playerId !== localPlayer.id) {
-          throwDartRef.current(payload.segment, payload.score, payload.multiplier, false);
-        }
-      })
-      .on('broadcast', { event: 'turn_end' }, ({ payload }) => {
-        if (payload.playerId !== localPlayer.id) {
-          setShowPlayerChange(true);
-        }
-      })
-      .subscribe();
-
-    return () => {
-      throwChannelRef.current?.unsubscribe();
-    };
-  }, [gameId, localPlayer.id]);
+  // Shared realtime throw synchronization (Supabase channel)
+  const { sendThrow, sendTurnEnd } = useOnlineThrowSync({
+    channelName: `o1:${gameId}`,
+    localPlayerId: localPlayer.id,
+    onRemoteThrow: ({ segment, score = 0, multiplier }) => {
+      throwDartRef.current(segment, score, multiplier, false);
+    },
+    onRemoteTurnEnd: () => {
+      setShowPlayerChange(true);
+    },
+  });
 
   const endTurnWithMisses = useCallback(() => {
     if (showPlayerChange || !introComplete || showWinnerScreen) return;

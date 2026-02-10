@@ -1,10 +1,9 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
-import { Label } from './ui/label';
-import { Separator } from './ui/separator';
 import { createClient } from '../utils/supabase/client';
 import type { GameConfiguration } from '../types/game';
+import { resolveProfilePicUrl } from '../utils/profile';
 
 // Convert hex color to hue value (0-360)
 function hexToHue(hex: string): number {
@@ -109,6 +108,7 @@ export function PlayerGameSetup({
   const [flight, setFlight] = useState<FlightAnimation | null>(null);
   const [modalScale, setModalScale] = useState(1);
   const [fetchedProfilePic, setFetchedProfilePic] = useState<string | null>(null);
+  const [friendCount, setFriendCount] = useState<number>(0);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   const supabase = createClient();
@@ -196,23 +196,6 @@ export function PlayerGameSetup({
           .eq('id', player.player_id)
           .single();
 
-        // Helper to resolve profile pic URL
-        const resolveProfilePicUrl = (pic: string): string => {
-          if (pic.startsWith('http')) {
-            return pic;
-          } else if (pic.includes('LowLifeStore')) {
-            // Store purchases are served from the main PWA domain
-            const path = pic.startsWith('/') ? pic : `/${pic}`;
-            return `https://www.lowlifesofgranboard.com${path}`;
-          } else if (pic.startsWith('/assets') || pic.startsWith('assets') || pic === 'default-pfp.png') {
-            return pic.startsWith('/') ? pic : `/${pic}`;
-          } else {
-            // Storage bucket path
-            const { data: urlData } = supabase.storage.from('profilepic').getPublicUrl(pic);
-            return urlData.publicUrl;
-          }
-        };
-
         if (profileError || !opponentProfile) {
           // Must be youth player - try youth schema
           opponentIsYouth = true;
@@ -273,6 +256,19 @@ export function PlayerGameSetup({
             soloWinRate: statsData.solo_win_rate || 0,
             soloHighestCheckout: statsData.solo_highest_checkout || 0,
           });
+        }
+
+        // Fetch friend count
+        try {
+          const { count } = await (supabase as any)
+            .schema('player')
+            .from('friends')
+            .select('*', { count: 'exact', head: true })
+            .eq('status', 'accepted')
+            .or(`player_id.eq.${player.player_id},friend_id.eq.${player.player_id}`);
+          setFriendCount(count || 0);
+        } catch {
+          setFriendCount(0);
         }
 
         // If opponent is a doubles team, fetch partner stats and calculate team averages
@@ -539,95 +535,120 @@ export function PlayerGameSetup({
 
         {/* Content */}
         <div className="flex-1 flex overflow-hidden">
-          {/* Left Side - Stats */}
-          <div className="w-1/3 p-4 border-r overflow-y-auto flex flex-col justify-center" style={{ borderColor: player.accentColor }}>
-            {loading ? (
-              <div className="text-gray-400 text-sm" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                Loading stats...
-              </div>
-            ) : displayStats ? (
-              <div>
-                {/* Rating Cards - 3 columns like LLOGB */}
-                <div className="grid grid-cols-3 gap-3 mb-4">
-                  {/* 01 AVG */}
-                  <div className="text-center">
-                    <div className="text-xs uppercase tracking-wider text-gray-500 mb-1" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                      01 AVG
+          {/* Left Side - Player Card (PlayerCardReadOnly style) */}
+          <div
+            className="w-1/3 relative overflow-hidden"
+            style={{
+              borderRight: `1px solid ${player.accentColor}`,
+              background: 'rgba(0, 0, 0, 0.3)',
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+            }}
+          >
+            {/* Glassmorphic base layer */}
+            <div
+              className="absolute inset-0"
+              style={{
+                background: 'linear-gradient(135deg, rgba(0, 0, 0, 0.2) 0%, rgba(20, 20, 20, 0.4) 100%)',
+              }}
+            />
+
+            <div className="relative z-[5] h-full flex flex-col p-4">
+              {/* Top row: Profile pic + Name/ID/Counts */}
+              <div className="flex items-start gap-3 mb-4">
+                {/* Profile Picture */}
+                <Avatar
+                  className="w-16 h-16 shrink-0 border-[3px]"
+                  style={{
+                    borderColor: player.accentColor,
+                  }}
+                >
+                  <AvatarImage src={fetchedProfilePic || player.profilePic} />
+                  <AvatarFallback className="bg-zinc-800 text-white text-xl">
+                    {player.granboardName.charAt(0)}
+                  </AvatarFallback>
+                </Avatar>
+
+                {/* Name + Info */}
+                <div className="flex-1 min-w-0 pt-0.5">
+                  <div
+                    className="font-bold text-sm truncate"
+                    style={{ color: player.accentColor, fontFamily: 'Helvetica, Arial, sans-serif' }}
+                  >
+                    {player.granboardName}
+                  </div>
+                  {soloStats?.granid && (
+                    <div className="text-white text-xs font-medium" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                      {soloStats.granid}
                     </div>
-                    <div
-                      className="text-2xl font-bold"
-                      style={{ fontFamily: 'Helvetica, Arial, sans-serif', color: player.accentColor }}
-                    >
+                  )}
+                  {player.isDoublesTeam && player.partnerName && (
+                    <div className="text-gray-400 text-[10px] truncate" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                      + {player.partnerName}
+                    </div>
+                  )}
+                  {/* Online Games + Friends */}
+                  <div className="mt-1.5 space-y-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Online Games</span>
+                      <span className="text-white text-xs font-bold" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                        {soloStats ? ('gameCount' in soloStats ? soloStats.gameCount : 0) : 0}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Friends</span>
+                      <span className="text-white text-xs font-bold" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                        {friendCount}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Stats Section - 3 columns */}
+              {loading ? (
+                <div className="flex-1 flex items-center justify-center">
+                  <span className="text-gray-400 text-xs" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Loading...</span>
+                </div>
+              ) : displayStats ? (
+                <div className="flex-1 flex flex-col justify-center">
+                  {/* Column headers */}
+                  <div className="grid grid-cols-3 gap-1 text-center mb-1">
+                    <div className="text-[9px] uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>01 AVG</div>
+                    <div className="text-[9px] uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>OVERALL</div>
+                    <div className="text-[9px] uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>CR AVG</div>
+                  </div>
+                  {/* Letter ratings - large */}
+                  <div className="grid grid-cols-3 gap-1 text-center">
+                    <div className="text-3xl font-bold text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
                       {'pprLetter' in displayStats && displayStats.pprLetter ? displayStats.pprLetter : '--'}
                     </div>
-                    <div className="text-sm text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                      {displayStats.pprNumeric > 0 ? displayStats.pprNumeric.toFixed(2) : '--'}
-                    </div>
-                  </div>
-
-                  {/* OVERALL */}
-                  <div className="text-center">
-                    <div className="text-xs uppercase tracking-wider text-gray-500 mb-1" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                      OVERALL
-                    </div>
-                    <div
-                      className="text-2xl font-bold"
-                      style={{ fontFamily: 'Helvetica, Arial, sans-serif', color: player.accentColor }}
-                    >
+                    <div className="text-3xl font-bold text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
                       {'overallLetter' in displayStats && displayStats.overallLetter ? displayStats.overallLetter : '--'}
                     </div>
-                    <div className="text-sm text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                      {displayStats.overallNumeric > 0 ? displayStats.overallNumeric.toFixed(2) : '--'}
-                    </div>
-                  </div>
-
-                  {/* CR AVG */}
-                  <div className="text-center">
-                    <div className="text-xs uppercase tracking-wider text-gray-500 mb-1" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                      CR AVG
-                    </div>
-                    <div
-                      className="text-2xl font-bold"
-                      style={{ fontFamily: 'Helvetica, Arial, sans-serif', color: player.accentColor }}
-                    >
+                    <div className="text-3xl font-bold text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
                       {'mprLetter' in displayStats && displayStats.mprLetter ? displayStats.mprLetter : '--'}
                     </div>
-                    <div className="text-sm text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                  </div>
+                  {/* Numeric ratings */}
+                  <div className="grid grid-cols-3 gap-1 text-center mt-0.5">
+                    <div className="text-xs font-bold text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                      {displayStats.pprNumeric > 0 ? displayStats.pprNumeric.toFixed(2) : '--'}
+                    </div>
+                    <div className="text-xs font-bold text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                      {displayStats.overallNumeric > 0 ? displayStats.overallNumeric.toFixed(2) : '--'}
+                    </div>
+                    <div className="text-xs font-bold text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
                       {displayStats.mprNumeric > 0 ? displayStats.mprNumeric.toFixed(2) : '--'}
                     </div>
                   </div>
                 </div>
-
-                {/* Divider */}
-                <div className="my-3 h-[1px] w-full" style={{ backgroundColor: player.accentColor }} />
-
-                {/* Game Stats Section */}
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Games Played</span>
-                    <span className="text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}>
-                      {'gamesPlayed' in displayStats ? displayStats.gamesPlayed : ('gameCount' in displayStats ? displayStats.gameCount : 0)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Wins</span>
-                    <span className="text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}>
-                      {'wins' in displayStats ? displayStats.wins : ('soloWins' in displayStats ? displayStats.soloWins : 0)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-gray-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Win Rate</span>
-                    <span className="text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}>
-                      {'winRate' in displayStats ? displayStats.winRate.toFixed(1) : ('soloWinRate' in displayStats ? displayStats.soloWinRate.toFixed(1) : '0.0')}%
-                    </span>
-                  </div>
+              ) : (
+                <div className="flex-1 flex items-center justify-center">
+                  <span className="text-gray-400 text-xs" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>No stats available</span>
                 </div>
-              </div>
-            ) : (
-              <div className="text-gray-400 text-sm" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                No stats available
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           {/* Right Side - Game Setup */}

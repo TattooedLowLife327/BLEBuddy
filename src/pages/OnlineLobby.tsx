@@ -8,29 +8,14 @@ import { AppHeader } from '../components/AppHeader';
 import { type GameData } from '../contexts/GameContext';
 import type { GameConfiguration } from '../types/game';
 import { checkCameraAvailable } from '../utils/webrtc/peerConnection';
-
-// Resolve profile pic URL from various formats
-const resolveProfilePicUrl = (profilepic: string | undefined): string | undefined => {
-  if (!profilepic) return undefined;
-
-  // Already a full URL
-  if (profilepic.startsWith('http')) return profilepic;
-
-  // LowLifeStore assets are served from the main PWA domain
-  if (profilepic.includes('LowLifeStore')) {
-    const path = profilepic.startsWith('/') ? profilepic : `/${profilepic}`;
-    return `https://www.lowlifesofgranboard.com${path}`;
-  }
-
-  // Local asset path (defaults only)
-  if (profilepic.startsWith('/assets') || profilepic.startsWith('assets') || profilepic === 'default-pfp.png') {
-    return profilepic.startsWith('/') ? profilepic : `/${profilepic}`;
-  }
-
-  // Storage path - construct Supabase public URL
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://sndsyxxcnuwjmjgikzgg.supabase.co';
-  return `${supabaseUrl}/storage/v1/object/public/profilepic/${profilepic}`;
-};
+import { resolveProfilePicUrl } from '../utils/profile';
+import {
+  REQUEST_TIMEOUT_MS,
+  IDLE_TIMEOUT_MS,
+  IDLE_WARNING_DURATION_S,
+  IDLE_CHECK_INTERVAL_MS,
+  LOBBY_HEARTBEAT_INTERVAL_MS,
+} from '../utils/constants';
 
 const normalizeGameType = (value: string | null | undefined): string | null => {
   if (!value) return null;
@@ -77,8 +62,6 @@ interface OnlineLobbyProps {
   onAddMissedRequest?: (request: MissedRequest) => void;
 }
 
-const REQUEST_TIMEOUT_MS = 7000; // 7 seconds
-
 type PlayerStatus = 'waiting' | 'idle' | 'in_match';
 
 interface AvailablePlayer {
@@ -98,6 +81,9 @@ interface AvailablePlayer {
   partnerName?: string;
   status: PlayerStatus;
   idleTimeRemaining?: number; // seconds remaining in idle countdown (0-300)
+  granid?: string;
+  friendCount?: number;
+  onlineGameCount?: number;
 }
 
 export function OnlineLobby({
@@ -203,9 +189,6 @@ export function OnlineLobby({
   const idleCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const idleCountdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
-  const IDLE_WARNING_DURATION_S = 300; // 5 minutes in seconds
-
   // Wrap logout to clean up lobby entry first
   const handleLogout = useCallback(async () => {
     try {
@@ -273,8 +256,12 @@ export function OnlineLobby({
   useEffect(() => {
     if (!canAccess || cameraError || checkingCamera) return;
 
-    // Check for idle every 30 seconds
+    // Check for idle on an interval
     idleCheckIntervalRef.current = setInterval(() => {
+      // Skip idle work when tab is not visible to avoid unnecessary DB writes
+      if (document.visibilityState === 'hidden') {
+        return;
+      }
       const timeSinceActivity = Date.now() - lastActivityRef.current;
       if (timeSinceActivity >= IDLE_TIMEOUT_MS && !showIdleWarning) {
         console.log('[OnlineLobby] User idle for 15 minutes, showing warning');
@@ -287,7 +274,7 @@ export function OnlineLobby({
           .eq('player_id', userId);
         startIdleCountdown();
       }
-    }, 30000); // Check every 30 seconds
+    }, IDLE_CHECK_INTERVAL_MS);
 
     // Activity listeners
     const handleActivity = () => resetActivity();
@@ -328,6 +315,41 @@ export function OnlineLobby({
     verifyCameraAccess();
   }, [canAccess]);
 
+  const cleanupStaleGames = useCallback(async () => {
+    try {
+      // Aggressive cleanup of ALL old/stale games for this user
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+
+      // Delete ALL games older than 2 hours (stuck games from crashes, etc.)
+      await (supabase as any)
+        .schema('companion')
+        .from('active_games')
+        .delete()
+        .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
+        .lt('created_at', twoHoursAgo);
+
+      // Delete stale pending games (unanswered requests older than 5 min)
+      await (supabase as any)
+        .schema('companion')
+        .from('active_games')
+        .delete()
+        .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
+        .eq('status', 'pending')
+        .lt('created_at', fiveMinutesAgo);
+
+      // Delete cancelled/declined/abandoned games
+      await (supabase as any)
+        .schema('companion')
+        .from('active_games')
+        .delete()
+        .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
+        .in('status', ['cancelled', 'declined', 'abandoned']);
+    } catch (err) {
+      console.error('[OnlineLobby] Error during stale game cleanup:', err);
+    }
+  }, [supabase, userId]);
+
   // Join lobby on mount (only if camera is available)
   useEffect(() => {
     if (!canAccess || cameraError || checkingCamera) return;
@@ -336,34 +358,8 @@ export function OnlineLobby({
       try {
         console.log('Joining online lobby...');
 
-        // Aggressive cleanup of ALL old/stale games for this user
-        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-        const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-
-        // Delete ALL games older than 2 hours (stuck games from crashes, etc.)
-        await (supabase as any)
-          .schema('companion')
-          .from('active_games')
-          .delete()
-          .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
-          .lt('created_at', twoHoursAgo);
-
-        // Delete stale pending games (unanswered requests older than 5 min)
-        await (supabase as any)
-          .schema('companion')
-          .from('active_games')
-          .delete()
-          .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
-          .eq('status', 'pending')
-          .lt('created_at', fiveMinutesAgo);
-
-        // Delete cancelled/declined/abandoned games
-        await (supabase as any)
-          .schema('companion')
-          .from('active_games')
-          .delete()
-          .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
-          .in('status', ['cancelled', 'declined', 'abandoned']);
+        // Perform shared stale game cleanup once on lobby join
+        await cleanupStaleGames();
 
         // Insert current user into online_lobby (companion schema)
         const { error: insertError } = await (supabase as any)
@@ -406,13 +402,16 @@ export function OnlineLobby({
           }
         });
     };
-  }, [canAccess, cameraError, checkingCamera, userId, userName, isYouthPlayer, isDoublesTeam, partnerId, partnerName]);
+  }, [canAccess, cameraError, checkingCamera, userId, userName, isYouthPlayer, isDoublesTeam, partnerId, partnerName, cleanupStaleGames]);
 
   // Heartbeat: update last_seen every 30 seconds
   useEffect(() => {
     if (!canAccess || cameraError || checkingCamera) return;
 
     const heartbeatInterval = setInterval(async () => {
+      if (document.visibilityState === 'hidden') {
+        return;
+      }
       const { error } = await (supabase as any)
         .schema('companion')
         .from('online_lobby')
@@ -422,7 +421,7 @@ export function OnlineLobby({
       if (error) {
         console.error('Heartbeat error:', error);
       }
-    }, 30000); // 30 seconds
+    }, LOBBY_HEARTBEAT_INTERVAL_MS);
 
     return () => clearInterval(heartbeatInterval);
   }, [canAccess, cameraError, checkingCamera, userId]);
@@ -504,7 +503,7 @@ export function OnlineLobby({
 
               const { data: rawStatsData, error: statsError } = await statsSchema
                 .from(statsTable)
-                .select('mpr_numeric, ppr_numeric, overall_numeric, mpr_letter, ppr_letter, overall_letter, solo_games_played, solo_wins, solo_win_rate, solo_highest_checkout')
+                .select('granid, mpr_numeric, ppr_numeric, overall_numeric, mpr_letter, ppr_letter, overall_letter, online_game_count, solo_games_played, solo_wins, solo_win_rate, solo_highest_checkout')
                 .eq('id', playerId)
                 .single();
 
@@ -514,12 +513,14 @@ export function OnlineLobby({
               }
 
               const statsData = (rawStatsData as {
+                granid: string | null;
                 mpr_numeric: number | null;
                 ppr_numeric: number | null;
                 overall_numeric: number | null;
                 mpr_letter: string | null;
                 ppr_letter: string | null;
                 overall_letter: string | null;
+                online_game_count: number | null;
                 solo_games_played: number | null;
                 solo_wins: number | null;
                 solo_win_rate: number | null;
@@ -546,6 +547,18 @@ export function OnlineLobby({
                 }
               }
 
+              // Fetch friend count
+              let playerFriendCount = 0;
+              try {
+                const { count } = await (supabase as any)
+                  .schema('player')
+                  .from('friends')
+                  .select('*', { count: 'exact', head: true })
+                  .eq('status', 'accepted')
+                  .or(`player_id.eq.${playerId},friend_id.eq.${playerId}`);
+                playerFriendCount = count || 0;
+              } catch { /* ignore */ }
+
               return {
                 id: lobbyEntry.id,
                 player_id: playerId,
@@ -563,6 +576,9 @@ export function OnlineLobby({
                 partnerName: partnerDisplayName,
                 status: playerStatus,
                 idleTimeRemaining,
+                granid: statsData?.granid || undefined,
+                friendCount: playerFriendCount,
+                onlineGameCount: statsData?.online_game_count ?? 0,
               } as AvailablePlayer;
             })
           );
@@ -584,10 +600,18 @@ export function OnlineLobby({
     }
   }, [supabase, userId]);
 
+  const lastRefreshRef = useRef<number>(0);
+
   const handleManualRefresh = useCallback(async () => {
+    const now = Date.now();
+    // Basic rate-limiting: ignore refreshes more often than every 3 seconds
+    if (now - lastRefreshRef.current < 3000 || isRefreshing) {
+      return;
+    }
+    lastRefreshRef.current = now;
     setIsRefreshing(true);
     await fetchAvailablePlayers();
-  }, [fetchAvailablePlayers]);
+  }, [fetchAvailablePlayers, isRefreshing]);
 
   // Initial fetch only - no auto-polling
   useEffect(() => {
@@ -1301,7 +1325,7 @@ export function OnlineLobby({
               className={`grid transition-opacity duration-200 ${isRefreshing ? 'opacity-50' : 'opacity-100'}`}
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
                 gap: '16px',
                 justifyItems: 'center',
               }}
@@ -1318,7 +1342,7 @@ export function OnlineLobby({
                   : 0;
 
                 // SVG circle properties for countdown border
-                const strokeDasharray = 400;
+                const strokeDasharray = 500;
                 const strokeDashoffset = strokeDasharray * (1 - idleProgress);
 
                 const hexToRgbaPlayer = (hex: string, alpha: number) => {
@@ -1333,8 +1357,8 @@ export function OnlineLobby({
                     key={player.id}
                     className="flex items-center justify-center"
                     style={{
-                      width: '140px',
-                      height: '185px',
+                      width: '180px',
+                      height: '280px',
                     }}
                   >
                     <div
@@ -1342,27 +1366,27 @@ export function OnlineLobby({
                       className={`relative rounded-lg overflow-hidden ${isInMatch ? 'cursor-not-allowed' : 'cursor-pointer hover:scale-[1.05]'} transition-transform origin-center`}
                       style={{
                         filter: isIdle || isInMatch ? 'grayscale(0.7) brightness(0.6)' : 'none',
-                        width: '140px',
-                        height: '185px',
+                        width: '180px',
+                        height: '280px',
                       }}
                     >
                     {/* SVG Countdown Border for Idle Players */}
                     {isIdle && (
                       <svg
                         className="absolute inset-0 w-full h-full pointer-events-none z-10"
-                        viewBox="0 0 100 100"
+                        viewBox="0 0 100 155"
                         preserveAspectRatio="none"
                       >
                         <rect
                           x="2"
                           y="2"
                           width="96"
-                          height="96"
-                          rx="8"
-                          ry="8"
+                          height="151"
+                          rx="6"
+                          ry="6"
                           fill="none"
                           stroke={playerAccentColor}
-                          strokeWidth="3"
+                          strokeWidth="2"
                           strokeDasharray={strokeDasharray}
                           strokeDashoffset={strokeDashoffset}
                           style={{
@@ -1372,103 +1396,130 @@ export function OnlineLobby({
                       </svg>
                     )}
 
-                    {/* Card Background with border */}
+                    {/* Card Background - glassmorphic */}
                     <div
-                      className={`absolute inset-0 rounded-lg border bg-zinc-900/90 ${isIdle ? 'border-zinc-600' : ''}`}
+                      className={`absolute inset-0 rounded-lg border-2 ${isIdle ? 'border-zinc-600' : ''}`}
                       style={{
                         borderColor: isIdle ? '#52525b' : playerAccentColor,
                         boxShadow: isWaiting
-                          ? `0 0 12px ${hexToRgbaPlayer(playerAccentColor, 0.4)}`
+                          ? `0 0 20px ${hexToRgbaPlayer(playerAccentColor, 0.4)}`
                           : 'none',
+                        background: 'rgba(0, 0, 0, 0.3)',
+                        backdropFilter: 'blur(20px)',
+                        WebkitBackdropFilter: 'blur(20px)',
+                      }}
+                    />
+                    <div
+                      className="absolute inset-0 rounded-lg"
+                      style={{
+                        background: 'linear-gradient(135deg, rgba(0, 0, 0, 0.2) 0%, rgba(20, 20, 20, 0.4) 100%)',
                       }}
                     />
 
-                    {/* Card Content - Vertical layout */}
-                    <div className="relative z-[5] flex flex-col items-center justify-center h-full p-3">
-                      {/* Profile Picture */}
-                      <div className="relative mb-3">
-                        {isWaiting && (
-                          <div
-                            className="absolute inset-0 rounded-full blur-md"
+                    {/* Card Content */}
+                    <div className="relative z-[5] flex flex-col h-full p-3">
+                      {/* Top: Profile pic + Name/ID row */}
+                      <div className="flex items-start gap-2.5 mb-2">
+                        {/* Profile Picture */}
+                        <div className="relative shrink-0">
+                          {isWaiting && (
+                            <div
+                              className="absolute inset-0 rounded-full blur-md"
+                              style={{
+                                backgroundColor: playerAccentColor,
+                                opacity: 0.5,
+                                transform: 'scale(1.2)',
+                              }}
+                            />
+                          )}
+                          <Avatar
+                            className="relative w-14 h-14 border-[3px]"
                             style={{
-                              backgroundColor: playerAccentColor,
-                              opacity: 0.5,
-                              transform: 'scale(1.2)',
+                              borderColor: isIdle ? '#52525b' : playerAccentColor,
                             }}
-                          />
-                        )}
-                        <Avatar
-                          className="relative w-16 h-16 border-2"
-                          style={{
-                            borderColor: isIdle ? '#52525b' : playerAccentColor,
-                          }}
-                        >
-                          <AvatarImage src={resolveProfilePicUrl(player.profilePic)} />
-                          <AvatarFallback className="bg-zinc-800 text-white text-lg">
-                            {player.granboardName.charAt(0)}
-                          </AvatarFallback>
-                        </Avatar>
+                          >
+                            <AvatarImage src={resolveProfilePicUrl(player.profilePic)} />
+                            <AvatarFallback className="bg-zinc-800 text-white text-lg">
+                              {player.granboardName.charAt(0)}
+                            </AvatarFallback>
+                          </Avatar>
+                        </div>
+
+                        {/* Name + ID */}
+                        <div className="flex-1 min-w-0 pt-0.5">
+                          <div
+                            className="font-bold text-xs truncate"
+                            style={{ color: playerAccentColor, fontFamily: 'Helvetica, Arial, sans-serif' }}
+                          >
+                            {player.granboardName}
+                          </div>
+                          {player.granid && (
+                            <div className="text-white text-[10px] font-medium" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                              {player.granid}
+                            </div>
+                          )}
+                          {player.isDoublesTeam && player.partnerName && (
+                            <div className="text-gray-400 text-[9px] truncate" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                              + {player.partnerName}
+                            </div>
+                          )}
+                        </div>
                       </div>
 
-                      {/* Granboard Name */}
-                      <h3
-                        className="text-white text-sm font-bold truncate max-w-full text-center"
-                        style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}
-                      >
-                        {player.granboardName}
-                      </h3>
-
-                      {/* Team indicator */}
-                      {player.isDoublesTeam && player.partnerName && (
-                        <p className="text-xs text-gray-400 truncate max-w-full text-center" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                          + {player.partnerName}
-                        </p>
-                      )}
+                      {/* Online Games + Friends */}
+                      <div className="space-y-0.5 mb-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[9px] uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Online Games</span>
+                          <span className="text-white text-[10px] font-bold" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                            {player.onlineGameCount ?? 0}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[9px] uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Friends</span>
+                          <span className="text-white text-[10px] font-bold" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                            {player.friendCount ?? 0}
+                          </span>
+                        </div>
+                      </div>
 
                       {/* Status indicator for idle/in_match */}
                       {isIdle && (
-                        <p className="text-yellow-500 text-xs font-semibold">IDLE</p>
+                        <p className="text-yellow-500 text-xs font-semibold text-center mb-1">IDLE</p>
                       )}
                       {isInMatch && (
-                        <p className="text-red-400 text-xs font-semibold">IN MATCH</p>
+                        <p className="text-red-400 text-xs font-semibold text-center mb-1">IN MATCH</p>
                       )}
 
-                      {/* Stats - 3 columns matching PlayerGameSetup */}
+                      {/* Stats Section - 3 columns */}
                       {isWaiting && (
-                        <div className="flex items-center justify-center gap-3 mt-2">
-                          <div className="text-center">
-                            <div className="text-[8px] uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>01</div>
-                            <div
-                              className="text-base font-bold"
-                              style={{ color: playerAccentColor }}
-                            >
+                        <div className="flex-1 flex flex-col justify-center">
+                          {/* Headers */}
+                          <div className="grid grid-cols-3 gap-1 text-center mb-0.5">
+                            <div className="text-[8px] uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>01 AVG</div>
+                            <div className="text-[8px] uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>OVERALL</div>
+                            <div className="text-[8px] uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>CR AVG</div>
+                          </div>
+                          {/* Letter ratings */}
+                          <div className="grid grid-cols-3 gap-1 text-center">
+                            <div className="text-2xl font-bold text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
                               {player.pprLetter || '--'}
                             </div>
-                            <div className="text-[11px] text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                              {player.pprNumeric > 0 ? player.pprNumeric.toFixed(2) : '--'}
-                            </div>
-                          </div>
-                          <div className="text-center">
-                            <div className="text-[8px] uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>ALL</div>
-                            <div
-                              className="text-base font-bold"
-                              style={{ color: playerAccentColor }}
-                            >
+                            <div className="text-2xl font-bold text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
                               {player.overallLetter || '--'}
                             </div>
-                            <div className="text-[11px] text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                              {player.overallNumeric > 0 ? player.overallNumeric.toFixed(2) : '--'}
-                            </div>
-                          </div>
-                          <div className="text-center">
-                            <div className="text-[8px] uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>CR</div>
-                            <div
-                              className="text-base font-bold"
-                              style={{ color: playerAccentColor }}
-                            >
+                            <div className="text-2xl font-bold text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
                               {player.mprLetter || '--'}
                             </div>
-                            <div className="text-[11px] text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                          </div>
+                          {/* Numeric ratings */}
+                          <div className="grid grid-cols-3 gap-1 text-center">
+                            <div className="text-[10px] font-bold text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                              {player.pprNumeric > 0 ? player.pprNumeric.toFixed(2) : '--'}
+                            </div>
+                            <div className="text-[10px] font-bold text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                              {player.overallNumeric > 0 ? player.overallNumeric.toFixed(2) : '--'}
+                            </div>
+                            <div className="text-[10px] font-bold text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
                               {player.mprNumeric > 0 ? player.mprNumeric.toFixed(2) : '--'}
                             </div>
                           </div>
