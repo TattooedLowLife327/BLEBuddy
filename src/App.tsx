@@ -132,9 +132,23 @@ export default function App() {
   const [userName, setUserName] = useState<string>('');
   const [missedRequests, setMissedRequests] = useState<GameRequestNotification[]>([]);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showBLEDisconnectedPopup, setShowBLEDisconnectedPopup] = useState(false);
+  const wasBLEConnectedRef = useRef(bleConnected);
 
   const supabase = createClient();
   const locationRef = useRef(location.pathname);
+
+  // Show popup when BLE disconnects from board (transition from connected to disconnected)
+  useEffect(() => {
+    if (bleConnected) {
+      wasBLEConnectedRef.current = true;
+    } else {
+      if (wasBLEConnectedRef.current) {
+        setShowBLEDisconnectedPopup(true);
+      }
+      wasBLEConnectedRef.current = false;
+    }
+  }, [bleConnected]);
 
   const removeActiveGame = useCallback(
     async (gameId?: string, playerIdOverride?: string) => {
@@ -766,6 +780,47 @@ export default function App() {
     </Routes>
 
     <SettingsModal isOpen={showSettingsModal} onClose={() => setShowSettingsModal(false)} />
+
+    {/* BLE disconnected popup */}
+    {showBLEDisconnectedPopup && (
+      <div
+        className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+        onClick={() => setShowBLEDisconnectedPopup(false)}
+      >
+        <div
+          className="rounded-xl border border-zinc-600 bg-zinc-900 shadow-xl max-w-sm w-full p-6"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <h3 className="text-lg font-bold text-white mb-2" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+            Bluetooth disconnected
+          </h3>
+          <p className="text-zinc-400 text-sm mb-6" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+            The connection to your board was lost. Reconnect from the menu when you&apos;re ready.
+          </p>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => setShowBLEDisconnectedPopup(false)}
+              className="flex-1 py-2.5 px-4 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white font-semibold text-sm transition-colors"
+              style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}
+            >
+              OK
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                setShowBLEDisconnectedPopup(false);
+                await bleConnect();
+              }}
+              className="flex-1 py-2.5 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm transition-colors"
+              style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}
+            >
+              Reconnect
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     </>
   );
 }
