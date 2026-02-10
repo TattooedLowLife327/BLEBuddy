@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Clock, Camera } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '../components/ui/avatar';
 import { createClient } from '../utils/supabase/client';
@@ -61,9 +62,15 @@ interface OnlineLobbyProps {
   onClearMissedRequests?: () => void;
   onOpenSettings?: () => void;
   onAddMissedRequest?: (request: MissedRequest) => void;
+  bleConnected?: boolean;
+  bleStatus?: 'disconnected' | 'scanning' | 'connecting' | 'connected';
+  onBLEConnect?: () => Promise<{ success: boolean; error?: string }>;
+  onBLEDisconnect?: () => Promise<void>;
 }
 
 type PlayerStatus = 'waiting' | 'idle' | 'in_match';
+
+export type LobbyType = 'main' | 'ladies' | 'youth';
 
 interface AvailablePlayer {
   id: string;
@@ -85,6 +92,8 @@ interface AvailablePlayer {
   granid?: string;
   friendCount?: number;
   onlineGameCount?: number;
+  gender?: string | null;
+  isYouth?: boolean;
 }
 
 export function OnlineLobby({
@@ -104,6 +113,10 @@ export function OnlineLobby({
   onClearMissedRequests,
   onOpenSettings,
   onAddMissedRequest,
+  bleConnected,
+  bleStatus,
+  onBLEConnect,
+  onBLEDisconnect,
 }: OnlineLobbyProps) {
   const [availablePlayers, setAvailablePlayers] = useState<AvailablePlayer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -120,6 +133,10 @@ export function OnlineLobby({
   const [checkingCamera, setCheckingCamera] = useState(true);
   const outgoingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const supabase = createClient();
+  const [searchParams] = useSearchParams();
+  const lobbyType: LobbyType = (searchParams.get('type') === 'ladies' || searchParams.get('type') === 'youth')
+    ? searchParams.get('type') as 'ladies' | 'youth'
+    : 'main';
 
   // Check if user already has an active game - returns the blocking game or null
   const checkForExistingGame = async (): Promise<{ id: string; status: string; created_at: string; completed_at: string | null } | null> => {
@@ -482,7 +499,7 @@ export function OnlineLobby({
 
               const { data: rawProfileData, error: profileError } = await profileSchema
                 .from(profileTable)
-                .select('granboard_name, profilepic, profilecolor')
+                .select('granboard_name, profilepic, profilecolor, gender')
                 .eq('id', playerId)
                 .single();
 
@@ -495,6 +512,7 @@ export function OnlineLobby({
                 granboard_name: string | null;
                 profilepic: string | null;
                 profilecolor: string | null;
+                gender?: string | null;
               }) || null;
 
               const statsSchema = isYouth
@@ -580,11 +598,19 @@ export function OnlineLobby({
                 granid: statsData?.granid || undefined,
                 friendCount: playerFriendCount,
                 onlineGameCount: statsData?.online_game_count ?? 0,
+                gender: profileData?.gender ?? null,
+                isYouth: isYouth,
               } as AvailablePlayer;
             })
           );
 
-        const validPlayers = playersWithData.filter((p): p is AvailablePlayer => p !== null);
+        let validPlayers = playersWithData.filter((p): p is AvailablePlayer => p !== null);
+        // Filter by lobby type: ladies only female; youth only youth accounts
+        if (lobbyType === 'ladies') {
+          validPlayers = validPlayers.filter((p) => p.gender === 'female');
+        } else if (lobbyType === 'youth') {
+          validPlayers = validPlayers.filter((p) => p.isYouth === true);
+        }
         allPlayers = [...allPlayers, ...validPlayers];
       } else {
         console.log('No players in lobby');
@@ -599,7 +625,7 @@ export function OnlineLobby({
       setLoading(false);
       setIsRefreshing(false);
     }
-  }, [supabase, userId]);
+  }, [supabase, userId, lobbyType]);
 
   const lastRefreshRef = useRef<number>(0);
 
@@ -614,11 +640,11 @@ export function OnlineLobby({
     await fetchAvailablePlayers();
   }, [fetchAvailablePlayers, isRefreshing]);
 
-  // Initial fetch only - no auto-polling
+  // Initial fetch and when lobby type changes
   useEffect(() => {
     if (!canAccess || cameraError || checkingCamera) return;
     fetchAvailablePlayers();
-  }, [canAccess, cameraError, checkingCamera]);
+  }, [canAccess, cameraError, checkingCamera, lobbyType, fetchAvailablePlayers]);
 
   // Listen for incoming game requests
   useEffect(() => {
@@ -1295,6 +1321,10 @@ export function OnlineLobby({
         <AppHeader
           title="Online Lobby"
           onBack={onBack}
+          bleConnected={bleConnected}
+          bleStatus={bleStatus}
+          onBLEConnect={onBLEConnect}
+          onBLEDisconnect={onBLEDisconnect}
           showRefresh={true}
           isRefreshing={isRefreshing}
           onRefresh={handleManualRefresh}

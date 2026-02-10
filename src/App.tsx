@@ -589,7 +589,7 @@ export default function App() {
           bleStatus={bleStatus === 'error' ? 'disconnected' : bleStatus}
           onBLEConnect={bleConnect}
           onBLEDisconnect={bleDisconnect}
-          onNavigateToOnlineLobby={() => navigate('/online-lobby')}
+          onNavigateToOnlineLobby={(lobbyType) => navigate(`/online-lobby${lobbyType ? `?type=${lobbyType}` : ''}`)}
           onNavigateToLocalDubs={() => navigate('/local-dubs-setup')}
           onNavigateToRemoteDubs={() => navigate('/remote-dubs-setup')}
           onNavigateToInhouse01={(gameType) => navigate(`/game/01-inhouse?type=${gameType}`)}
@@ -620,6 +620,10 @@ export default function App() {
           onClearMissedRequests={() => setMissedRequests([])}
           onOpenSettings={() => setShowSettingsModal(true)}
           onAddMissedRequest={(req) => setMissedRequests(prev => [...prev, { id: req.id, fromPlayerId: req.challengerId, fromPlayerName: req.challengerName, createdAt: req.timestamp, schema: req.schema || 'player' }])}
+          bleConnected={bleConnected}
+          bleStatus={bleStatus === 'error' ? 'disconnected' : bleStatus}
+          onBLEConnect={bleConnect}
+          onBLEDisconnect={bleDisconnect}
         />
       } />
 

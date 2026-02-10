@@ -124,10 +124,9 @@ export function AppHeader({
 
   return (
     <div className="relative flex items-center justify-center h-10 shrink-0">
-      {/* Left side */}
-      <div className="absolute left-0 z-20">
-        {onBack ? (
-          // Back button for pages like OnlineLobby
+      {/* Left side: back button (when onBack) and/or BLE indicator (when bleStatus) */}
+      <div className="absolute left-0 z-20 flex items-center gap-2">
+        {onBack && (
           <button
             onClick={onBack}
             className="p-1 text-white hover:opacity-80 transition-opacity"
@@ -135,8 +134,8 @@ export function AppHeader({
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
-        ) : bleStatus ? (
-          // BLE status for Dashboard
+        )}
+        {bleStatus && (
           <button
             onClick={handleBLEClick}
             className="flex items-center gap-2 transition-all hover:scale-105"
@@ -167,7 +166,7 @@ export function AppHeader({
                'Disconnected'}
             </span>
           </button>
-        ) : null}
+        )}
       </div>
 
       {/* Center - title */}
