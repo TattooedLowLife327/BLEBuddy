@@ -163,6 +163,9 @@ export function LocalDubsSetup({
             >
               Your Team
             </h2>
+            <p className="text-gray-400 text-center text-sm mb-4" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+              Your partner is selected below — they use their real account, not GUEST. Opponent team “scan to join” with their account is coming soon.
+            </p>
 
             <div className="flex items-center justify-center gap-8">
               {/* User */}

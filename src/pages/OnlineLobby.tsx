@@ -204,6 +204,7 @@ export function OnlineLobby({
   };
 
   const lastActivityRef = useRef<number>(Date.now());
+  const idleWarningShownRef = useRef<boolean>(false);
   const idleCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const idleCountdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -236,6 +237,7 @@ export function OnlineLobby({
     // If warning is showing, dismiss it and reset
     if (showIdleWarning) {
       setShowIdleWarning(false);
+      idleWarningShownRef.current = false;
       setIdleCountdown(IDLE_WARNING_DURATION_S);
       // Clear countdown interval
       if (idleCountdownIntervalRef.current) {
@@ -246,55 +248,63 @@ export function OnlineLobby({
       (supabase as any)
         .schema('companion')
         .from('online_lobby')
-        .update({ status: 'waiting', last_seen: new Date().toISOString() })
+        .update({ status: 'waiting', last_seen: new Date().toISOString(), idle_started_at: null })
         .eq('player_id', userId);
     }
   }, [showIdleWarning, supabase, userId]);
 
-  // Start idle countdown when warning shows
+  // Start 5-minute countdown when warning shows; boot user from lobby when it hits zero
   const startIdleCountdown = useCallback(() => {
-    setIdleCountdown(IDLE_WARNING_DURATION_S);
+    setIdleCountdown(IDLE_WARNING_DURATION_S); // 5:00 – display immediately
     idleCountdownIntervalRef.current = setInterval(() => {
       setIdleCountdown(prev => {
         if (prev <= 1) {
-          // Time's up - remove from lobby
           if (idleCountdownIntervalRef.current) {
             clearInterval(idleCountdownIntervalRef.current);
             idleCountdownIntervalRef.current = null;
           }
-          onBack(); // Leave lobby
+          // Remove from lobby then navigate away so user is dead in lobby
+          (supabase as any)
+            .schema('companion')
+            .from('online_lobby')
+            .delete()
+            .eq('player_id', userId)
+            .then(() => {
+              console.log('[OnlineLobby] Idle timeout – removed from lobby');
+              onBack();
+            })
+            .catch((err: unknown) => {
+              console.error('[OnlineLobby] Error removing idle user from lobby:', err);
+              onBack();
+            });
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
-  }, [onBack]);
+  }, [onBack, supabase, userId]);
 
-  // Idle detection effect
+  // Idle detection: after 15 min show "Are you still there?" and start 5 min countdown (ref avoids effect re-run clearing the countdown)
   useEffect(() => {
     if (!canAccess || cameraError || checkingCamera) return;
 
-    // Check for idle on an interval
     idleCheckIntervalRef.current = setInterval(() => {
-      // Skip idle work when tab is not visible to avoid unnecessary DB writes
-      if (document.visibilityState === 'hidden') {
-        return;
-      }
+      if (document.visibilityState === 'hidden') return;
       const timeSinceActivity = Date.now() - lastActivityRef.current;
-      if (timeSinceActivity >= IDLE_TIMEOUT_MS && !showIdleWarning) {
-        console.log('[OnlineLobby] User idle for 15 minutes, showing warning');
+      if (timeSinceActivity >= IDLE_TIMEOUT_MS && !idleWarningShownRef.current) {
+        idleWarningShownRef.current = true;
+        console.log('[OnlineLobby] User idle for 15 minutes – showing warning and starting 5 min countdown');
         setShowIdleWarning(true);
-        // Update status to 'idle' in database
+        const now = new Date().toISOString();
         (supabase as any)
           .schema('companion')
           .from('online_lobby')
-          .update({ status: 'idle', last_seen: new Date().toISOString() })
+          .update({ status: 'idle', last_seen: now, idle_started_at: now })
           .eq('player_id', userId);
         startIdleCountdown();
       }
     }, IDLE_CHECK_INTERVAL_MS);
 
-    // Activity listeners
     const handleActivity = () => resetActivity();
     window.addEventListener('click', handleActivity);
     window.addEventListener('touchstart', handleActivity);
@@ -313,7 +323,7 @@ export function OnlineLobby({
       window.removeEventListener('keydown', handleActivity);
       window.removeEventListener('scroll', handleActivity, true);
     };
-  }, [canAccess, cameraError, checkingCamera, showIdleWarning, resetActivity, startIdleCountdown, supabase, userId]);
+  }, [canAccess, cameraError, checkingCamera, resetActivity, startIdleCountdown, supabase, userId]);
 
   // Check camera availability on mount - required for online play
   useEffect(() => {
@@ -969,7 +979,7 @@ export function OnlineLobby({
     const legsToWin = deriveLegsToWin(gameConfig.legs);
     const doubleOut = deriveDoubleOut(gameConfig);
 
-    // Create game in active_games table
+    // Create game in active_games table. Solo vs solo: partner ids null, is_doubles false.
     try {
       const { data: gameData, error: gameError } = await (supabase as any)
         .schema('companion')

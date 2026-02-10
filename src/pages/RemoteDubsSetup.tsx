@@ -93,10 +93,8 @@ export function RemoteDubsSetup({
     try {
       setLoading(true);
 
-      // Query friends table from player schema where:
-      // 1. User is either player_id or friend_id
-      // 2. Status is 'accepted'
-      const { data: friendships, error: friendsError } = await supabase
+      // 1. Only friends: get accepted friendships from player schema
+      const { data: friendships, error: friendsError } = await (supabase as any)
         .schema('player')
         .from('friends')
         .select('player_id, friend_id, player_granboard_name, friend_granboard_name')
@@ -109,48 +107,62 @@ export function RemoteDubsSetup({
         return;
       }
 
-      // Get the friend IDs (the other person in each friendship)
-      const friendIds = (friendships || []).map((friendship: any) => {
-        return friendship.player_id === userId ? friendship.friend_id : friendship.player_id;
-      });
+      const friendIds = (friendships || []).map((friendship: any) =>
+        friendship.player_id === userId ? friendship.friend_id : friendship.player_id
+      );
 
       if (friendIds.length === 0) {
         setFriends([]);
         return;
       }
 
-      // Fetch the profiles of all friends who are currently active (online or in_game)
-      const { data: friendProfiles, error: profilesError } = await supabase
-        .schema('player')
-        .from('player_profiles')
-        .select('id, granboard_name, profilepic, profilecolor, is_active, last_seen')
-        .in('id', friendIds);
+      // 2. Only friends who are active on the app right now: in companion.online_lobby with recent last_seen
+      const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+      const { data: lobbyRows, error: lobbyError } = await (supabase as any)
+        .schema('companion')
+        .from('online_lobby')
+        .select('player_id, status')
+        .in('player_id', friendIds)
+        .gte('last_seen', twoMinutesAgo);
 
-      if (profilesError) {
-        console.error('Error fetching friend profiles:', profilesError);
+      if (lobbyError || !lobbyRows?.length) {
         setFriends([]);
         return;
       }
 
-      // Process the profiles and determine their online status
-      const processedFriends: FriendProfile[] = (friendProfiles || [])
-        .map((profile: any) => {
-          // Only include friends who are active (is_active = true)
-          if (!profile.is_active) return null;
+      const activeFriendIds = lobbyRows.map((row: any) => row.player_id);
+      const statusByPlayerId: Record<string, 'online' | 'in_game'> = {};
+      lobbyRows.forEach((row: any) => {
+        statusByPlayerId[row.player_id] = row.status === 'in_match' ? 'in_game' : 'online';
+      });
 
-          // Check if they're in a game (you'll need to implement this based on your game tables)
-          // For now, we'll assume everyone who is active is 'online'
-          // You can add a query to check if they have an active game session
-          
-          return {
-            id: profile.id,
-            granboard_name: profile.granboard_name,
-            profilepic: profile.profilepic,
-            profilecolor: profile.profilecolor,
-            status: 'online', // Default to online for active users
-          };
-        })
-        .filter((f): f is FriendProfile => f !== null);
+      // 3. Fetch profiles for friends who are active (player + youth schemas)
+      const { data: playerProfiles } = await (supabase as any)
+        .schema('player')
+        .from('player_profiles')
+        .select('id, granboard_name, profilepic, profilecolor')
+        .in('id', activeFriendIds);
+
+      const foundIds = new Set((playerProfiles || []).map((p: any) => p.id));
+      const missingIds = activeFriendIds.filter((id: string) => !foundIds.has(id));
+      let youthProfiles: any[] = [];
+      if (missingIds.length > 0) {
+        const { data: youth } = await (supabase as any)
+          .schema('youth')
+          .from('youth_profiles')
+          .select('id, granboard_name, profilepic, profilecolor')
+          .in('id', missingIds);
+        youthProfiles = youth || [];
+      }
+
+      const allProfiles = [...(playerProfiles || []), ...youthProfiles];
+      const processedFriends: FriendProfile[] = allProfiles.map((profile: any) => ({
+        id: profile.id,
+        granboard_name: profile.granboard_name,
+        profilepic: profile.profilepic,
+        profilecolor: profile.profilecolor,
+        status: statusByPlayerId[profile.id] || 'online',
+      }));
 
       setFriends(processedFriends);
     } catch (err) {
@@ -220,7 +232,7 @@ export function RemoteDubsSetup({
           className="text-gray-300 text-center mb-6 px-8"
           style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}
         >
-          Make sure you're friends with your partner on the LowLife App before attempting to pair for dubs play.
+          Only friends can be invited. They must have the app open to receive your request.
         </p>
 
         {/* Friends Horizontal Scroll */}
@@ -230,7 +242,7 @@ export function RemoteDubsSetup({
           ) : friends.length === 0 ? (
             <div className="text-center text-gray-400 py-12">
               <p style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                No friends are currently online
+                No friends are currently in the app
               </p>
               <button
                 onClick={fetchMutualFriendsOnline}

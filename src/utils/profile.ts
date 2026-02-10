@@ -40,3 +40,23 @@ export const resolveProfilePicUrl = (
   return `${supabaseUrl}/storage/v1/object/public/profilepic/${profilepic}`;
 };
 
+/**
+ * Resolve a card skin reference (e.g. from player_profiles.skin) into a browser-usable URL.
+ * Same rules as profile pic: full URL, LowLifeStore path, /assets, or storage path.
+ */
+export const resolveSkinUrl = (skin: string | undefined | null): string | undefined => {
+  if (!skin || !skin.trim()) return undefined;
+  const s = skin.trim();
+  if (s.startsWith('http')) return s;
+  if (s.includes('LowLifeStore')) {
+    const path = s.startsWith('/') ? s : `/${s}`;
+    return `${LOW_LIFE_STORE_DOMAIN}${path}`;
+  }
+  if (s.startsWith('/assets') || s.startsWith('assets')) {
+    return s.startsWith('/') ? s : `/${s}`;
+  }
+  const supabaseUrl =
+    import.meta.env.VITE_SUPABASE_URL || 'https://sndsyxxcnuwjmjgikzgg.supabase.co';
+  return `${supabaseUrl}/storage/v1/object/public/skins/${s}`;
+};
+

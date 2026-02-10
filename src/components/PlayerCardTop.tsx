@@ -12,6 +12,8 @@ export interface PlayerCardTopData {
   granboardName: string;
   profilePic?: string | null;
   accentColor: string;
+  /** Card skin image URL (from store/profile) – shows as textured background with hole for PFP */
+  skin?: string | null;
   granid?: string | null;
   friendCount?: number;
   onlineGameCount?: number;
@@ -56,16 +58,17 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(0, 0, 0, ${alpha})`;
 }
 
-// Leopard-spot style pattern for panel (full card) background
-const spotPatternStyle: React.CSSProperties = {
+// Skin: organic blob / leopard-spot pattern for panel (visible on dark background)
+const skinPatternStyle: React.CSSProperties = {
   backgroundImage: [
-    'radial-gradient(ellipse 12px 14px at 20% 15%, rgba(40,40,45,0.5) 0%, transparent 70%)',
-    'radial-gradient(ellipse 10px 12px at 60% 25%, rgba(35,35,40,0.45) 0%, transparent 70%)',
-    'radial-gradient(ellipse 14px 10px at 80% 55%, rgba(38,38,43,0.5) 0%, transparent 70%)',
-    'radial-gradient(ellipse 11px 13px at 35% 70%, rgba(42,42,47,0.45) 0%, transparent 70%)',
-    'radial-gradient(ellipse 9px 11px at 70% 85%, rgba(36,36,41,0.5) 0%, transparent 70%)',
+    'radial-gradient(ellipse 24px 28px at 15% 20%, rgba(30,30,35,0.85) 0%, transparent 65%)',
+    'radial-gradient(ellipse 20px 24px at 55% 15%, rgba(28,28,33,0.8) 0%, transparent 65%)',
+    'radial-gradient(ellipse 28px 22px at 85% 45%, rgba(32,32,37,0.85) 0%, transparent 65%)',
+    'radial-gradient(ellipse 22px 26px at 25% 65%, rgba(26,26,31,0.8) 0%, transparent 65%)',
+    'radial-gradient(ellipse 18px 22px at 75% 80%, rgba(30,30,35,0.85) 0%, transparent 65%)',
+    'radial-gradient(ellipse 16px 20px at 45% 90%, rgba(28,28,33,0.75) 0%, transparent 65%)',
   ].join(', '),
-  backgroundColor: '#0a0a0b',
+  backgroundColor: '#0c0c0d',
 };
 
 export function PlayerCardTop({
@@ -82,79 +85,112 @@ export function PlayerCardTop({
   const isInMatch = status === 'in_match';
   const profilePicUrl = resolvedProfilePic ?? resolveProfilePicUrl(data.profilePic);
 
-  // Panel variant: centered layout matching original card design (avatar → LLOGB → name → games • friends → stats)
+  // Panel variant: centered layout matching reference (skin bg, PFP border, LLOGB, NAME caps, games • friends, stats)
   if (isPanel) {
+    const hasSkinImage = Boolean(data.skin && data.skin.trim());
     return (
       <div
-        className="relative overflow-hidden flex flex-col w-full h-full rounded-lg"
-        style={{
-          ...spotPatternStyle,
-          border: `2px solid ${data.accentColor}`,
-          boxShadow: `0 0 24px ${hexToRgba(data.accentColor, 0.5)}`,
-        }}
+        className="relative overflow-hidden flex flex-col w-full h-full rounded-tl-lg rounded-bl-lg"
       >
-        <div className="relative z-[5] flex flex-col flex-1 items-center pt-5 pb-4 px-4">
-          {/* Centered avatar with accent glow */}
-          <div className="relative mb-1">
-            <Avatar
-              className="border-[3px] shrink-0"
+        {/* Base: black + blob pattern when no skin image */}
+        {!hasSkinImage && (
+          <div className="absolute inset-0 z-0" style={skinPatternStyle} />
+        )}
+        {hasSkinImage && <div className="absolute inset-0 z-0 bg-black" />}
+
+        {/* Player's skin image (like legitllogb) – hole cut out for PFP, gradient fade */}
+        {hasSkinImage && (
+          <div className="absolute inset-0 overflow-hidden z-[1] rounded-tl-lg rounded-bl-lg">
+            <div
+              className="absolute inset-0"
               style={{
-                width: 80,
-                height: 80,
-                borderColor: data.accentColor,
-                boxShadow: `0 0 16px ${hexToRgba(data.accentColor, 0.5)}`,
+                backgroundImage: `url(${data.skin!.trim()})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center top',
+                backgroundRepeat: 'no-repeat',
+                opacity: 0.35,
+                mask: 'radial-gradient(circle 52px at 50% 76px, transparent 100%, black 100%)',
+                WebkitMask: 'radial-gradient(circle 52px at 50% 76px, transparent 100%, black 100%)',
+              }}
+            />
+            <div
+              className="absolute inset-0"
+              style={{
+                background: 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.1) 15%, rgba(0,0,0,0.4) 35%, rgba(0,0,0,0.75) 55%, black 75%)',
+              }}
+            />
+          </div>
+        )}
+
+        {/* Black circle behind PFP so skin doesn't show through (matches pre-cut hole: 104px) */}
+        {hasSkinImage && (
+          <div
+            className="absolute z-[2] rounded-full bg-black"
+            style={{
+              top: 24,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: 104,
+              height: 104,
+            }}
+          />
+        )}
+
+        <div className="relative z-[5] flex flex-col flex-1 items-center pt-5 pb-4 px-4">
+          {/* Avatar sized to fill skin pre-cut hole (104px); LLOGB badge overlaps PFP border */}
+          <div className="relative mb-0.5">
+            <Avatar
+              className="shrink-0 rounded-full overflow-hidden"
+              style={{
+                width: 104,
+                height: 104,
+                border: `3px solid ${data.accentColor}`,
+                boxShadow: `0 0 10px ${hexToRgba(data.accentColor, 0.3)}`,
               }}
             >
               <AvatarImage src={profilePicUrl} />
               <AvatarFallback className="bg-zinc-800 text-white text-2xl">
-                {data.granboardName.charAt(0)}
+                {data.granboardName.charAt(0).toUpperCase()}
               </AvatarFallback>
             </Avatar>
             {llogbBadge && (
               <img
                 src="/icons/llogbicon.png"
                 alt="LLoGB"
-                className="absolute opacity-90 pointer-events-none z-[5]"
-                style={{ bottom: -6, right: -6, height: 28, width: 28 }}
+                className="absolute opacity-95 pointer-events-none z-[5]"
+                style={{ bottom: 6, left: '50%', transform: 'translateX(-50%)', height: 36, width: 36 }}
                 onError={(e) => {
                   (e.target as HTMLImageElement).style.display = 'none';
                 }}
               />
             )}
           </div>
-          {/* LLOGB label below avatar (when badge shown) */}
-          {llogbBadge && (
-            <div
-              className="text-white uppercase tracking-wider mb-0.5"
-              style={{ fontFamily: FONT, fontSize: 10 }}
-            >
-              LLOGB
-            </div>
-          )}
-          {/* Player name - prominent purple/accent */}
+          {/* Breathing room below profile pic, then player name */}
           <div
-            className="font-bold text-center truncate max-w-full"
+            className="font-bold text-center truncate max-w-full uppercase mt-4"
             style={{
               color: data.accentColor,
               fontFamily: FONT,
-              fontSize: 15,
-              textShadow: `0 0 12px ${hexToRgba(data.accentColor, 0.4)}`,
+              fontSize: 18,
+              lineHeight: 1.2,
+              letterSpacing: '0.02em',
+              textShadow: `0 0 14px ${hexToRgba(data.accentColor, 0.5)}`,
             }}
           >
-            {data.granboardName}
+            {data.granboardName.toUpperCase()}
           </div>
-          {/* Single line: X games • Y friends */}
+          {/* Single line: X games • Y friends (bold numbers, smaller labels) */}
           <div
             className="text-white text-center mb-4"
-            style={{ fontFamily: FONT, fontSize: 12 }}
+            style={{ fontFamily: FONT, fontSize: 11 }}
           >
             <span className="font-bold">{(data.onlineGameCount ?? 0).toLocaleString()}</span>
-            <span className="font-normal"> games • </span>
+            <span className="font-normal text-white/80"> games · </span>
             <span className="font-bold">{(data.friendCount ?? 0).toLocaleString()}</span>
-            <span className="font-normal"> friends</span>
+            <span className="font-normal text-white/80"> friends</span>
           </div>
 
-          {/* Stats: 01 AVG, OVERALL, CR AVG - label, grade, value */}
+          {/* Stats: labels smallest, letter grade large, numbers medium */}
           {loading ? (
             <div className="flex-1 flex items-center justify-center">
               <span className="text-gray-400 text-xs" style={{ fontFamily: FONT }}>
@@ -164,35 +200,35 @@ export function PlayerCardTop({
           ) : (
             <div className="w-full grid grid-cols-3 gap-2 text-center">
               <div className="flex flex-col items-center">
-                <div className="uppercase tracking-wider text-white/80" style={{ fontFamily: FONT, fontSize: 9 }}>
+                <div className="uppercase tracking-wider text-white/70" style={{ fontFamily: FONT, fontSize: 8 }}>
                   01 AVG
                 </div>
-                <div className="font-bold text-white" style={{ fontFamily: FONT, fontSize: 22 }}>
+                <div className="font-bold text-white" style={{ fontFamily: FONT, fontSize: 26 }}>
                   {data.pprLetter || '--'}
                 </div>
-                <div className="text-white" style={{ fontFamily: FONT, fontSize: 11 }}>
+                <div className="text-white/90" style={{ fontFamily: FONT, fontSize: 12 }}>
                   {data.pprNumeric != null && data.pprNumeric > 0 ? data.pprNumeric.toFixed(2) : '--'}
                 </div>
               </div>
               <div className="flex flex-col items-center">
-                <div className="uppercase tracking-wider text-white/80" style={{ fontFamily: FONT, fontSize: 9 }}>
+                <div className="uppercase tracking-wider text-white/70" style={{ fontFamily: FONT, fontSize: 8 }}>
                   OVERALL
                 </div>
-                <div className="font-bold text-white" style={{ fontFamily: FONT, fontSize: 22 }}>
+                <div className="font-bold text-white" style={{ fontFamily: FONT, fontSize: 26 }}>
                   {data.overallLetter || '--'}
                 </div>
-                <div className="text-white" style={{ fontFamily: FONT, fontSize: 11 }}>
+                <div className="text-white/90" style={{ fontFamily: FONT, fontSize: 12 }}>
                   {data.overallNumeric != null && data.overallNumeric > 0 ? data.overallNumeric.toFixed(2) : '--'}
                 </div>
               </div>
               <div className="flex flex-col items-center">
-                <div className="uppercase tracking-wider text-white/80" style={{ fontFamily: FONT, fontSize: 9 }}>
+                <div className="uppercase tracking-wider text-white/70" style={{ fontFamily: FONT, fontSize: 8 }}>
                   CR AVG
                 </div>
-                <div className="font-bold text-white" style={{ fontFamily: FONT, fontSize: 22 }}>
+                <div className="font-bold text-white" style={{ fontFamily: FONT, fontSize: 26 }}>
                   {data.mprLetter || '--'}
                 </div>
-                <div className="text-white" style={{ fontFamily: FONT, fontSize: 11 }}>
+                <div className="text-white/90" style={{ fontFamily: FONT, fontSize: 12 }}>
                   {data.mprNumeric != null && data.mprNumeric > 0 ? data.mprNumeric.toFixed(2) : '--'}
                 </div>
               </div>
