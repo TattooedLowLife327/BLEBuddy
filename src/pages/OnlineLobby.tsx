@@ -9,6 +9,7 @@ import { type GameData } from '../contexts/GameContext';
 import type { GameConfiguration } from '../types/game';
 import { checkCameraAvailable } from '../utils/webrtc/peerConnection';
 import { resolveProfilePicUrl } from '../utils/profile';
+import { PlayerCardTop } from '../components/PlayerCardTop';
 import {
   REQUEST_TIMEOUT_MS,
   IDLE_TIMEOUT_MS,
@@ -1345,13 +1346,6 @@ export function OnlineLobby({
                 const strokeDasharray = 500;
                 const strokeDashoffset = strokeDasharray * (1 - idleProgress);
 
-                const hexToRgbaPlayer = (hex: string, alpha: number) => {
-                  const r = parseInt(hex.slice(1, 3), 16);
-                  const g = parseInt(hex.slice(3, 5), 16);
-                  const b = parseInt(hex.slice(5, 7), 16);
-                  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-                };
-
                 return (
                   <div
                     key={player.id}
@@ -1396,136 +1390,25 @@ export function OnlineLobby({
                       </svg>
                     )}
 
-                    {/* Card Background - glassmorphic */}
-                    <div
-                      className={`absolute inset-0 rounded-lg border-2 ${isIdle ? 'border-zinc-600' : ''}`}
-                      style={{
-                        borderColor: isIdle ? '#52525b' : playerAccentColor,
-                        boxShadow: isWaiting
-                          ? `0 0 20px ${hexToRgbaPlayer(playerAccentColor, 0.4)}`
-                          : 'none',
-                        background: 'rgba(0, 0, 0, 0.3)',
-                        backdropFilter: 'blur(20px)',
-                        WebkitBackdropFilter: 'blur(20px)',
+                    <PlayerCardTop
+                      variant="card"
+                      data={{
+                        granboardName: player.granboardName,
+                        profilePic: player.profilePic,
+                        accentColor: playerAccentColor,
+                        granid: player.granid,
+                        friendCount: player.friendCount,
+                        onlineGameCount: player.onlineGameCount,
+                        pprLetter: player.pprLetter,
+                        pprNumeric: player.pprNumeric,
+                        overallLetter: player.overallLetter,
+                        overallNumeric: player.overallNumeric,
+                        mprLetter: player.mprLetter,
+                        mprNumeric: player.mprNumeric,
+                        partnerName: player.partnerName,
                       }}
+                      status={player.status}
                     />
-                    <div
-                      className="absolute inset-0 rounded-lg"
-                      style={{
-                        background: 'linear-gradient(135deg, rgba(0, 0, 0, 0.2) 0%, rgba(20, 20, 20, 0.4) 100%)',
-                      }}
-                    />
-
-                    {/* Card Content */}
-                    <div className="relative z-[5] flex flex-col h-full p-3">
-                      {/* Top: Profile pic + Name/ID row */}
-                      <div className="flex items-start gap-2.5 mb-2">
-                        {/* Profile Picture */}
-                        <div className="relative shrink-0">
-                          {isWaiting && (
-                            <div
-                              className="absolute inset-0 rounded-full blur-md"
-                              style={{
-                                backgroundColor: playerAccentColor,
-                                opacity: 0.5,
-                                transform: 'scale(1.2)',
-                              }}
-                            />
-                          )}
-                          <Avatar
-                            className="relative w-14 h-14 border-[3px]"
-                            style={{
-                              borderColor: isIdle ? '#52525b' : playerAccentColor,
-                            }}
-                          >
-                            <AvatarImage src={resolveProfilePicUrl(player.profilePic)} />
-                            <AvatarFallback className="bg-zinc-800 text-white text-lg">
-                              {player.granboardName.charAt(0)}
-                            </AvatarFallback>
-                          </Avatar>
-                        </div>
-
-                        {/* Name + ID */}
-                        <div className="flex-1 min-w-0 pt-0.5">
-                          <div
-                            className="font-bold text-xs truncate"
-                            style={{ color: playerAccentColor, fontFamily: 'Helvetica, Arial, sans-serif' }}
-                          >
-                            {player.granboardName}
-                          </div>
-                          {player.granid && (
-                            <div className="text-white text-[10px] font-medium" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                              {player.granid}
-                            </div>
-                          )}
-                          {player.isDoublesTeam && player.partnerName && (
-                            <div className="text-gray-400 text-[9px] truncate" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                              + {player.partnerName}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Online Games + Friends */}
-                      <div className="space-y-0.5 mb-2">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[9px] uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Online Games</span>
-                          <span className="text-white text-[10px] font-bold" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                            {player.onlineGameCount ?? 0}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[9px] uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Friends</span>
-                          <span className="text-white text-[10px] font-bold" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                            {player.friendCount ?? 0}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Status indicator for idle/in_match */}
-                      {isIdle && (
-                        <p className="text-yellow-500 text-xs font-semibold text-center mb-1">IDLE</p>
-                      )}
-                      {isInMatch && (
-                        <p className="text-red-400 text-xs font-semibold text-center mb-1">IN MATCH</p>
-                      )}
-
-                      {/* Stats Section - 3 columns */}
-                      {isWaiting && (
-                        <div className="flex-1 flex flex-col justify-center">
-                          {/* Headers */}
-                          <div className="grid grid-cols-3 gap-1 text-center mb-0.5">
-                            <div className="text-[8px] uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>01 AVG</div>
-                            <div className="text-[8px] uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>OVERALL</div>
-                            <div className="text-[8px] uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>CR AVG</div>
-                          </div>
-                          {/* Letter ratings */}
-                          <div className="grid grid-cols-3 gap-1 text-center">
-                            <div className="text-2xl font-bold text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                              {player.pprLetter || '--'}
-                            </div>
-                            <div className="text-2xl font-bold text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                              {player.overallLetter || '--'}
-                            </div>
-                            <div className="text-2xl font-bold text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                              {player.mprLetter || '--'}
-                            </div>
-                          </div>
-                          {/* Numeric ratings */}
-                          <div className="grid grid-cols-3 gap-1 text-center">
-                            <div className="text-[10px] font-bold text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                              {player.pprNumeric > 0 ? player.pprNumeric.toFixed(2) : '--'}
-                            </div>
-                            <div className="text-[10px] font-bold text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                              {player.overallNumeric > 0 ? player.overallNumeric.toFixed(2) : '--'}
-                            </div>
-                            <div className="text-[10px] font-bold text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                              {player.mprNumeric > 0 ? player.mprNumeric.toFixed(2) : '--'}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
                     </div>
                   </div>
                 );

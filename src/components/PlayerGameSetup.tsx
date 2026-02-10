@@ -4,6 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { createClient } from '../utils/supabase/client';
 import type { GameConfiguration } from '../types/game';
 import { resolveProfilePicUrl } from '../utils/profile';
+import { PlayerCardTop } from './PlayerCardTop';
 
 // Convert hex color to hue value (0-360)
 function hexToHue(hex: string): number {
@@ -535,120 +536,28 @@ export function PlayerGameSetup({
 
         {/* Content */}
         <div className="flex-1 flex overflow-hidden">
-          {/* Left Side - Player Card (PlayerCardReadOnly style) */}
-          <div
-            className="w-1/3 relative overflow-hidden"
-            style={{
-              borderRight: `1px solid ${player.accentColor}`,
-              background: 'rgba(0, 0, 0, 0.3)',
-              backdropFilter: 'blur(20px)',
-              WebkitBackdropFilter: 'blur(20px)',
-            }}
-          >
-            {/* Glassmorphic base layer */}
-            <div
-              className="absolute inset-0"
-              style={{
-                background: 'linear-gradient(135deg, rgba(0, 0, 0, 0.2) 0%, rgba(20, 20, 20, 0.4) 100%)',
+          {/* Left Side - Player card top (PlayerCardReadOnly style from legitllogb) */}
+          <div className="w-1/3 relative overflow-hidden min-w-0">
+            <PlayerCardTop
+              variant="panel"
+              data={{
+                granboardName: player.granboardName,
+                profilePic: player.profilePic,
+                accentColor: player.accentColor,
+                granid: soloStats?.granid ?? null,
+                friendCount,
+                onlineGameCount: soloStats && 'gameCount' in soloStats ? soloStats.gameCount : 0,
+                pprLetter: displayStats && 'pprLetter' in displayStats ? displayStats.pprLetter ?? null : null,
+                pprNumeric: displayStats?.pprNumeric ?? 0,
+                overallLetter: displayStats && 'overallLetter' in displayStats ? displayStats.overallLetter ?? null : null,
+                overallNumeric: displayStats?.overallNumeric ?? 0,
+                mprLetter: displayStats && 'mprLetter' in displayStats ? displayStats.mprLetter ?? null : null,
+                mprNumeric: displayStats?.mprNumeric ?? 0,
+                partnerName: player.partnerName ?? null,
               }}
+              loading={loading}
+              resolvedProfilePic={fetchedProfilePic}
             />
-
-            <div className="relative z-[5] h-full flex flex-col p-4">
-              {/* Top row: Profile pic + Name/ID/Counts */}
-              <div className="flex items-start gap-3 mb-4">
-                {/* Profile Picture */}
-                <Avatar
-                  className="w-16 h-16 shrink-0 border-[3px]"
-                  style={{
-                    borderColor: player.accentColor,
-                  }}
-                >
-                  <AvatarImage src={fetchedProfilePic || player.profilePic} />
-                  <AvatarFallback className="bg-zinc-800 text-white text-xl">
-                    {player.granboardName.charAt(0)}
-                  </AvatarFallback>
-                </Avatar>
-
-                {/* Name + Info */}
-                <div className="flex-1 min-w-0 pt-0.5">
-                  <div
-                    className="font-bold text-sm truncate"
-                    style={{ color: player.accentColor, fontFamily: 'Helvetica, Arial, sans-serif' }}
-                  >
-                    {player.granboardName}
-                  </div>
-                  {soloStats?.granid && (
-                    <div className="text-white text-xs font-medium" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                      {soloStats.granid}
-                    </div>
-                  )}
-                  {player.isDoublesTeam && player.partnerName && (
-                    <div className="text-gray-400 text-[10px] truncate" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                      + {player.partnerName}
-                    </div>
-                  )}
-                  {/* Online Games + Friends */}
-                  <div className="mt-1.5 space-y-0.5">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Online Games</span>
-                      <span className="text-white text-xs font-bold" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                        {soloStats ? ('gameCount' in soloStats ? soloStats.gameCount : 0) : 0}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Friends</span>
-                      <span className="text-white text-xs font-bold" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                        {friendCount}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Stats Section - 3 columns */}
-              {loading ? (
-                <div className="flex-1 flex items-center justify-center">
-                  <span className="text-gray-400 text-xs" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Loading...</span>
-                </div>
-              ) : displayStats ? (
-                <div className="flex-1 flex flex-col justify-center">
-                  {/* Column headers */}
-                  <div className="grid grid-cols-3 gap-1 text-center mb-1">
-                    <div className="text-[9px] uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>01 AVG</div>
-                    <div className="text-[9px] uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>OVERALL</div>
-                    <div className="text-[9px] uppercase tracking-wider text-gray-500" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>CR AVG</div>
-                  </div>
-                  {/* Letter ratings - large */}
-                  <div className="grid grid-cols-3 gap-1 text-center">
-                    <div className="text-3xl font-bold text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                      {'pprLetter' in displayStats && displayStats.pprLetter ? displayStats.pprLetter : '--'}
-                    </div>
-                    <div className="text-3xl font-bold text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                      {'overallLetter' in displayStats && displayStats.overallLetter ? displayStats.overallLetter : '--'}
-                    </div>
-                    <div className="text-3xl font-bold text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                      {'mprLetter' in displayStats && displayStats.mprLetter ? displayStats.mprLetter : '--'}
-                    </div>
-                  </div>
-                  {/* Numeric ratings */}
-                  <div className="grid grid-cols-3 gap-1 text-center mt-0.5">
-                    <div className="text-xs font-bold text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                      {displayStats.pprNumeric > 0 ? displayStats.pprNumeric.toFixed(2) : '--'}
-                    </div>
-                    <div className="text-xs font-bold text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                      {displayStats.overallNumeric > 0 ? displayStats.overallNumeric.toFixed(2) : '--'}
-                    </div>
-                    <div className="text-xs font-bold text-white" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                      {displayStats.mprNumeric > 0 ? displayStats.mprNumeric.toFixed(2) : '--'}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex-1 flex items-center justify-center">
-                  <span className="text-gray-400 text-xs" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>No stats available</span>
-                </div>
-              )}
-            </div>
           </div>
 
           {/* Right Side - Game Setup */}
