@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { createClient } from '../utils/supabase/client';
 import type { GameConfiguration } from '../types/game';
 import { resolveProfilePicUrl } from '../utils/profile';
@@ -442,89 +441,6 @@ export function PlayerGameSetup({
           transform: `scale(${modalScale})`,
         }}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: player.accentColor }}>
-          <div className="flex items-center gap-3">
-            <Avatar
-              className="w-16 h-16 border-2"
-              style={{
-                borderColor: player.accentColor,
-                boxShadow: `0 0 20px ${hexToRgba(player.accentColor, 0.6)}`,
-              }}
-            >
-              <AvatarImage src={fetchedProfilePic || player.profilePic} />
-              <AvatarFallback className="bg-white/10 text-white text-xl">
-                {player.granboardName.charAt(0)}
-              </AvatarFallback>
-            </Avatar>
-            <div>
-              <h2
-                className="text-xl text-white"
-                style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold', color: player.accentColor }}
-              >
-                {player.granboardName}
-              </h2>
-              {soloStats?.granid && (
-                <p className="text-gray-400 text-xs" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                  {soloStats.granid}
-                </p>
-              )}
-              {player.isDoublesTeam && player.partnerName && (
-                <p className="text-gray-400 text-xs" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                  + {player.partnerName}
-                </p>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* Handicap Toggle */}
-            <span className="text-xs text-zinc-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-              Handicap
-            </span>
-            <button
-              type="button"
-              onClick={() => setHandicap(!handicap)}
-              className="relative inline-flex items-center justify-center transition-all"
-              style={{
-                width: '56px',
-                height: '27px',
-              }}
-            >
-              {/* Base SVG */}
-              <img
-                src={handicap ? '/assets/ontogglebase.svg' : '/assets/offtogglebase.svg'}
-                alt={handicap ? 'On' : 'Off'}
-                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 transition-opacity"
-                style={
-                  handicap
-                    ? {
-                        filter: `hue-rotate(${profileHue - 270}deg) saturate(1.2) brightness(1.1)`,
-                        width: '47px',
-                        height: '17px',
-                      }
-                    : {
-                        width: '56px',
-                        height: '17px',
-                      }
-                }
-              />
-              {/* Knob SVG */}
-              <img
-                src={handicap ? '/assets/ontoggleknob.svg' : '/assets/offtoggleknob.svg'}
-                alt="Toggle knob"
-                className="absolute transition-all duration-200"
-                style={{
-                  left: handicap ? '15px' : '-7px',
-                  top: '55%',
-                  transform: 'translateY(-50%)',
-                  width: '26px',
-                  height: '27px',
-                }}
-              />
-            </button>
-          </div>
-        </div>
-
         {/* Content */}
         <div className="flex-1 flex overflow-hidden">
           {/* Left Side - Player card top (PlayerCardReadOnly style from legitllogb) */}
@@ -552,8 +468,63 @@ export function PlayerGameSetup({
             />
           </div>
 
-          {/* Right Side - Game Setup */}
-          <div className="flex-1 p-4 overflow-y-auto">
+          {/* Right Side - Game Setup (format section) */}
+          <div className="flex-1 p-4 overflow-y-auto flex flex-col">
+            {/* Top row: Handicap toggle + Close button */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-zinc-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                  Handicap
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setHandicap(!handicap)}
+                  className="relative inline-flex items-center justify-center transition-all"
+                  style={{
+                    width: '56px',
+                    height: '27px',
+                  }}
+                >
+                  <img
+                    src={handicap ? '/assets/ontogglebase.svg' : '/assets/offtogglebase.svg'}
+                    alt={handicap ? 'On' : 'Off'}
+                    className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 transition-opacity"
+                    style={
+                      handicap
+                        ? {
+                            filter: `hue-rotate(${profileHue - 270}deg) saturate(1.2) brightness(1.1)`,
+                            width: '47px',
+                            height: '17px',
+                          }
+                        : {
+                            width: '56px',
+                            height: '17px',
+                          }
+                    }
+                  />
+                  <img
+                    src={handicap ? '/assets/ontoggleknob.svg' : '/assets/offtoggleknob.svg'}
+                    alt="Toggle knob"
+                    className="absolute transition-all duration-200"
+                    style={{
+                      left: handicap ? '15px' : '-7px',
+                      top: '55%',
+                      transform: 'translateY(-50%)',
+                      width: '26px',
+                      height: '27px',
+                    }}
+                  />
+                </button>
+              </div>
+              <button
+                onClick={onClose}
+                className="hover:opacity-80 transition-opacity"
+                aria-label="Close"
+              >
+                <img src="/icons/closebutton.svg" alt="Close" className="w-7 h-7" />
+              </button>
+            </div>
+
             {/* Legs Selection - only 3 or 5 legs, 1 leg is default (no selection) */}
             <div className="mb-4">
               <div className="flex gap-2 justify-center">
