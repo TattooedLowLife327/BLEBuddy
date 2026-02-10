@@ -141,12 +141,17 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
 
   const { localStream, remoteStream, connectionState, error, initialize, disconnect: webrtcDisconnect } = useWebRTC(webRTCOptions);
 
+  const handleCancel = useCallback(async () => {
+    await webrtcDisconnect();
+    onCancel();
+  }, [webrtcDisconnect, onCancel]);
+
   const { isOpponentOnline, disconnectCountdown, leaveMatch, opponentLeftMessage } = useGameStatus({
     gameId,
     localPlayerId: visiblePlayerId,
     remotePlayerId,
     remotePlayerName,
-    onOpponentLeft: onCancel,
+    onOpponentLeft: handleCancel,
     onOpponentDisconnected: () => console.log('[CorkScreen] Opponent disconnected'),
     onOpponentReconnected: () => console.log('[CorkScreen] Opponent reconnected'),
   });
@@ -305,7 +310,11 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
   }, [gameId, corkRound, player1.id, player2.id]);
 
   // Initialize WebRTC
-  useEffect(() => { initialize(); return () => { webrtcDisconnect(); }; }, [initialize, webrtcDisconnect]);
+  // Start WebRTC once; do NOT disconnect on unmount so camera carries over to game screen
+  useEffect(() => {
+    initialize();
+    return () => { /* leave connection alive for Game screen */ };
+  }, [initialize]);
 
   // Request fullscreen on mount
   useEffect(() => {
@@ -436,6 +445,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
 
   const handleConfirmLeave = async () => {
     setShowLeaveConfirm(false);
+    await webrtcDisconnect();
     await leaveMatch();
     onCancel();
   };

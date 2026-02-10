@@ -594,13 +594,21 @@ class BLEConnection {
         console.log(`🔄 Auto-reconnect attempt ${this.reconnectAttempts}/${this.MAX_RECONNECT_ATTEMPTS} in ${delay}ms...`);
 
         this.reconnectTimeout = setTimeout(async () => {
+          this.reconnectTimeout = null;
           const result = await this.autoReconnect();
           if (result.success) {
             console.log('✅ Auto-reconnect successful');
             this.reconnectAttempts = 0; // Reset on success
           } else {
             console.log('❌ Auto-reconnect failed:', result.error);
-            // handleDisconnection will be called again if still disconnected
+            // If still disconnected, schedule next attempt (up to MAX_RECONNECT_ATTEMPTS total)
+            if (!this.isConnected && this.reconnectAttempts < this.MAX_RECONNECT_ATTEMPTS) {
+              this.handleDisconnection();
+            } else if (this.reconnectAttempts >= this.MAX_RECONNECT_ATTEMPTS) {
+              console.log('❌ Max auto-reconnect attempts reached. Manual reconnection required.');
+              this.reconnectAttempts = 0;
+              this.device = null;
+            }
           }
         }, delay);
       }

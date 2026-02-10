@@ -40,11 +40,12 @@ export function BLEProvider({ children }: BLEProviderProps) {
       setCanAutoReconnect(canReconnect);
 
       // Auto-reconnect if we have a saved device and aren't already connected
-      if (canReconnect && status === 'disconnected') {
-        console.log('[BLEContext] Auto-reconnecting to saved device...');
+      if (canReconnect && !bleConnection.isConnected) {
+        console.log('[BLEContext] Auto-reconnecting to saved device on load...');
         const result = await bleConnection.autoReconnect();
         if (result.success && result.device) {
           setDeviceName(result.device.name || 'Unknown Device');
+          setCanAutoReconnect(true);
           console.log('[BLEContext] Auto-reconnect successful:', result.device.name);
         } else {
           console.log('[BLEContext] Auto-reconnect failed:', result.error);
@@ -52,6 +53,30 @@ export function BLEProvider({ children }: BLEProviderProps) {
       }
     };
     checkAndAutoReconnect();
+  }, []);
+
+  // When user returns to the tab, try to reconnect if we're disconnected but have a saved device
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (bleConnection.isConnected) return;
+      const savedName = bleConnection.getLastDeviceName();
+      if (!savedName) return;
+
+      console.log('[BLEContext] Page visible and disconnected – attempting auto-reconnect...');
+      bleConnection.autoReconnect().then((result) => {
+        if (result.success && result.device) {
+          setDeviceName(result.device.name || 'Granboard');
+          setCanAutoReconnect(true);
+          console.log('[BLEContext] Auto-reconnect on visibility successful:', result.device.name);
+        } else {
+          console.log('[BLEContext] Auto-reconnect on visibility failed:', result.error);
+        }
+      });
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
   useEffect(() => {

@@ -84,7 +84,12 @@ class WebRTCManager {
   private localPlayerId: string = '';
   private remotePlayerId: string = '';
   private gameId: string = '';
-  
+  private _lastInitReused: boolean = false;
+
+  getLastInitReused(): boolean {
+    return this._lastInitReused;
+  }
+
   private readonly ICE_SERVERS: RTCIceServer[] = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
@@ -168,6 +173,22 @@ class WebRTCManager {
   async initialize(gameId: string, localPlayerId: string, remotePlayerId: string): Promise<boolean> {
     console.log(`[WebRTC] Initializing - gameId: ${gameId}, local: ${localPlayerId}, remote: ${remotePlayerId}`);
 
+    // Reuse existing connection when navigating Cork → Game (same game, same peers)
+    if (
+      this.gameId === gameId &&
+      this.localPlayerId === localPlayerId &&
+      this.remotePlayerId === remotePlayerId &&
+      this.peerConnection &&
+      this.localStream
+    ) {
+      console.log('[WebRTC] Reusing existing connection – camera feeds carry over');
+      this._lastInitReused = true;
+      const state = this.peerConnection.connectionState as RTCPeerConnectionState;
+      this.onConnectionStateCallbacks.forEach((cb) => cb(state));
+      return true;
+    }
+
+    this._lastInitReused = false;
     // Clean up any existing connection first
     await this.disconnect();
 
@@ -350,6 +371,9 @@ class WebRTCManager {
     if (this.peerConnection) { this.peerConnection.close(); this.peerConnection = null; }
     if (this.signalChannel) { await this.signalChannel.unsubscribe(); this.signalChannel = null; }
     this.remoteStream = null;
+    this.gameId = '';
+    this.localPlayerId = '';
+    this.remotePlayerId = '';
   }
 }
 

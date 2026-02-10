@@ -47,7 +47,12 @@ export function useWebRTC(options: UseWebRTCOptions | null): UseWebRTCReturn {
     }
 
     setLocalStream(webRTCManager.getLocalMediaStream());
+    setRemoteStream(webRTCManager.getRemoteMediaStream());
 
+    if (webRTCManager.getLastInitReused()) {
+      console.log('[useWebRTC] Reused connection – skipping offer/answer');
+      return;
+    }
     if (options.isInitiator) {
       // Wait a bit for the receiver to subscribe before sending offer
       console.log('[useWebRTC] Initiator waiting 2s for receiver to be ready...');
