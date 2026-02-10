@@ -266,7 +266,7 @@ export default function App() {
             .eq('status', 'active')
             .limit(1);
           if (tournamentData && tournamentData.length > 0) setHasActiveTournament(true);
-        } catch {}
+        } catch { /* ignore */ }
 
         // Check for active league
         try {
@@ -278,7 +278,7 @@ export default function App() {
             .eq('status', 'scheduled')
             .limit(1);
           if (leagueData && leagueData.length > 0) setHasActiveLeague(true);
-        } catch {}
+        } catch { /* ignore */ }
 
         if (profileData?.profilecolor) setAccentColor(profileData.profilecolor);
 
@@ -403,7 +403,7 @@ export default function App() {
                 : supabase.from('player_profiles');
               const { data: profile } = await profileQuery.select('granboard_name').eq('id', challengerId).single();
               if ((profile as any)?.granboard_name) challengerName = (profile as any).granboard_name;
-            } catch {}
+            } catch { /* ignore */ }
 
             setMissedRequests(prev => {
               if (prev.some(n => n.id === notificationId)) return prev;
@@ -514,7 +514,7 @@ export default function App() {
       } else {
         setPartner({ id: partnerId, name: (partnerData as any).granboard_name });
       }
-    } catch {}
+    } catch { /* ignore */ }
     navigate('/online-lobby');
   };
 
@@ -522,7 +522,7 @@ export default function App() {
     try {
       const { data: partnerData } = await supabase.from('player_profiles').select('granboard_name').eq('id', partnerId).single();
       if (partnerData) setPartner({ id: partnerId, name: (partnerData as any).granboard_name });
-    } catch {}
+    } catch { /* ignore */ }
     navigate('/online-lobby');
   };
 

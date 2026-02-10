@@ -670,4 +670,4 @@ export function LobbyCard({
       </div>
     </div>
   );
-};
+}

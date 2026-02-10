@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { X } from 'lucide-react';
 import { createClient } from '../utils/supabase/client';
 import type { GameConfiguration } from '../types/game';
 import { resolveProfilePicUrl } from '../utils/profile';
@@ -206,15 +207,21 @@ export function PlayerGameSetup({
             .eq('id', player.player_id)
             .single();
 
-          if (youthProfile?.profilepic) {
-            setFetchedProfilePic(resolveProfilePicUrl(youthProfile.profilepic));
-          }
-        } else if (opponentProfile?.profilepic) {
-          setFetchedProfilePic(resolveProfilePicUrl(opponentProfile.profilepic));
-        }
+          // Always set fetched profile pic to resolved URL if available, prioritizing youthProfile
+          const youthPicUrl = youthProfile?.profilepic ? resolveProfilePicUrl(youthProfile.profilepic) : null;
+          const oppPicUrl = opponentProfile?.profilepic ? resolveProfilePicUrl(opponentProfile.profilepic) : null;
 
-        // Fetch opponent's solo stats
-        const statsSchema = opponentIsYouth
+          if (youthPicUrl) {
+            setFetchedProfilePic(youthPicUrl || null);
+          } else if (oppPicUrl) {
+            setFetchedProfilePic(oppPicUrl || null);
+          } else {
+            setFetchedProfilePic(null);
+          }
+          }
+
+          // Fetch opponent's solo stats
+          const statsSchema = opponentIsYouth
           ? (supabase as any).schema('youth')
           : (supabase as any).schema('player');
 
@@ -276,7 +283,7 @@ export function PlayerGameSetup({
           console.log('Fetching partner stats for:', player.partnerId);
 
           // Determine if partner is youth
-          let partnerIsYouth = opponentIsYouth; // Assume same schema for now
+          const partnerIsYouth = opponentIsYouth; // Assume same schema for now
 
           const partnerStatsSchema = partnerIsYouth
             ? (supabase as any).schema('youth')
@@ -441,6 +448,18 @@ export function PlayerGameSetup({
           transform: `scale(${modalScale})`,
         }}
       >
+        {/* Top bar: Close button only */}
+        <div className="flex items-center justify-end shrink-0 px-3 py-2 border-b border-zinc-700/50">
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-md text-white hover:bg-white/10 transition-colors"
+            aria-label="Close"
+          >
+            <X className="w-6 h-6" strokeWidth={2.5} />
+          </button>
+        </div>
+
         {/* Content */}
         <div className="flex-1 flex overflow-hidden">
           {/* Left Side - Player card top (PlayerCardReadOnly style from legitllogb) */}
@@ -464,67 +483,12 @@ export function PlayerGameSetup({
                 partnerName: player.partnerName ?? null,
               }}
               loading={loading}
-              resolvedProfilePic={fetchedProfilePic}
+              resolvedProfilePic={fetchedProfilePic ?? resolveProfilePicUrl(player.profilePic ?? undefined)}
             />
           </div>
 
           {/* Right Side - Game Setup (format section) */}
           <div className="flex-1 p-4 overflow-y-auto flex flex-col">
-            {/* Top row: Handicap toggle + Close button */}
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-zinc-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                  Handicap
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setHandicap(!handicap)}
-                  className="relative inline-flex items-center justify-center transition-all"
-                  style={{
-                    width: '56px',
-                    height: '27px',
-                  }}
-                >
-                  <img
-                    src={handicap ? '/assets/ontogglebase.svg' : '/assets/offtogglebase.svg'}
-                    alt={handicap ? 'On' : 'Off'}
-                    className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 transition-opacity"
-                    style={
-                      handicap
-                        ? {
-                            filter: `hue-rotate(${profileHue - 270}deg) saturate(1.2) brightness(1.1)`,
-                            width: '47px',
-                            height: '17px',
-                          }
-                        : {
-                            width: '56px',
-                            height: '17px',
-                          }
-                    }
-                  />
-                  <img
-                    src={handicap ? '/assets/ontoggleknob.svg' : '/assets/offtoggleknob.svg'}
-                    alt="Toggle knob"
-                    className="absolute transition-all duration-200"
-                    style={{
-                      left: handicap ? '15px' : '-7px',
-                      top: '55%',
-                      transform: 'translateY(-50%)',
-                      width: '26px',
-                      height: '27px',
-                    }}
-                  />
-                </button>
-              </div>
-              <button
-                onClick={onClose}
-                className="hover:opacity-80 transition-opacity"
-                aria-label="Close"
-              >
-                <img src="/icons/closebutton.svg" alt="Close" className="w-7 h-7" />
-              </button>
-            </div>
-
             {/* Legs Selection - only 3 or 5 legs, 1 leg is default (no selection) */}
             <div className="mb-4">
               <div className="flex gap-2 justify-center">
@@ -546,6 +510,52 @@ export function PlayerGameSetup({
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* Handicap - inside format section, below Legs */}
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <span className="text-xs text-zinc-400" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                Handicap
+              </span>
+              <button
+                type="button"
+                onClick={() => setHandicap(!handicap)}
+                className="relative inline-flex items-center justify-center transition-all"
+                style={{
+                  width: '56px',
+                  height: '27px',
+                }}
+              >
+                <img
+                  src={handicap ? '/assets/ontogglebase.svg' : '/assets/offtogglebase.svg'}
+                  alt={handicap ? 'On' : 'Off'}
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 transition-opacity"
+                  style={
+                    handicap
+                      ? {
+                          filter: `hue-rotate(${profileHue - 270}deg) saturate(1.2) brightness(1.1)`,
+                          width: '47px',
+                          height: '17px',
+                        }
+                      : {
+                          width: '56px',
+                          height: '17px',
+                        }
+                  }
+                />
+                <img
+                  src={handicap ? '/assets/ontoggleknob.svg' : '/assets/offtoggleknob.svg'}
+                  alt="Toggle knob"
+                  className="absolute transition-all duration-200"
+                  style={{
+                    left: handicap ? '15px' : '-7px',
+                    top: '55%',
+                    transform: 'translateY(-50%)',
+                    width: '26px',
+                    height: '27px',
+                  }}
+                />
+              </button>
             </div>
 
             {/* Game Slots - only show boxes when 3 or 5 legs selected */}
