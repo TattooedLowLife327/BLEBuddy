@@ -221,7 +221,12 @@ export function CROnlineGameScreen({
   const lastProcessedThrowRef = useRef<string | null>(null);
   const playerChangeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const animationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentDartsRef = useRef<DartThrow[]>([]);
+  const lastAppliedThrowTimeRef = useRef<number>(0);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+
+  /** Min ms after last throw before we accept a button (avoids board sending button right after a single throw). */
+  const BUTTON_DEBOUNCE_MS = 1500;
 
   // WebRTC for video - memoize options to prevent infinite re-initialization
   const webRTCOptions = useMemo(() => ({
@@ -393,6 +398,20 @@ export function CROnlineGameScreen({
     return () => clearTimeout(timer);
   }, [showGoodLuck]);
 
+  // Clear turn/achievement timeouts on unmount to avoid setState after unmount or stuck state
+  useEffect(() => {
+    return () => {
+      if (playerChangeTimeoutRef.current) {
+        clearTimeout(playerChangeTimeoutRef.current);
+        playerChangeTimeoutRef.current = null;
+      }
+      if (animationTimeoutRef.current) {
+        clearTimeout(animationTimeoutRef.current);
+        animationTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
   // Track turn changes
   useEffect(() => {
     if (introComplete) {
@@ -445,9 +464,15 @@ export function CROnlineGameScreen({
       applyThrowRef.current(segment, multiplier, false);
     },
     onRemoteTurnEnd: () => {
-      setShowPlayerChange(true);
+      // Only switch when we've applied all 3 remote throws; avoids switching before throws arrive
+      if (currentDartsRef.current.length === 3) {
+        setShowPlayerChange(true);
+      }
     },
   });
+
+  // Keep ref in sync for onRemoteTurnEnd
+  currentDartsRef.current = currentDarts;
 
   // Apply a throw (from BLE or remote)
   const applyThrow = useCallback((segment: string, multiplier: number, isLocal: boolean) => {
@@ -496,33 +521,36 @@ export function CROnlineGameScreen({
         const overflow = Math.max(0, (currentMarks + hitMarks) - 3);
         next[currentThrower][target] = newMarks;
 
+        const value = target === 'B' ? 25 : parseInt(target, 10);
+        let pointsAddedThisThrow = 0;
+
         // Score points if closed and opponent hasn't closed
         if (newMarks === 3 && oppMarks < 3 && overflow > 0) {
-          const value = target === 'B' ? 25 : parseInt(target, 10);
+          pointsAddedThisThrow = overflow * value;
           if (currentThrower === 'p1') {
-            setP1Score(s => s + overflow * value);
+            setP1Score(s => s + pointsAddedThisThrow);
             setP1ScoreReachedRound(currentRound);
           } else {
-            setP2Score(s => s + overflow * value);
+            setP2Score(s => s + pointsAddedThisThrow);
             setP2ScoreReachedRound(currentRound);
           }
         } else if (currentMarks >= 3 && oppMarks < 3) {
-          const value = target === 'B' ? 25 : parseInt(target, 10);
+          pointsAddedThisThrow = hitMarks * value;
           if (currentThrower === 'p1') {
-            setP1Score(s => s + hitMarks * value);
+            setP1Score(s => s + pointsAddedThisThrow);
             setP1ScoreReachedRound(currentRound);
           } else {
-            setP2Score(s => s + hitMarks * value);
+            setP2Score(s => s + pointsAddedThisThrow);
             setP2ScoreReachedRound(currentRound);
           }
         }
 
-        // Check win
+        // Check win using score that includes this throw (setState is async so p1Score/p2Score are stale)
         const allClosed = TARGETS.every(t => next[currentThrower][t] >= 3);
         if (allClosed) {
-          const myScore = currentThrower === 'p1' ? p1Score : p2Score;
+          const myScoreBefore = currentThrower === 'p1' ? p1Score : p2Score;
           const theirScore = currentThrower === 'p1' ? p2Score : p1Score;
-          if (myScore >= theirScore) {
+          if (myScoreBefore + pointsAddedThisThrow >= theirScore) {
             setGameWinner(currentThrower);
             setTimeout(() => setShowWinnerScreen(true), 500);
           }
@@ -535,6 +563,7 @@ export function CROnlineGameScreen({
     // Broadcast throw to opponent if local
     if (isLocal) {
       sendThrow({ playerId: localPlayer.id, segment, multiplier });
+      lastAppliedThrowTimeRef.current = Date.now();
     }
 
     // Check achievements & end turn on 3rd dart
@@ -612,6 +641,13 @@ export function CROnlineGameScreen({
     console.log('[CROnlineGame] Processing throw:', lastThrow.segment);
 
     if (lastThrow.segmentType === 'BUTTON' || lastThrow.segment === 'BTN') {
+      // Allow 0 darts: player missed all 3 or board didn't register anything. Allow 2–3 darts anytime.
+      // Only ignore when exactly 1 dart was just applied (likely board sending button right after a triple)
+      if (currentDarts.length === 1 && (Date.now() - lastAppliedThrowTimeRef.current) < BUTTON_DEBOUNCE_MS) {
+        console.log('[CROnlineGame] Ignoring button – too soon after single throw (possible board glitch)');
+        lastProcessedThrowRef.current = throwKey;
+        return;
+      }
       console.log('[CROnlineGame] Button press detected, ending turn');
       endTurnWithMisses();
       return;
@@ -624,7 +660,7 @@ export function CROnlineGameScreen({
     const multiplier = lastThrow.multiplier;
 
     applyThrow(segment, multiplier, true);
-  }, [lastThrow, isLocalTurn, localIsP1, currentThrower, applyThrow, endTurnWithMisses]);
+  }, [lastThrow, isLocalTurn, localIsP1, currentThrower, currentDarts.length, applyThrow, endTurnWithMisses]);
 
   // Handle player change
   useEffect(() => {
