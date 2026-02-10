@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { ChevronLeft, ChevronRight, Bluetooth } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Bluetooth, Lock } from 'lucide-react';
 import { LobbyCard } from '../components/LobbyCard';
 import { AppHeader } from '../components/AppHeader';
 import { isDevMode } from '../utils/devMode';
+import { LADIES_LOBBY_PASSWORD, YOUTH_LOBBY_PASSWORD } from '../utils/constants';
 
 // Images from public/assets/
 const dartsIcon = '/assets/5darts.png';
@@ -33,7 +34,7 @@ interface DashboardProps {
   bleStatus: 'disconnected' | 'scanning' | 'connecting' | 'connected';
   onBLEConnect: () => Promise<{ success: boolean; error?: string }>;
   onBLEDisconnect: () => Promise<void>;
-  onNavigateToOnlineLobby: () => void;
+  onNavigateToOnlineLobby: (lobbyType?: 'main' | 'ladies' | 'youth') => void;
   onNavigateToLocalDubs: () => void;
   onNavigateToRemoteDubs: () => void;
   onNavigateToInhouse01: (gameType: '301' | '501' | '701') => void;
@@ -69,8 +70,15 @@ export function Dashboard({
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [flippingCard, setFlippingCard] = useState<string | null>(null);
   const [showBLEPrompt, setShowBLEPrompt] = useState(false);
+  const [unlockedLadies, setUnlockedLadies] = useState(false);
+  const [unlockedYouth, setUnlockedYouth] = useState(false);
+  const [passwordModalFor, setPasswordModalFor] = useState<'ladies' | 'youth' | null>(null);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState('');
 
   const isAdminTeam = userRole === 'owner' || userRole === 'the_man' || userRole === 'admin' || userRole === 'mod';
+  const canAccessLadies = isAdminTeam || userGender === 'female' || unlockedLadies;
+  const canAccessYouth = isAdminTeam || isYouthPlayer || unlockedYouth;
 
   const lobbyCards = [
     {
@@ -78,7 +86,7 @@ export function Dashboard({
       title: 'Online',
       description: 'Solo / Doubles / Remote Doubles',
       customIcon: dartsIcon,
-      visible: isAdminTeam || !isYouthPlayer,
+      visible: isAdminTeam || (!isYouthPlayer && userGender !== 'female'),
       expandable: true,
       accentColor: '#06B6D4',
     },
@@ -120,7 +128,7 @@ export function Dashboard({
       title: 'Ladies Only',
       description: 'Protected access',
       customIcon: ladiesDartIcon,
-      visible: isAdminTeam || userGender === 'female',
+      visible: true,
       protected: true,
       accentColor: '#EC4899',
     },
@@ -129,7 +137,7 @@ export function Dashboard({
       title: 'Youth Lobby',
       description: 'Safe play environment',
       customIcon: youthDartIcon,
-      visible: isAdminTeam || isYouthPlayer,
+      visible: true,
       accentColor: '#84CC16',
     },
   ];
@@ -186,6 +194,72 @@ export function Dashboard({
     setShowBLEPrompt(false);
   };
 
+  const handleNavigateFromCard = (cardId?: string) => {
+    if (cardId === 'ladies-only') {
+      if (!canAccessLadies) {
+        setPasswordModalFor('ladies');
+        setPasswordInput('');
+        setPasswordError('');
+        return;
+      }
+      if (!bleConnected && !isDevMode()) {
+        setShowBLEPrompt(true);
+        return;
+      }
+      onNavigateToOnlineLobby('ladies');
+      return;
+    }
+    if (cardId === 'youth-lobby') {
+      if (!canAccessYouth) {
+        setPasswordModalFor('youth');
+        setPasswordInput('');
+        setPasswordError('');
+        return;
+      }
+      if (!bleConnected && !isDevMode()) {
+        setShowBLEPrompt(true);
+        return;
+      }
+      onNavigateToOnlineLobby('youth');
+      return;
+    }
+    handleNavigateToOnlineLobby();
+  };
+
+  const handlePasswordSubmit = () => {
+    if (passwordModalFor === 'ladies') {
+      if (passwordInput.trim() === LADIES_LOBBY_PASSWORD) {
+        setUnlockedLadies(true);
+        setPasswordModalFor(null);
+        setPasswordInput('');
+        setPasswordError('');
+        if (!bleConnected && !isDevMode()) {
+          setShowBLEPrompt(true);
+          return;
+        }
+        onNavigateToOnlineLobby('ladies');
+      } else {
+        setPasswordError('Incorrect password');
+      }
+      return;
+    }
+    if (passwordModalFor === 'youth') {
+      if (passwordInput.trim() === YOUTH_LOBBY_PASSWORD) {
+        setUnlockedYouth(true);
+        setPasswordModalFor(null);
+        setPasswordInput('');
+        setPasswordError('');
+        if (!bleConnected && !isDevMode()) {
+          setShowBLEPrompt(true);
+          return;
+        }
+        onNavigateToOnlineLobby('youth');
+      } else {
+        setPasswordError('Incorrect password');
+      }
+    }
+  };
+
   return (
     <div
       className="h-screen w-full overflow-hidden"
@@ -216,6 +290,52 @@ export function Dashboard({
                 className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white rounded-lg text-sm font-semibold transition-colors"
               >
                 {bleStatus === 'connecting' || bleStatus === 'scanning' ? 'Connecting...' : 'Connect'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {passwordModalFor && (
+        <div className="fixed inset-0 z-[70] bg-black/80 flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border rounded-xl p-6 max-w-sm w-full text-center"
+            style={{ borderColor: passwordModalFor === 'ladies' ? '#EC4899' : '#84CC16' }}
+          >
+            <Lock className="w-12 h-12 mx-auto mb-3" style={{ color: passwordModalFor === 'ladies' ? '#EC4899' : '#84CC16' }} />
+            <h2 className="text-white text-lg font-bold mb-2">
+              {passwordModalFor === 'ladies' ? 'Ladies Only' : 'Youth Lobby'}
+            </h2>
+            <p className="text-zinc-400 text-sm mb-4">
+              Enter the access code to continue.
+            </p>
+            <input
+              type="password"
+              value={passwordInput}
+              onChange={(e) => { setPasswordInput(e.target.value); setPasswordError(''); }}
+              onKeyDown={(e) => e.key === 'Enter' && handlePasswordSubmit()}
+              placeholder="Access code"
+              className="w-full px-4 py-2 rounded-lg bg-zinc-800 border border-zinc-600 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:border-transparent mb-2"
+              style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}
+              autoFocus
+            />
+            {passwordError && (
+              <p className="text-red-400 text-sm mb-2">{passwordError}</p>
+            )}
+            <div className="flex gap-3 mt-2">
+              <button
+                onClick={() => { setPasswordModalFor(null); setPasswordInput(''); setPasswordError(''); }}
+                className="flex-1 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg text-sm font-semibold transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePasswordSubmit}
+                className="flex-1 px-4 py-2 text-white rounded-lg text-sm font-semibold transition-colors"
+                style={{
+                  backgroundColor: passwordModalFor === 'ladies' ? '#EC4899' : '#84CC16',
+                }}
+              >
+                Enter
               </button>
             </div>
           </div>
@@ -289,7 +409,7 @@ export function Dashboard({
                       expandable={card.expandable}
                       isCenter={isCenter}
                       isFlipped={isCenter && flippingCard === card.id}
-                      onNavigateToSolo={handleNavigateToOnlineLobby}
+                      onNavigateToSolo={handleNavigateFromCard}
                       onNavigateToLocalDubs={onNavigateToLocalDubs}
                       onNavigateToRemoteDubs={onNavigateToRemoteDubs}
                       onNavigateToInhouse01={onNavigateToInhouse01}

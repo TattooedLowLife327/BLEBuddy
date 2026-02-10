@@ -15,3 +15,7 @@ export const LOBBY_HEARTBEAT_INTERVAL_MS = 30_000; // 30 seconds
 // Game status / disconnect timeout
 export const DISCONNECT_TIMEOUT_SECONDS = 60;
 
+// Protected lobby access (hardcoded passwords for Ladies / Youth cards)
+export const LADIES_LOBBY_PASSWORD = 'blebuddy-ladies';
+export const YOUTH_LOBBY_PASSWORD = 'blebuddy-youth';
+

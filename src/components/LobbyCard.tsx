@@ -16,7 +16,7 @@ interface LobbyCardProps {
   expandable?: boolean;
   isCenter?: boolean;
   isFlipped?: boolean;
-  onNavigateToSolo?: () => void;
+  onNavigateToSolo?: (cardId?: string) => void;
   onNavigateToLocalDubs?: () => void;
   onNavigateToRemoteDubs?: () => void;
   // In-house game navigation
@@ -491,6 +491,48 @@ export function LobbyCard({
                 </>
               ) : null}
             </div>
+          ) : id === 'ladies-only' ? (
+            // Ladies only back face
+            <>
+              <h3
+                className="text-xl font-bold text-white mb-3"
+                style={{ color: accentColor, fontFamily: 'Helvetica, Arial, sans-serif' }}
+              >
+                Ladies Only
+              </h3>
+              <div className="space-y-2 w-full px-4">
+                <button
+                  className="w-full py-2 px-3 rounded-lg backdrop-blur-sm bg-white/10 text-white text-sm hover:bg-white/20 transition-colors text-center"
+                  style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onNavigateToSolo?.('ladies-only');
+                  }}
+                >
+                  Solo
+                </button>
+                <button
+                  className="w-full py-2 px-3 rounded-lg backdrop-blur-sm bg-white/10 text-white text-sm hover:bg-white/20 transition-colors text-center"
+                  style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onNavigateToLocalDubs?.();
+                  }}
+                >
+                  Local Dubs
+                </button>
+                <button
+                  className="w-full py-2 px-3 rounded-lg backdrop-blur-sm bg-white/10 text-white text-sm hover:bg-white/20 transition-colors text-center"
+                  style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onNavigateToRemoteDubs?.();
+                  }}
+                >
+                  Remote Dubs
+                </button>
+              </div>
+            </>
           ) : id === 'youth-lobby' ? (
             // Youth lobby back face
             <>
@@ -507,7 +549,7 @@ export function LobbyCard({
                   style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}
                   onClick={(e) => {
                     e.stopPropagation();
-                    onNavigateToSolo?.();
+                    onNavigateToSolo?.('youth-lobby');
                   }}
                 >
                   Solo
