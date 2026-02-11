@@ -167,6 +167,8 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
   const [corkRound, setCorkRound] = useState(1);
   const [myThrowSent, setMyThrowSent] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const revealStartedRef = useRef(false);
+  const corkTimeoutsRef = useRef<NodeJS.Timeout[]>([]);
   const devMode = isDevMode();
 
   // Phase-based intro animation (0=nothing, 1=cams slide in + bars slide up, 2=colors revealed)
@@ -399,25 +401,31 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
     sendCorkThrow(score, valid, display);
   }, [lastThrow, lastTs, winner, myThrowSent, sendCorkThrow]);
 
-  // Check for winner when both have thrown
+  // Check for winner when both have thrown (run once per "both thrown", with cleanup to avoid double-fire)
   useEffect(() => {
     if (p1State.status !== 'thrown' || p2State.status !== 'thrown' || p1State.score === null || p2State.score === null || winner) return;
+    if (revealStartedRef.current) return;
+    revealStartedRef.current = true;
 
-    // Show "?" for opponent for 1 second before revealing both scores
-    setTimeout(() => {
+    const p1Score = p1State.score;
+    const p2Score = p2State.score;
+
+    const t1 = setTimeout(() => {
       setRevealed(true);
-      setTimeout(() => {
-        if (p1State.score! > p2State.score!) {
+      const t2 = setTimeout(() => {
+        if (p1Score > p2Score) {
           playSound('corkWinner');
           setWinner(player1.id);
-          setTimeout(() => onCorkComplete(player1.id), 2500);
-        } else if (p2State.score! > p1State.score!) {
+          const t3 = setTimeout(() => onCorkComplete(player1.id), 2500);
+          corkTimeoutsRef.current.push(t3);
+        } else if (p2Score > p1Score) {
           playSound('corkWinner');
           setWinner(player2.id);
-          setTimeout(() => onCorkComplete(player2.id), 2500);
+          const t3 = setTimeout(() => onCorkComplete(player2.id), 2500);
+          corkTimeoutsRef.current.push(t3);
         } else {
           setTieAlert(true);
-          setTimeout(() => {
+          const t3 = setTimeout(() => {
             setTieAlert(false);
             setRevealed(false);
             setP1State({ status: 'waiting', score: null, wasValid: false, display: '-' });
@@ -427,10 +435,19 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
             setCorkRound(r => r + 1);
             setTurnKey(k => k + 1);
             setMyThrowSent(false);
+            revealStartedRef.current = false;
           }, 2500);
+          corkTimeoutsRef.current.push(t3);
         }
       }, 1000);
+      corkTimeoutsRef.current.push(t2);
     }, 1000);
+    corkTimeoutsRef.current.push(t1);
+
+    return () => {
+      corkTimeoutsRef.current.forEach(clearTimeout);
+      corkTimeoutsRef.current = [];
+    };
   }, [p1State, p2State, winner, player1.id, player2.id, onCorkComplete]);
 
   // Score display logic - show ? for opponent until both thrown

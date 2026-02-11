@@ -134,6 +134,7 @@ export default function App() {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showBLEDisconnectedPopup, setShowBLEDisconnectedPopup] = useState(false);
   const wasBLEConnectedRef = useRef(bleConnected);
+  const corkCompleteHandledRef = useRef(false);
 
   const supabase = createClient();
   const locationRef = useRef(location.pathname);
@@ -444,6 +445,7 @@ export default function App() {
 
   const handleRejoinGame = () => {
     if (!pendingRejoinGame) return;
+    corkCompleteHandledRef.current = false;
     setActiveGame({
       gameId: pendingRejoinGame.gameId,
       opponentId: pendingRejoinGame.opponentId,
@@ -485,27 +487,34 @@ export default function App() {
   };
 
   const handleGameAccepted = (gameData: GameData) => {
+    corkCompleteHandledRef.current = false;
     setActiveGame(gameData);
     navigate('/cork');
   };
 
-  const handleCorkComplete = (firstPlayerId: string) => {
-    if (activeGame) {
-      setActiveGame({ ...activeGame, corkWinnerId: firstPlayerId });
-    }
-    const configuredGames = activeGame?.gameConfig?.games || [];
-    const isMedley = configuredGames.length > 1 || activeGame?.gameType === 'medley';
+  const handleCorkComplete = useCallback((firstPlayerId: string) => {
+    if (corkCompleteHandledRef.current) return;
+    corkCompleteHandledRef.current = true;
+    setActiveGame((prev) => (prev ? { ...prev, corkWinnerId: firstPlayerId } : prev));
+  }, [setActiveGame]);
+
+  // Navigate to game screen only after state has corkWinnerId (avoids white screen from stale state)
+  useEffect(() => {
+    if (!activeGame?.corkWinnerId || location.pathname !== '/cork') return;
+    const configuredGames = activeGame.gameConfig?.games || [];
+    const isMedley = configuredGames.length > 1 || activeGame.gameType === 'medley';
     if (isMedley) {
       navigate('/game/match');
       return;
     }
-    const firstGame = configuredGames.find(game => game) || activeGame?.gameType || 'cricket';
-    const normalized = firstGame.toLowerCase();
+    const firstGame = configuredGames.find((g) => g) || activeGame.gameType || 'cricket';
+    const normalized = String(firstGame).toLowerCase();
     const nextRoute = normalized === 'cricket' || normalized === 'cr' ? '/game/cricket' : '/game/01-online';
     navigate(nextRoute);
-  };
+  }, [activeGame?.corkWinnerId, activeGame?.gameConfig?.games, activeGame?.gameType, location.pathname, navigate]);
 
   const handleCorkCancel = async () => {
+    corkCompleteHandledRef.current = false;
     await removeActiveGame(activeGame?.gameId);
     setActiveGame(null);
     setPendingRejoinGame(null);
@@ -513,6 +522,7 @@ export default function App() {
   };
 
   const handleLeaveMatch = async () => {
+    corkCompleteHandledRef.current = false;
     await removeActiveGame(activeGame?.gameId);
     setActiveGame(null);
     setPendingRejoinGame(null);
