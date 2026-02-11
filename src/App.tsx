@@ -594,6 +594,7 @@ export default function App() {
         <Dashboard
           userId={userId}
           isYouthPlayer={isYouthPlayer}
+          hasParentPaired={hasParentPaired}
           userRole={userRole}
           userGender={userGender}
           userAge={userAge}

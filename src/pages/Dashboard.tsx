@@ -25,6 +25,7 @@ type GameRequestNotification = {
 interface DashboardProps {
   userId: string;
   isYouthPlayer: boolean;
+  hasParentPaired: boolean;
   userRole: string | null;
   userGender: string | null;
   userAge: number | null;
@@ -48,6 +49,7 @@ interface DashboardProps {
 export function Dashboard({
   userId,
   isYouthPlayer,
+  hasParentPaired,
   userRole,
   userGender,
   userAge,
@@ -86,7 +88,7 @@ export function Dashboard({
       title: 'Online',
       description: 'Solo / Doubles / Remote Doubles',
       customIcon: dartsIcon,
-      visible: isAdminTeam || (!isYouthPlayer && userGender !== 'female'),
+      visible: isAdminTeam || !isYouthPlayer || (isYouthPlayer && hasParentPaired),
       expandable: true,
       accentColor: '#06B6D4',
     },
@@ -128,7 +130,7 @@ export function Dashboard({
       title: 'Ladies Only',
       description: 'Protected access',
       customIcon: ladiesDartIcon,
-      visible: true,
+      visible: isAdminTeam || (!isYouthPlayer && userGender === 'female'),
       protected: true,
       accentColor: '#EC4899',
     },
@@ -137,7 +139,7 @@ export function Dashboard({
       title: 'Youth Lobby',
       description: 'Safe play environment',
       customIcon: youthDartIcon,
-      visible: true,
+      visible: isAdminTeam || isYouthPlayer,
       accentColor: '#84CC16',
     },
   ];
@@ -175,10 +177,7 @@ export function Dashboard({
   };
 
   const handleNavigateToOnlineLobby = () => {
-    if (!bleConnected && !isDevMode()) {
-      setShowBLEPrompt(true);
-      return;
-    }
+    // Allow entering lobby without BLE so users can view it on phones / prod; BLE required when playing.
     onNavigateToOnlineLobby();
   };
 
@@ -202,10 +201,6 @@ export function Dashboard({
         setPasswordError('');
         return;
       }
-      if (!bleConnected && !isDevMode()) {
-        setShowBLEPrompt(true);
-        return;
-      }
       onNavigateToOnlineLobby('ladies');
       return;
     }
@@ -214,10 +209,6 @@ export function Dashboard({
         setPasswordModalFor('youth');
         setPasswordInput('');
         setPasswordError('');
-        return;
-      }
-      if (!bleConnected && !isDevMode()) {
-        setShowBLEPrompt(true);
         return;
       }
       onNavigateToOnlineLobby('youth');
@@ -233,10 +224,6 @@ export function Dashboard({
         setPasswordModalFor(null);
         setPasswordInput('');
         setPasswordError('');
-        if (!bleConnected && !isDevMode()) {
-          setShowBLEPrompt(true);
-          return;
-        }
         onNavigateToOnlineLobby('ladies');
       } else {
         setPasswordError('Incorrect password');
@@ -249,10 +236,6 @@ export function Dashboard({
         setPasswordModalFor(null);
         setPasswordInput('');
         setPasswordError('');
-        if (!bleConnected && !isDevMode()) {
-          setShowBLEPrompt(true);
-          return;
-        }
         onNavigateToOnlineLobby('youth');
       } else {
         setPasswordError('Incorrect password');
