@@ -46,7 +46,7 @@ interface GameContextType {
 
   // Active game
   activeGame: GameData | null;
-  setActiveGame: (game: GameData | null) => void;
+  setActiveGame: (game: GameData | null | ((prev: GameData | null) => GameData | null)) => void;
 
   // Pending rejoin
   pendingRejoinGame: PendingRejoinGame | null;
@@ -89,8 +89,10 @@ export function GameProvider({ children }: GameProviderProps) {
     }
   }, [activeGame]);
 
-  const setActiveGame = (game: GameData | null) => {
-    setActiveGameState(game);
+  const setActiveGame = (gameOrUpdater: GameData | null | ((prev: GameData | null) => GameData | null)) => {
+    setActiveGameState((prev) =>
+      typeof gameOrUpdater === 'function' ? gameOrUpdater(prev) : gameOrUpdater
+    );
   };
 
   const clearGameState = () => {
