@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { Bluetooth } from 'lucide-react';
 import { useBLE } from '../contexts/BLEContext';
 import { useWebRTC } from '../hooks/useWebRTC';
+import { useGameStatus } from '../hooks/useGameStatus';
 import { isDevMode } from '../utils/devMode';
 import type { DartThrowData } from '../utils/ble/bleConnection';
 import type { GameConfiguration, GameInOut } from '../types/game';
@@ -22,6 +23,19 @@ interface PlayerInfo {
   name: string;
   profilePic?: string;
   accentColor: string;
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  if (!hex) return `rgba(0, 0, 0, ${alpha})`;
+  const c = hex.trim();
+  if (c.startsWith('#')) {
+    const h = c.slice(1);
+    const r = h.length >= 6 ? parseInt(h.slice(0, 2), 16) : parseInt(h[0] + h[0], 16);
+    const g = h.length >= 6 ? parseInt(h.slice(2, 4), 16) : parseInt(h[1] + h[1], 16);
+    const b = h.length >= 6 ? parseInt(h.slice(4, 6), 16) : parseInt(h[2] + h[2], 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  return `rgba(0, 0, 0, ${alpha})`;
 }
 
 // Snapshot of state before a single dart throw (for undo)
@@ -353,6 +367,14 @@ export function O1OnlineGameScreen({
   }), [gameId, localPlayer.id, remotePlayer.id, isInitiator]);
 
   const { localStream, remoteStream, initialize: webrtcInit, disconnect: webrtcDisconnect } = useWebRTC(webRTCOptions);
+
+  const { disconnectCountdown, leaveMatch } = useGameStatus({
+    gameId,
+    localPlayerId: localPlayer.id,
+    remotePlayerId: remotePlayer.id,
+    remotePlayerName: remotePlayer.name,
+    onOpponentLeft: () => onLeaveMatch?.(),
+  });
 
   // Determine which player is p1/p2 based on startingPlayer (cork winner)
   // P1 (LEFT) = whoever goes first (cork winner)
@@ -965,6 +987,66 @@ export function O1OnlineGameScreen({
         backgroundSize: 'cover',
         backgroundPosition: 'center',
       }} />
+
+      {/* Full-screen opponent disconnected overlay: 60s timer, Leave or wait */}
+      {disconnectCountdown !== null && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 400,
+          background: 'rgba(0,0,0,0.85)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 24,
+          fontFamily: FONT_NAME,
+        }}>
+          <div style={{
+            maxWidth: 360,
+            width: '100%',
+            background: 'rgba(24, 24, 27, 0.95)',
+            border: `3px solid ${localPlayer.accentColor}`,
+            borderRadius: 12,
+            padding: 24,
+            textAlign: 'center',
+            boxShadow: `0 4px 24px rgba(0,0,0,0.4), 0 0 14px ${hexToRgba(localPlayer.accentColor, 0.35)}`,
+          }}>
+            <h2 style={{ color: '#fff', fontSize: 20, fontWeight: 'bold', marginBottom: 8 }}>
+              Opponent disconnected
+            </h2>
+            <p style={{ color: '#a1a1aa', fontSize: 14, marginBottom: 8 }}>
+              They have 60 seconds to rejoin. If the timer reaches 0 you'll be returned to the lobby.
+            </p>
+            <div style={{ color: localPlayer.accentColor, fontSize: 48, fontWeight: 'bold', marginBottom: 20 }}>
+              {disconnectCountdown}s
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                await leaveMatch();
+                onLeaveMatch?.();
+              }}
+              style={{
+                width: '100%',
+                padding: '12px 24px',
+                borderRadius: 8,
+                border: 'none',
+                color: '#fff',
+                fontWeight: 'bold',
+                fontSize: 16,
+                cursor: 'pointer',
+                backgroundColor: localPlayer.accentColor,
+                boxShadow: `0 0 14px ${hexToRgba(localPlayer.accentColor, 0.4)}`,
+              }}
+            >
+              Leave match
+            </button>
+            <p style={{ color: '#71717a', fontSize: 12, marginTop: 12 }}>
+              Or wait for them to rejoin before the timer ends.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Background - Split Screen Video Feeds */}
       <div style={{
@@ -1616,7 +1698,7 @@ export function O1OnlineGameScreen({
               Undo Dart ({undosRemaining} left)
             </button>
             <button
-              onClick={() => { setMenuOpen(false); onLeaveMatch?.(); }}
+              onClick={async () => { setMenuOpen(false); await leaveMatch(); onLeaveMatch?.(); }}
               style={{
                 width: '100%', padding: `calc(14 * ${scale}) calc(20 * ${scale})`,
                 background: 'transparent', border: 'none',

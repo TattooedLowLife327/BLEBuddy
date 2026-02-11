@@ -21,6 +21,19 @@ const MARK_ICONS: Record<1 | 2 | 3, string> = {
   3: '/assets/CR3Mark.svg',
 };
 
+function hexToRgba(hex: string, alpha: number): string {
+  if (!hex) return `rgba(0, 0, 0, ${alpha})`;
+  const c = hex.trim();
+  if (c.startsWith('#')) {
+    const h = c.slice(1);
+    const r = h.length >= 6 ? parseInt(h.slice(0, 2), 16) : parseInt(h[0] + h[0], 16);
+    const g = h.length >= 6 ? parseInt(h.slice(2, 4), 16) : parseInt(h[1] + h[1], 16);
+    const b = h.length >= 6 ? parseInt(h.slice(4, 6), 16) : parseInt(h[2] + h[2], 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  return `rgba(0, 0, 0, ${alpha})`;
+}
+
 interface DartThrow {
   segment: string;
   score: number;
@@ -867,6 +880,63 @@ export function CROnlineGameScreen({
         </div>
       )}
 
+      {/* Full-screen opponent disconnected overlay: 60s timer, Leave or wait */}
+      {disconnectCountdown !== null && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 400,
+          background: 'rgba(0,0,0,0.85)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 24,
+          fontFamily: FONT_NAME,
+        }}>
+          <div style={{
+            maxWidth: 360,
+            width: '100%',
+            background: 'rgba(24, 24, 27, 0.95)',
+            border: `3px solid ${localPlayer.accentColor}`,
+            borderRadius: 12,
+            padding: 24,
+            textAlign: 'center',
+            boxShadow: `0 4px 24px rgba(0,0,0,0.4), 0 0 14px ${hexToRgba(localPlayer.accentColor, 0.35)}`,
+          }}>
+            <h2 style={{ color: '#fff', fontSize: 20, fontWeight: 'bold', marginBottom: 8 }}>
+              Opponent disconnected
+            </h2>
+            <p style={{ color: '#a1a1aa', fontSize: 14, marginBottom: 8 }}>
+              They have 60 seconds to rejoin. If the timer reaches 0 you'll be returned to the lobby.
+            </p>
+            <div style={{ color: localPlayer.accentColor, fontSize: 48, fontWeight: 'bold', marginBottom: 20 }}>
+              {disconnectCountdown}s
+            </div>
+            <button
+              type="button"
+              onClick={handleConfirmLeave}
+              style={{
+                width: '100%',
+                padding: '12px 24px',
+                borderRadius: 8,
+                border: 'none',
+                color: '#fff',
+                fontWeight: 'bold',
+                fontSize: 16,
+                cursor: 'pointer',
+                backgroundColor: localPlayer.accentColor,
+                boxShadow: `0 0 14px ${hexToRgba(localPlayer.accentColor, 0.4)}`,
+              }}
+            >
+              Leave match
+            </button>
+            <p style={{ color: '#71717a', fontSize: 12, marginTop: 12 }}>
+              Or wait for them to rejoin before the timer ends.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* SPLIT SCREEN VIDEO BACKGROUND - P1 always on left, P2 always on right */}
       <div style={{
         position: 'absolute',
@@ -912,28 +982,6 @@ export function CROnlineGameScreen({
               transform: 'none',
             }}
           />
-          {/* Connection status indicator */}
-          {!isOpponentOnline && (
-            <div style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              background: 'rgba(0, 0, 0, 0.8)',
-              padding: `calc(20 * ${scale})`,
-              borderRadius: `calc(12 * ${scale})`,
-              textAlign: 'center',
-            }}>
-              <div style={{ color: '#ff4444', fontFamily: FONT_NAME, fontSize: `calc(24 * ${scale})` }}>
-                Opponent Disconnected
-              </div>
-              {disconnectCountdown && (
-                <div style={{ color: '#fff', fontFamily: FONT_NAME, fontSize: `calc(48 * ${scale})`, marginTop: `calc(10 * ${scale})` }}>
-                  {disconnectCountdown}s
-                </div>
-              )}
-            </div>
-          )}
         </div>
       </div>
 

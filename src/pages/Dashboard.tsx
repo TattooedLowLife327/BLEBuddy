@@ -177,7 +177,10 @@ export function Dashboard({
   };
 
   const handleNavigateToOnlineLobby = () => {
-    // Allow entering lobby without BLE so users can view it on phones / prod; BLE required when playing.
+    if (!bleConnected && !isDevMode()) {
+      setShowBLEPrompt(true);
+      return;
+    }
     onNavigateToOnlineLobby();
   };
 
@@ -201,6 +204,10 @@ export function Dashboard({
         setPasswordError('');
         return;
       }
+      if (!bleConnected && !isDevMode()) {
+        setShowBLEPrompt(true);
+        return;
+      }
       onNavigateToOnlineLobby('ladies');
       return;
     }
@@ -209,6 +216,10 @@ export function Dashboard({
         setPasswordModalFor('youth');
         setPasswordInput('');
         setPasswordError('');
+        return;
+      }
+      if (!bleConnected && !isDevMode()) {
+        setShowBLEPrompt(true);
         return;
       }
       onNavigateToOnlineLobby('youth');
@@ -224,6 +235,10 @@ export function Dashboard({
         setPasswordModalFor(null);
         setPasswordInput('');
         setPasswordError('');
+        if (!bleConnected && !isDevMode()) {
+          setShowBLEPrompt(true);
+          return;
+        }
         onNavigateToOnlineLobby('ladies');
       } else {
         setPasswordError('Incorrect password');
@@ -236,6 +251,10 @@ export function Dashboard({
         setPasswordModalFor(null);
         setPasswordInput('');
         setPasswordError('');
+        if (!bleConnected && !isDevMode()) {
+          setShowBLEPrompt(true);
+          return;
+        }
         onNavigateToOnlineLobby('youth');
       } else {
         setPasswordError('Incorrect password');

@@ -123,16 +123,16 @@ export function AppHeader({
   };
 
   return (
-    <div className="relative flex items-center justify-center h-10 shrink-0">
+    <div className="relative flex items-center justify-center h-10 md:h-14 shrink-0">
       {/* Left side: back button (when onBack) and/or BLE indicator (when bleStatus) */}
       <div className="absolute left-0 z-20 flex items-center gap-2">
         {onBack && (
           <button
             onClick={onBack}
-            className="p-1 text-white hover:opacity-80 transition-opacity"
+            className="p-1 md:p-2 text-white hover:opacity-80 transition-opacity"
             aria-label="Back"
           >
-            <ChevronLeft className="w-5 h-5" />
+            <ChevronLeft className="w-5 h-5 md:w-6 md:h-6" />
           </button>
         )}
         {bleStatus && (
@@ -144,7 +144,7 @@ export function AppHeader({
             <img
               src={bluetoothIcon}
               alt="BLE Status"
-              className="w-5 h-5 object-contain transition-all duration-300"
+              className="w-5 h-5 md:w-6 md:h-6 object-contain transition-all duration-300"
               style={{
                 filter: bleConnected
                   ? 'brightness(0) saturate(100%) invert(64%) sepia(98%) saturate(451%) hue-rotate(85deg) brightness(95%) contrast(89%)'
@@ -154,7 +154,7 @@ export function AppHeader({
               }}
             />
             <span
-              className="transition-colors text-xs"
+              className="transition-colors text-xs md:text-sm"
               style={{
                 fontFamily: 'Helvetica, Arial, sans-serif',
                 color: bleConnected ? '#10b981' : bleStatus === 'connecting' || bleStatus === 'scanning' ? '#f59e0b' : '#ef4444'
@@ -171,7 +171,7 @@ export function AppHeader({
 
       {/* Center - title */}
       <h1
-        className="text-base text-white uppercase tracking-wider font-bold"
+        className="text-base md:text-xl text-white uppercase tracking-wider font-bold"
         style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}
       >
         {title}
@@ -183,10 +183,10 @@ export function AppHeader({
         {showRefresh && onRefresh && (
           <button
             onClick={onRefresh}
-            className="p-2 text-white hover:bg-white/10 rounded-full transition-colors"
+            className="p-2 md:p-2.5 text-white hover:bg-white/10 rounded-full transition-colors"
             aria-label="Refresh"
           >
-            <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-5 h-5 md:w-6 md:h-6 ${isRefreshing ? 'animate-spin' : ''}`} />
           </button>
         )}
 
@@ -196,10 +196,10 @@ export function AppHeader({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="relative p-1.5 rounded-full border border-white/10 text-white hover:opacity-80 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+                className="relative p-1.5 md:p-2 rounded-full border border-white/10 text-white hover:opacity-80 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
                 aria-label={notificationCount ? `${notificationCount} missed requests` : 'No missed requests'}
               >
-                <Bell className="w-4 h-4" />
+                <Bell className="w-4 h-4 md:w-5 md:h-5" />
                 {notificationCount > 0 && (
                   <span className="absolute -top-1 -right-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-0.5 text-[10px] font-semibold text-white">
                     {notificationCount > 9 ? '9+' : notificationCount}

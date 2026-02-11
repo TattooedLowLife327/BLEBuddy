@@ -98,7 +98,7 @@ export function PlayerCardTop({
         )}
         {hasSkinImage && <div className="absolute inset-0 z-0 bg-black" />}
 
-        {/* Player's skin image (like legitllogb) – hole cut out for PFP, gradient fade */}
+        {/* Player's skin image – hole cut out for PFP, light gradient so skin stays visible */}
         {hasSkinImage && (
           <div className="absolute inset-0 overflow-hidden z-[1] rounded-tl-lg rounded-bl-lg">
             <div
@@ -108,7 +108,7 @@ export function PlayerCardTop({
                 backgroundSize: 'cover',
                 backgroundPosition: 'center top',
                 backgroundRepeat: 'no-repeat',
-                opacity: 0.35,
+                opacity: 0.65,
                 mask: 'radial-gradient(circle 52px at 50% 76px, transparent 100%, black 100%)',
                 WebkitMask: 'radial-gradient(circle 52px at 50% 76px, transparent 100%, black 100%)',
               }}
@@ -116,7 +116,7 @@ export function PlayerCardTop({
             <div
               className="absolute inset-0"
               style={{
-                background: 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.1) 15%, rgba(0,0,0,0.4) 35%, rgba(0,0,0,0.75) 55%, black 75%)',
+                background: 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.05) 35%, rgba(0,0,0,0.35) 55%, rgba(0,0,0,0.7) 75%, black 95%)',
               }}
             />
           </div>
@@ -136,9 +136,9 @@ export function PlayerCardTop({
           />
         )}
 
-        <div className="relative z-[5] flex flex-col items-center pt-5 pb-0 px-4 shrink-0">
-          {/* Avatar sized to fill skin pre-cut hole (104px); LLOGB badge overlaps PFP border */}
-          <div className="relative mb-0.5">
+        <div className="relative z-[5] flex flex-col items-center pt-4 pb-1 px-4 shrink-0">
+          {/* Avatar fills the skin precut hole (104px) */}
+          <div className="relative mb-1.5">
             <Avatar
               className="shrink-0 rounded-full overflow-hidden"
               style={{
@@ -167,11 +167,10 @@ export function PlayerCardTop({
           </div>
           {/* Breathing room below profile pic, then player name */}
           <div
-            className="font-bold text-center truncate max-w-full uppercase mt-4"
+            className="font-bold text-center truncate max-w-full uppercase mt-4 text-lg md:text-xl"
             style={{
               color: data.accentColor,
               fontFamily: FONT,
-              fontSize: 18,
               lineHeight: 1.2,
               letterSpacing: '0.02em',
               textShadow: `0 0 14px ${hexToRgba(data.accentColor, 0.5)}`,
@@ -181,8 +180,8 @@ export function PlayerCardTop({
           </div>
           {/* Single line: X games • Y friends (bold numbers, smaller labels) */}
           <div
-            className="text-white text-center mb-4"
-            style={{ fontFamily: FONT, fontSize: 11 }}
+            className="text-white text-center mb-3 text-[11px] md:text-sm"
+            style={{ fontFamily: FONT }}
           >
             <span className="font-bold">{(data.onlineGameCount ?? 0).toLocaleString()}</span>
             <span className="font-normal text-white/80"> games · </span>
@@ -190,7 +189,7 @@ export function PlayerCardTop({
             <span className="font-normal text-white/80"> friends</span>
           </div>
 
-          {/* Stats: labels smallest, letter grade large, numbers medium */}
+          {/* Stats: labels smallest, letter grade large, numbers medium - larger on desktop */}
           {loading ? (
             <div className="flex-1 flex items-center justify-center">
               <span className="text-gray-400 text-xs" style={{ fontFamily: FONT }}>
@@ -198,37 +197,37 @@ export function PlayerCardTop({
               </span>
             </div>
           ) : (
-            <div className="w-full grid grid-cols-3 gap-2 text-center">
+            <div className="w-full grid grid-cols-3 gap-2 md:gap-3 text-center">
               <div className="flex flex-col items-center">
-                <div className="uppercase tracking-wider text-white/70" style={{ fontFamily: FONT, fontSize: 8 }}>
+                <div className="uppercase tracking-wider text-white/70 text-[8px] md:text-[11px]" style={{ fontFamily: FONT }}>
                   01 AVG
                 </div>
-                <div className="font-bold text-white" style={{ fontFamily: FONT, fontSize: 26 }}>
+                <div className="font-bold text-white text-[26px] md:text-[32px]" style={{ fontFamily: FONT }}>
                   {data.pprLetter || '--'}
                 </div>
-                <div className="text-white/90" style={{ fontFamily: FONT, fontSize: 12 }}>
+                <div className="text-white/90 text-sm md:text-base font-medium" style={{ fontFamily: FONT }}>
                   {data.pprNumeric != null && data.pprNumeric > 0 ? data.pprNumeric.toFixed(2) : '--'}
                 </div>
               </div>
               <div className="flex flex-col items-center">
-                <div className="uppercase tracking-wider text-white/70" style={{ fontFamily: FONT, fontSize: 8 }}>
+                <div className="uppercase tracking-wider text-white/70 text-[8px] md:text-[11px]" style={{ fontFamily: FONT }}>
                   OVERALL
                 </div>
-                <div className="font-bold text-white" style={{ fontFamily: FONT, fontSize: 26 }}>
+                <div className="font-bold text-white text-[26px] md:text-[32px]" style={{ fontFamily: FONT }}>
                   {data.overallLetter || '--'}
                 </div>
-                <div className="text-white/90" style={{ fontFamily: FONT, fontSize: 12 }}>
+                <div className="text-white/90 text-sm md:text-base font-medium" style={{ fontFamily: FONT }}>
                   {data.overallNumeric != null && data.overallNumeric > 0 ? data.overallNumeric.toFixed(2) : '--'}
                 </div>
               </div>
               <div className="flex flex-col items-center">
-                <div className="uppercase tracking-wider text-white/70" style={{ fontFamily: FONT, fontSize: 8 }}>
+                <div className="uppercase tracking-wider text-white/70 text-[8px] md:text-[11px]" style={{ fontFamily: FONT }}>
                   CR AVG
                 </div>
-                <div className="font-bold text-white" style={{ fontFamily: FONT, fontSize: 26 }}>
+                <div className="font-bold text-white text-[26px] md:text-[32px]" style={{ fontFamily: FONT }}>
                   {data.mprLetter || '--'}
                 </div>
-                <div className="text-white/90" style={{ fontFamily: FONT, fontSize: 12 }}>
+                <div className="text-white/90 text-sm md:text-base font-medium" style={{ fontFamily: FONT }}>
                   {data.mprNumeric != null && data.mprNumeric > 0 ? data.mprNumeric.toFixed(2) : '--'}
                 </div>
               </div>

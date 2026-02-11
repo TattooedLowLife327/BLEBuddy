@@ -9,8 +9,7 @@ import { AppHeader } from '../components/AppHeader';
 import { type GameData } from '../contexts/GameContext';
 import type { GameConfiguration } from '../types/game';
 import { checkCameraAvailable } from '../utils/webrtc/peerConnection';
-import { isDevMode } from '../utils/devMode';
-import { resolveProfilePicUrl } from '../utils/profile';
+import { resolveProfilePicUrl, resolveSkinUrl } from '../utils/profile';
 import { PlayerCardTop } from '../components/PlayerCardTop';
 import {
   REQUEST_TIMEOUT_MS,
@@ -108,27 +107,8 @@ interface AvailablePlayer {
   onlineGameCount?: number;
   gender?: string | null;
   isYouth?: boolean;
+  skin?: string | null;
 }
-
-/** Mock players for scroll preview: 10 total, 4 in match. */
-const MOCK_LOBBY_PLAYERS: AvailablePlayer[] = Array.from({ length: 10 }, (_, i) => ({
-  id: `mock-lobby-${i + 1}`,
-  player_id: `mock-lobby-${i + 1}`,
-  granboardName: `Demo Player ${i + 1}`,
-  accentColor: '#a855f7',
-  mprNumeric: 3.42,
-  pprNumeric: 72.5,
-  overallNumeric: 68.1,
-  mprLetter: 'B',
-  pprLetter: 'A',
-  overallLetter: 'B',
-  isDoublesTeam: false,
-  status: i >= 6 ? 'in_match' : 'waiting',
-  granid: `DEMO${String(i + 1).padStart(2, '0')}`,
-  friendCount: 42,
-  onlineGameCount: 128,
-  partnerName: null,
-}));
 
 export function OnlineLobby({
   onBack,
@@ -359,14 +339,9 @@ export function OnlineLobby({
     };
   }, [canAccess, cameraError, checkingCamera, resetActivity, startIdleCountdown, supabase, userId]);
 
-  // Check camera availability on mount - required for online play (skipped in dev mode)
+  // Check camera availability on mount - required for online play
   useEffect(() => {
     if (!canAccess) return;
-    if (isDevMode()) {
-      setCameraError(null);
-      setCheckingCamera(false);
-      return;
-    }
 
     async function verifyCameraAccess() {
       setCheckingCamera(true);
@@ -548,7 +523,7 @@ export function OnlineLobby({
 
               const { data: rawProfileData, error: profileError } = await profileSchema
                 .from(profileTable)
-                .select('granboard_name, profilepic, profilecolor, gender')
+                .select('granboard_name, profilepic, profilecolor, gender, skin')
                 .eq('id', playerId)
                 .single();
 
@@ -562,6 +537,7 @@ export function OnlineLobby({
                 profilepic: string | null;
                 profilecolor: string | null;
                 gender?: string | null;
+                skin?: string | null;
               }) || null;
 
               const statsSchema = isYouth
@@ -627,6 +603,8 @@ export function OnlineLobby({
                 playerFriendCount = count || 0;
               } catch { /* ignore */ }
 
+              const skinUrl = resolveSkinUrl(profileData?.skin ?? null);
+
               return {
                 id: lobbyEntry.id,
                 player_id: playerId,
@@ -649,6 +627,7 @@ export function OnlineLobby({
                 onlineGameCount: statsData?.online_game_count ?? 0,
                 gender: profileData?.gender ?? null,
                 isYouth: isYouth,
+                skin: skinUrl ?? undefined,
               } as AvailablePlayer;
             })
           );
@@ -849,6 +828,7 @@ export function OnlineLobby({
 
   const handleAcceptGame = async () => {
     if (!incomingRequest) return;
+    if (!bleConnected) return;
 
     // Check if user already has an active game
     const existingGame = await checkForExistingGame();
@@ -1003,6 +983,9 @@ export function OnlineLobby({
   }, [incomingRequest, onAddMissedRequest, supabase]);
 
   const handleStartGame = async (gameConfig: GameConfiguration) => {
+    if (!bleConnected) {
+      return; // Block send when disconnected; setup modal already disables button
+    }
     console.log('Starting game with config:', gameConfig);
     console.log('Against player:', selectedPlayer);
 
@@ -1189,6 +1172,8 @@ export function OnlineLobby({
           partnerName={partnerName}
           userId={userId}
           isYouthPlayer={isYouthPlayer}
+          bleConnected={bleConnected}
+          onBLEConnect={onBLEConnect}
         />
       )}
 
@@ -1199,6 +1184,8 @@ export function OnlineLobby({
           onAccept={handleAcceptGame}
           onDecline={handleDeclineGame}
           onTimeout={handleIncomingTimeout}
+          bleConnected={bleConnected}
+          onBLEConnect={onBLEConnect}
         />
       )}
 
@@ -1388,23 +1375,57 @@ export function OnlineLobby({
           onOpenSettings={onOpenSettings}
         />
 
+        {/* Full-screen disconnect overlay: app theme; send/accept are already blocked */}
+        {!bleConnected && (
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-6"
+            style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}
+          >
+            <div
+              className="rounded-xl border-[3px] bg-zinc-900/95 p-8 max-w-md w-full text-center shadow-xl"
+              style={{
+                borderColor: accentColor,
+                boxShadow: `0 4px 24px rgba(0,0,0,0.4), 0 0 14px ${hexToRgba(accentColor, 0.35)}`,
+              }}
+            >
+              <h2 className="text-xl font-bold text-white mb-2">Board disconnected</h2>
+              <p className="text-zinc-400 text-sm mb-6">
+                Reconnect your Granboard to send or accept game requests.
+              </p>
+              <button
+                type="button"
+                onClick={() => onBLEConnect?.()}
+                disabled={bleStatus === 'connecting' || bleStatus === 'scanning'}
+                className="w-full py-3 rounded-lg text-white font-bold transition-colors disabled:opacity-50"
+                style={{
+                  backgroundColor: accentColor,
+                  boxShadow: `0 0 14px ${hexToRgba(accentColor, 0.4)}`,
+                }}
+              >
+                {bleStatus === 'connecting' || bleStatus === 'scanning' ? 'Connecting...' : 'Reconnect'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Players Grid - Vertical Scrolling */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 scrollbar-hidden">
           {loading ? (
             <div className="text-center text-gray-400 py-12 w-full">
               Loading available players...
             </div>
+          ) : availablePlayers.length === 0 ? (
+            <div className="text-center text-gray-400 py-12 w-full">
+              <p style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                No players available. Waiting for opponents...
+              </p>
+            </div>
           ) : (
             <div
-              className={`grid transition-opacity duration-200 ${isRefreshing ? 'opacity-50' : 'opacity-100'}`}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
-                gap: '16px',
-                justifyItems: 'center',
-              }}
+              className={`grid transition-opacity duration-200 gap-4 md:gap-6 lg:gap-8 grid-cols-[repeat(auto-fill,minmax(240px,1fr))] md:grid-cols-[repeat(auto-fill,minmax(260px,1fr))] ${isRefreshing ? 'opacity-50' : 'opacity-100'}`}
+              style={{ justifyItems: 'center' }}
             >
-              {[...MOCK_LOBBY_PLAYERS, ...availablePlayers].map((player) => {
+              {sortByStatus(availablePlayers).map((player) => {
                 const playerAccentColor = player.accentColor;
                 const isIdle = player.status === 'idle';
                 const isInMatch = player.status === 'in_match';
@@ -1421,19 +1442,16 @@ export function OnlineLobby({
                 return (
                   <div
                     key={player.id}
-                    className="flex items-center justify-center"
-                    style={{
-                      width: '240px',
-                      height: '280px',
-                    }}
+                    className="flex items-center justify-center w-[240px] h-[300px] md:w-[260px] md:h-[300px]"
                   >
                     <div
                       onClick={() => !isInMatch && handlePlayerClick(player)}
-                      className={`relative rounded-xl overflow-hidden ${isInMatch ? 'cursor-not-allowed' : 'cursor-pointer hover:scale-[1.02]'} transition-transform origin-center`}
+                      className={`relative rounded-xl overflow-hidden w-full h-full ${isInMatch ? 'cursor-not-allowed' : 'cursor-pointer hover:scale-[1.02]'} transition-transform origin-center`}
                       style={{
                         filter: isIdle || isInMatch ? 'grayscale(0.7) brightness(0.6)' : 'none',
-                        width: '240px',
-                        height: '280px',
+                        width: '100%',
+                        height: '100%',
+                        minHeight: 300,
                         border: '3px solid',
                         borderColor: playerAccentColor,
                         backgroundColor: 'rgba(24, 24, 27, 0.95)',
@@ -1471,6 +1489,7 @@ export function OnlineLobby({
                           granboardName: player.granboardName,
                           profilePic: player.profilePic,
                           accentColor: playerAccentColor,
+                          skin: player.skin ?? undefined,
                           granid: player.granid ?? null,
                           friendCount: player.friendCount,
                           onlineGameCount: player.onlineGameCount,

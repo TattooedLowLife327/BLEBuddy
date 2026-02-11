@@ -37,6 +37,8 @@ interface IncomingRequestModalProps {
   onAccept: () => void;
   onDecline: () => void;
   onTimeout?: () => void; // Called when request times out (7 seconds)
+  bleConnected?: boolean;
+  onBLEConnect?: () => Promise<{ success: boolean; error?: string }>;
 }
 
 const hexToRgba = (hex: string, alpha: number) => {
@@ -46,7 +48,7 @@ const hexToRgba = (hex: string, alpha: number) => {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
-export function IncomingRequestModal({ request, onAccept, onDecline, onTimeout }: IncomingRequestModalProps) {
+export function IncomingRequestModal({ request, onAccept, onDecline, onTimeout, bleConnected = true, onBLEConnect }: IncomingRequestModalProps) {
   const [loading, setLoading] = useState(true);
   const [profilePic, setProfilePic] = useState<string | null>(null);
   const [profileColor, setProfileColor] = useState('#a855f7');
@@ -404,16 +406,17 @@ export function IncomingRequestModal({ request, onAccept, onDecline, onTimeout }
             Decline
           </button>
           <button
-            onClick={onAccept}
-            className="flex-1 py-3 rounded-lg text-white transition-all hover:scale-[1.02]"
+            onClick={bleConnected ? onAccept : onBLEConnect}
+            disabled={!bleConnected && !onBLEConnect}
+            className={`flex-1 py-3 rounded-lg text-white transition-all ${bleConnected ? 'hover:scale-[1.02]' : 'opacity-70 cursor-pointer'}`}
             style={{
               fontFamily: 'Helvetica, Arial, sans-serif',
               fontWeight: 'bold',
-              backgroundColor: '#16a34a',
-              boxShadow: '0 0 15px rgba(22, 163, 74, 0.4)',
+              backgroundColor: bleConnected ? '#16a34a' : '#52525b',
+              boxShadow: bleConnected ? '0 0 15px rgba(22, 163, 74, 0.4)' : 'none',
             }}
           >
-            Accept
+            {bleConnected ? 'Accept' : 'Reconnect to accept'}
           </button>
         </div>
       </div>

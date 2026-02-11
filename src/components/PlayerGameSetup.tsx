@@ -54,6 +54,8 @@ interface PlayerGameSetupProps {
   partnerName?: string;
   userId: string;
   isYouthPlayer: boolean;
+  bleConnected?: boolean;
+  onBLEConnect?: () => Promise<{ success: boolean; error?: string }>;
 }
 
 interface PlayerStats {
@@ -89,6 +91,8 @@ export function PlayerGameSetup({
   partnerName: _partnerName,
   userId: _userId,
   isYouthPlayer: _isYouthPlayer,
+  bleConnected = true,
+  onBLEConnect,
 }: PlayerGameSetupProps) {
   const [legs, setLegs] = useState<number>(3);
   const [games, setGames] = useState<string[]>(['', '', '']);
@@ -109,6 +113,7 @@ export function PlayerGameSetup({
   const [flight, setFlight] = useState<FlightAnimation | null>(null);
   const [glowGame, setGlowGame] = useState<'501' | 'CR' | 'CH' | null>(null);
   const [modalScale, setModalScale] = useState(1);
+  const [mobileModalSize, setMobileModalSize] = useState<{ width: number; maxHeight: number } | null>(null);
   const [fetchedProfilePic, setFetchedProfilePic] = useState<string | null>(null);
   const [fetchedSkin, setFetchedSkin] = useState<string | null>(null);
   const [friendCount, setFriendCount] = useState<number>(0);
@@ -156,19 +161,23 @@ export function PlayerGameSetup({
   // Calculate hue for toggle filter (base SVG is purple ~270 hue)
   const profileHue = useMemo(() => hexToHue(player.accentColor), [player.accentColor]);
 
-  // Calculate modal scale based on viewport
+  // Desktop: original 700px + scale to fit. Mobile only: full width so it doesn't render tiny.
   useEffect(() => {
     const calculateScale = () => {
-      // Check if we're in portrait mode (CSS rotates to landscape)
       const isPortrait = window.matchMedia('(orientation: portrait)').matches;
-
-      // When in portrait, CSS rotates content so swap width/height for calculations
       const viewWidth = isPortrait ? window.innerHeight : window.innerWidth;
       const viewHeight = isPortrait ? window.innerWidth : window.innerHeight;
 
-      const widthScale = (viewWidth - 48) / 700; // base modal width ~700px
-      const heightScale = (viewHeight - 48) / 550; // base modal height ~550px
-      setModalScale(Math.min(widthScale, heightScale, 1.2)); // Cap at 1.2x
+      const MOBILE_BREAK = 640;
+      if (viewWidth < MOBILE_BREAK) {
+        setMobileModalSize({ width: Math.max(280, viewWidth - 24), maxHeight: Math.min(550, viewHeight - 24) });
+        setModalScale(1);
+      } else {
+        setMobileModalSize(null); // desktop: use original fixed size
+        const widthScale = (viewWidth - 48) / 700;
+        const heightScale = (viewHeight - 48) / 550;
+        setModalScale(Math.min(widthScale, heightScale, 1.2));
+      }
     };
     calculateScale();
     window.addEventListener('resize', calculateScale);
@@ -370,6 +379,9 @@ export function PlayerGameSetup({
   };
 
   const confirmAndSendRequest = () => {
+    if (!bleConnected) {
+      return; // Send button is disabled; this is a safety check
+    }
     // Determine format
     let inOut: 'do' | 'mo' | 'mimo' | 'dido' | null = null;
     if (do_) inOut = 'do';
@@ -431,7 +443,7 @@ export function PlayerGameSetup({
   const has01Format = do_ || mo || mimo || dido;
   const hasBullFormat = full || split;
   const formatComplete = !has01Game || (has01Format && hasBullFormat);
-  const canSend = allSlotsFilled && formatComplete;
+  const canSend = allSlotsFilled && formatComplete && bleConnected;
 
   // Which game-type buttons get profile border (when that type is in the slots)
   const gamesInclude501 = games.some(g => g === '501');
@@ -462,11 +474,12 @@ export function PlayerGameSetup({
       <div
         className="rounded-xl border-[3px] bg-zinc-900/95 overflow-hidden flex flex-col origin-center"
         style={{
-          width: '700px',
-          maxHeight: '550px',
+          ...(mobileModalSize
+            ? { width: mobileModalSize.width, maxHeight: mobileModalSize.maxHeight, transform: 'scale(1)' }
+            : { width: 700, maxHeight: 550, transform: `scale(${modalScale})` }
+          ),
           borderColor: player.accentColor,
           boxShadow: `0 4px 24px rgba(0,0,0,0.4), 0 0 14px ${hexToRgba(player.accentColor, 0.35)}`,
-          transform: `scale(${modalScale})`,
         }}
       >
         {/* Content - no separate header bar; close is in right panel */}
@@ -773,7 +786,7 @@ export function PlayerGameSetup({
                   onClick={canSend ? handleStartGame : undefined}
                   disabled={!canSend}
                   className="rounded-lg p-2 transition-colors flex items-center justify-center shrink-0 border-0"
-                  title={canSend ? 'Review & send' : allSlotsFilled ? 'Select 01 format (Do/Mo/MiMo/DiDo) and bull (Full/Split)' : `Fill all ${legs} game slot(s)${has01Game ? ' and 01 + bull format' : ''}`}
+                  title={!bleConnected ? 'Reconnect your board to send a game request' : canSend ? 'Review & send' : allSlotsFilled ? 'Select 01 format (Do/Mo/MiMo/DiDo) and bull (Full/Split)' : `Fill all ${legs} game slot(s)${has01Game ? ' and 01 + bull format' : ''}`}
                   animate={canSend ? { scale: [1, 1.08, 1], boxShadow: [`0 0 0 0 ${hexToRgba(player.accentColor, 0)}`, `0 0 16px 2px ${hexToRgba(player.accentColor, 0.5)}`, `0 0 0 0 ${hexToRgba(player.accentColor, 0)}`] } : {}}
                   transition={canSend ? { repeat: Infinity, duration: 1.8, ease: 'easeInOut' } : {}}
                   style={{
