@@ -55,7 +55,11 @@ export async function getAvailableCameras(): Promise<CameraDevice[]> {
 export async function checkCameraAvailable(): Promise<{ available: boolean; error?: string }> {
   try {
     if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
-      return { available: false, error: 'Your browser does not support camera access. Please use Chrome, Edge, or Safari.' };
+      const isSecure = typeof location !== 'undefined' && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+      const msg = isSecure
+        ? 'Your browser does not support camera access. Try the latest Chrome or Edge.'
+        : 'Camera access requires a secure connection. Open this app at https://… or use http://localhost:3000 on this computer.';
+      return { available: false, error: msg };
     }
 
     const devices = await navigator.mediaDevices.enumerateDevices();

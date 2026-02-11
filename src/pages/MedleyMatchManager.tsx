@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CorkScreen } from '../components/CorkScreen';
 import { createClient } from '../utils/supabase/client';
+import { playSound } from '../utils/sounds';
 import { O1OnlineGameScreen } from './01OnlineGameScreen';
 import { CROnlineGameScreen } from './CROnlineGameScreen';
 import type { GameConfiguration } from '../types/game';
@@ -204,6 +205,7 @@ export function MedleyMatchManager({
     if (p1Wins >= gamesNeededToWin || p2Wins >= gamesNeededToWin || nextIndex >= legs.length) {
       setMatchWinner(p1Wins >= gamesNeededToWin ? 'p1' : 'p2');
       setMatchComplete(true);
+      playSound('medleyTransition');
       return;
     }
 

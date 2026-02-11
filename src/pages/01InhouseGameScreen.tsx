@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useBLE } from '../contexts/BLEContext';
 import { isDevMode } from '../utils/devMode';
 import { getCheckoutSuggestion } from '../utils/checkoutSolver';
+import { playSound } from '../utils/sounds';
 import type { DartThrowData } from '../utils/ble/bleConnection';
 
 // Resolve profile pic URL from various formats
@@ -384,6 +385,10 @@ export function O1InhouseGameScreen({
 
   const [p1Score, setP1Score] = useState(startScore);
   const [p2Score, setP2Score] = useState(startScore);
+  // Track score at the start of each turn so a bust can revert the
+  // player back to their score before the turn (standard 01 behavior).
+  const p1TurnStartScoreRef = useRef(startScore);
+  const p2TurnStartScoreRef = useRef(startScore);
   const [currentThrower, setCurrentThrower] = useState<'p1' | 'p2'>(() => startingPlayer || 'p1');
   const [currentDarts, setCurrentDarts] = useState<DartThrow[]>([]);
   const [roundScore, setRoundScore] = useState(0);
@@ -534,7 +539,7 @@ export function O1InhouseGameScreen({
       // If it was a win, show the winners screen after animation
       if (achievement === 'win' && winner) {
         setGameWinner(winner);
-        setTimeout(() => setShowWinnerScreen(true), 300);
+        setTimeout(() => { playSound('gameEnd'); setShowWinnerScreen(true); }, 300);
       }
     }, 3000);
   }, []);
@@ -559,6 +564,7 @@ export function O1InhouseGameScreen({
   useEffect(() => {
     if (!showGoodLuck) return; // Only run when showGoodLuck is true
     const timer = setTimeout(() => {
+      playSound('gameStart');
       setShowGoodLuck(false);
       setIntroComplete(true);
     }, 2500); // Animation duration
@@ -624,11 +630,12 @@ export function O1InhouseGameScreen({
             winner = p1ScoreReachedRound <= p2ScoreReachedRound ? 'p1' : 'p2';
           }
           setGameWinner(winner);
-          setTimeout(() => setShowWinnerScreen(true), 500);
+          setTimeout(() => { playSound('gameEnd'); setShowWinnerScreen(true); }, 500);
           return;
         }
 
         if (willCompleteRound) {
+          if (currentRound + 1 === 20) playSound('lastRound');
           // Start round exit animation
           setRoundAnimState('out');
           setTimeout(() => {
@@ -651,6 +658,16 @@ export function O1InhouseGameScreen({
 
   const throwDart = useCallback((segment: string, score: number, multiplier: number) => {
     if (currentDarts.length >= 3 || showPlayerChange || !introComplete) return;
+
+    // First dart of this turn: remember the score at turn start so a bust
+    // can roll the player back to this value.
+    if (currentDarts.length === 0) {
+      if (currentThrower === 'p1') {
+        p1TurnStartScoreRef.current = p1Score;
+      } else {
+        p2TurnStartScoreRef.current = p2Score;
+      }
+    }
 
     const hasStarted = currentThrower === 'p1' ? p1HasStarted : p2HasStarted;
     const setHasStarted = currentThrower === 'p1' ? setP1HasStarted : setP2HasStarted;
@@ -724,6 +741,8 @@ export function O1InhouseGameScreen({
     const newDarts = [...currentDarts, newDart];
     const newRoundScore = roundScore + effectiveScore;
 
+    playSound('dart');
+
     // Track darts thrown for PPR calculation
     if (currentThrower === 'p1') {
       setP1DartsThrown(prev => prev + 1);
@@ -732,14 +751,24 @@ export function O1InhouseGameScreen({
     }
 
     if (isBust) {
-      // Show the dart but don't update score, then switch players
+      // On bust, full turn is invalid: score should go back to what it was
+      // at the start of the turn, not after earlier darts in this turn.
+      if (currentThrower === 'p1') {
+        setP1Score(p1TurnStartScoreRef.current);
+      } else {
+        setP2Score(p2TurnStartScoreRef.current);
+      }
+
+      // Show the dart but don't keep the scoring change, then switch players
       setCurrentDarts(newDarts);
+      playSound('bust');
       // Trigger bust achievement
       const achievement = detectAchievement(newDarts, newRoundScore, true, false);
       triggerAchievement(achievement);
       // Use timeout ref so button can cancel it
       playerChangeTimeoutRef.current = setTimeout(() => {
         playerChangeTimeoutRef.current = null;
+        playSound('playerChange');
         setShowPlayerChange(true);
       }, 3000);
       return;
@@ -773,6 +802,8 @@ export function O1InhouseGameScreen({
     if (newDarts.length === 3 || didWin) {
       const achievement = detectAchievement(newDarts, newRoundScore, false, didWin);
       if (achievement) {
+        if (didWin) { playSound('out'); playSound('win'); }
+        else playSound('achievement');
         // Pass winner for win achievements (single game = show winner screen after)
         const winner = didWin ? currentThrower : undefined;
         triggerAchievement(achievement, winner);
@@ -781,6 +812,7 @@ export function O1InhouseGameScreen({
           // Use timeout ref so button can cancel it
           playerChangeTimeoutRef.current = setTimeout(() => {
             playerChangeTimeoutRef.current = null;
+            playSound('playerChange');
             setShowPlayerChange(true);
           }, 3000);
         }
@@ -799,6 +831,7 @@ export function O1InhouseGameScreen({
 
   const endTurnWithMisses = useCallback(() => {
     if (showPlayerChange || !introComplete || showWinnerScreen) return;
+    playSound('missClick');
     // Clear any pending player change timeout (button press = instant change)
     if (playerChangeTimeoutRef.current) {
       clearTimeout(playerChangeTimeoutRef.current);
@@ -815,6 +848,7 @@ export function O1InhouseGameScreen({
     }
     const remaining = Math.max(0, 3 - currentDarts.length);
     if (remaining === 0) {
+      playSound('playerChange');
       setShowPlayerChange(true);
       return;
     }
@@ -825,6 +859,7 @@ export function O1InhouseGameScreen({
     } else {
       setP2DartsThrown(prev => prev + remaining);
     }
+    playSound('playerChange');
     setShowPlayerChange(true);
   }, [activeAnimation, currentDarts, currentThrower, introComplete, showPlayerChange, showWinnerScreen]);
 

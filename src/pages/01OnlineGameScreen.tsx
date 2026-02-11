@@ -6,6 +6,7 @@ import { isDevMode } from '../utils/devMode';
 import type { DartThrowData } from '../utils/ble/bleConnection';
 import type { GameConfiguration, GameInOut } from '../types/game';
 import { getCheckoutSuggestion } from '../utils/checkoutSolver';
+import { playSound } from '../utils/sounds';
 import { createClient } from '../utils/supabase/client';
 import { useOnlineThrowSync } from '../hooks/useOnlineThrowSync';
 import { resolveProfilePicUrl } from '../utils/profile';
@@ -374,6 +375,10 @@ export function O1OnlineGameScreen({
 
   const [p1Score, setP1Score] = useState(startScore);
   const [p2Score, setP2Score] = useState(startScore);
+  // Track score at the **start of each turn** so 01 bust can correctly
+  // revert to the score before the turn (not just before the last dart).
+  const p1TurnStartScoreRef = useRef(startScore);
+  const p2TurnStartScoreRef = useRef(startScore);
   const [currentThrower, setCurrentThrower] = useState<'p1' | 'p2'>('p1');
   const [currentDarts, setCurrentDarts] = useState<DartThrow[]>([]);
   const [roundScore, setRoundScore] = useState(0);
@@ -484,7 +489,7 @@ export function O1OnlineGameScreen({
       setActiveAnimation(null);
       if (achievement === 'win' && winner) {
         setGameWinner(winner);
-        setTimeout(() => setShowWinnerScreen(true), 300);
+        setTimeout(() => { playSound('gameEnd'); setShowWinnerScreen(true); }, 300);
       }
     }, 3000);
   }, []);
@@ -508,6 +513,7 @@ export function O1OnlineGameScreen({
   useEffect(() => {
     if (!showGoodLuck) return; // Only run when showGoodLuck is true
     const timer = setTimeout(() => {
+      playSound('gameStart');
       setShowGoodLuck(false);
       setIntroComplete(true);
     }, 2500);
@@ -556,11 +562,12 @@ export function O1OnlineGameScreen({
             winner = p1ScoreReachedRound <= p2ScoreReachedRound ? 'p1' : 'p2';
           }
           setGameWinner(winner);
-          setTimeout(() => setShowWinnerScreen(true), 500);
+          setTimeout(() => { playSound('gameEnd'); setShowWinnerScreen(true); }, 500);
           return;
         }
 
         if (willCompleteRound) {
+          if (currentRound + 1 === 20) playSound('lastRound');
           setRoundAnimState('out');
           setTimeout(() => {
             setCurrentRound(prev => prev + 1);
@@ -586,6 +593,16 @@ export function O1OnlineGameScreen({
 
   const throwDart = useCallback((segment: string, score: number, multiplier: number, isLocal: boolean = true) => {
     if (currentDarts.length >= 3 || showPlayerChange || !introComplete) return;
+
+    // First dart of this turn: remember the score at turn start so a bust
+    // can roll the player back to this value (standard 01 behavior).
+    if (currentDarts.length === 0) {
+      if (currentThrower === 'p1') {
+        p1TurnStartScoreRef.current = p1Score;
+      } else {
+        p2TurnStartScoreRef.current = p2Score;
+      }
+    }
 
     // Only allow throws from the current thrower
     const expectedLocal = (localIsP1 && currentThrower === 'p1') || (!localIsP1 && currentThrower === 'p2');
@@ -625,6 +642,7 @@ export function O1OnlineGameScreen({
     const newDart: DartThrow = { segment, score: effectiveScore, multiplier };
     const newDarts = [...currentDarts, newDart];
     const newRoundScore = roundScore + effectiveScore;
+    playSound('dart');
     if (currentThrower === 'p1') setP1DartsThrown(prev => prev + 1);
     else setP2DartsThrown(prev => prev + 1);
 
@@ -639,12 +657,22 @@ export function O1OnlineGameScreen({
     }
 
     if (isBust) {
+      // On bust, full turn is invalid: score should go back to what it was
+      // at the **start of the turn**, not just before this last dart.
+      if (currentThrower === 'p1') {
+        setP1Score(p1TurnStartScoreRef.current);
+      } else {
+        setP2Score(p2TurnStartScoreRef.current);
+      }
+
       setCurrentDarts(newDarts);
+      playSound('bust');
       const achievement = detectAchievement(newDarts, newRoundScore, true, false);
       triggerAchievement(achievement);
       // Use timeout ref so button can cancel it
       playerChangeTimeoutRef.current = setTimeout(() => {
         playerChangeTimeoutRef.current = null;
+        playSound('playerChange');
         setShowPlayerChange(true);
         // Broadcast turn end if local
         if (isLocal) {
@@ -672,6 +700,8 @@ export function O1OnlineGameScreen({
     if (newDarts.length === 3 || didWin) {
       const achievement = detectAchievement(newDarts, newRoundScore, false, didWin);
       if (achievement) {
+        if (didWin) { playSound('out'); playSound('win'); }
+        else playSound('achievement');
         setShowDoubleBullEffect(false);
         const winner = didWin ? currentThrower : undefined;
         triggerAchievement(achievement, winner);
@@ -679,6 +709,7 @@ export function O1OnlineGameScreen({
           // Use timeout ref so button can cancel it
           playerChangeTimeoutRef.current = setTimeout(() => {
             playerChangeTimeoutRef.current = null;
+            playSound('playerChange');
             setShowPlayerChange(true);
             // Broadcast turn end if local
             if (isLocal) {
@@ -698,6 +729,7 @@ export function O1OnlineGameScreen({
     if (newDarts.length === 3) {
       playerChangeTimeoutRef.current = setTimeout(() => {
         playerChangeTimeoutRef.current = null;
+        playSound('playerChange');
         setShowPlayerChange(true);
         // Broadcast turn end if local
         if (isLocal) {
@@ -719,6 +751,7 @@ export function O1OnlineGameScreen({
       throwDartRef.current(segment, score, multiplier, false);
     },
     onRemoteTurnEnd: () => {
+      playSound('playerChange');
       setShowPlayerChange(true);
     },
   });
@@ -728,6 +761,7 @@ export function O1OnlineGameScreen({
     // Only local player can end turn with misses
     const expectedLocal = (localIsP1 && currentThrower === 'p1') || (!localIsP1 && currentThrower === 'p2');
     if (!expectedLocal) return;
+    playSound('missClick');
     // Clear any pending player change timeout (button press = instant change)
     if (playerChangeTimeoutRef.current) {
       clearTimeout(playerChangeTimeoutRef.current);
@@ -744,6 +778,7 @@ export function O1OnlineGameScreen({
     }
     const remaining = Math.max(0, 3 - currentDarts.length);
     if (remaining === 0) {
+      playSound('playerChange');
       setShowPlayerChange(true);
     } else {
       const misses = Array.from({ length: remaining }, () => ({ segment: 'MISS', score: 0, multiplier: 0 }));
@@ -753,6 +788,7 @@ export function O1OnlineGameScreen({
       } else {
         setP2DartsThrown(prev => prev + remaining);
       }
+      playSound('playerChange');
       setShowPlayerChange(true);
     }
     // Broadcast turn end to opponent

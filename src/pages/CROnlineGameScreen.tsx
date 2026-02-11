@@ -5,6 +5,7 @@ import { useGameStatus } from '../hooks/useGameStatus';
 import { AppHeader } from '../components/AppHeader';
 import { createClient } from '../utils/supabase/client';
 import { isDevMode } from '../utils/devMode';
+import { playSound } from '../utils/sounds';
 import type { DartThrowData } from '../utils/ble/bleConnection';
 import { RefreshCw, DoorOpen } from 'lucide-react';
 import { resolveProfilePicUrl } from '../utils/profile';
@@ -392,6 +393,7 @@ export function CROnlineGameScreen({
   useEffect(() => {
     if (!showGoodLuck) return; // Only run when showGoodLuck is true
     const timer = setTimeout(() => {
+      playSound('gameStart');
       setShowGoodLuck(false);
       setIntroComplete(true);
     }, 2500);
@@ -486,6 +488,7 @@ export function CROnlineGameScreen({
     const newDart: DartThrow = { segment, score: 0, multiplier };
     const newDarts = [...currentDarts, newDart];
     setCurrentDarts(newDarts);
+    playSound('dart');
 
     // Count marks for MPR, but don't credit marks beyond closing a dead target
     if (target) {
@@ -551,8 +554,9 @@ export function CROnlineGameScreen({
           const myScoreBefore = currentThrower === 'p1' ? p1Score : p2Score;
           const theirScore = currentThrower === 'p1' ? p2Score : p1Score;
           if (myScoreBefore + pointsAddedThisThrow >= theirScore) {
+            playSound('win');
             setGameWinner(currentThrower);
-            setTimeout(() => setShowWinnerScreen(true), 500);
+            setTimeout(() => { playSound('gameEnd'); setShowWinnerScreen(true); }, 500);
           }
         }
 
@@ -570,6 +574,7 @@ export function CROnlineGameScreen({
     if (newDarts.length === 3) {
       const achievement = detectAchievement(newDarts);
       if (achievement) {
+        playSound('achievement');
         setActiveAnimation(achievement);
         // 3 seconds to let award videos play fully (button can skip via animationTimeoutRef)
         animationTimeoutRef.current = setTimeout(() => {
@@ -580,6 +585,7 @@ export function CROnlineGameScreen({
       // Add delay before player change to let dart effects complete (button press skips this)
       playerChangeTimeoutRef.current = setTimeout(() => {
         playerChangeTimeoutRef.current = null;
+        playSound('playerChange');
         setShowPlayerChange(true);
         // Broadcast turn end if local
         if (isLocal) {
@@ -596,6 +602,7 @@ export function CROnlineGameScreen({
     if (showPlayerChange || !introComplete || showWinnerScreen) return;
     const expectedLocal = (localIsP1 && currentThrower === 'p1') || (!localIsP1 && currentThrower === 'p2');
     if (!expectedLocal) return;
+    playSound('missClick');
     // Clear any pending player change timeout (button press = instant change)
     if (playerChangeTimeoutRef.current) {
       clearTimeout(playerChangeTimeoutRef.current);
@@ -612,6 +619,7 @@ export function CROnlineGameScreen({
     }
     const remaining = Math.max(0, 3 - currentDarts.length);
     if (remaining === 0) {
+      playSound('playerChange');
       setShowPlayerChange(true);
     } else {
       const misses = Array.from({ length: remaining }, () => ({ segment: 'MISS', score: 0, multiplier: 0 }));
@@ -621,6 +629,7 @@ export function CROnlineGameScreen({
       } else {
         setP2DartsThrown(prev => prev + remaining);
       }
+      playSound('playerChange');
       setShowPlayerChange(true);
     }
     sendTurnEnd({ playerId: localPlayer.id });
@@ -694,12 +703,14 @@ export function CROnlineGameScreen({
             // Points and marks both tied - whoever reached that point total first wins
             winner = p1ScoreReachedRound <= p2ScoreReachedRound ? 'p1' : 'p2';
           }
+          playSound('win');
           setGameWinner(winner);
-          setTimeout(() => setShowWinnerScreen(true), 500);
+          setTimeout(() => { playSound('gameEnd'); setShowWinnerScreen(true); }, 500);
           return;
         }
 
         if (willCompleteRound) {
+          if (currentRound + 1 === 20) playSound('lastRound');
           setRoundAnimState('out');
           setTimeout(() => {
             setCurrentRound(prev => prev + 1);

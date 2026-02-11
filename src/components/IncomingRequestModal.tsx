@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { createClient } from '../utils/supabase/client';
+import { playSound } from '../utils/sounds';
 
 const REQUEST_TIMEOUT_SECONDS = 7;
 
@@ -86,6 +87,11 @@ export function IncomingRequestModal({ request, onAccept, onDecline, onTimeout }
       }
     };
   }, [request.id, onTimeout]);
+
+  // Play incoming request sound when modal is shown
+  useEffect(() => {
+    playSound('gameRequest');
+  }, [request.id]);
 
   // Parse game config
   const gameConfig = request.game_config;

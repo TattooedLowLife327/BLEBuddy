@@ -136,7 +136,7 @@ export function PlayerCardTop({
           />
         )}
 
-        <div className="relative z-[5] flex flex-col flex-1 items-center pt-5 pb-4 px-4">
+        <div className="relative z-[5] flex flex-col items-center pt-5 pb-0 px-4 shrink-0">
           {/* Avatar sized to fill skin pre-cut hole (104px); LLOGB badge overlaps PFP border */}
           <div className="relative mb-0.5">
             <Avatar

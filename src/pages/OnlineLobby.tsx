@@ -9,6 +9,7 @@ import { AppHeader } from '../components/AppHeader';
 import { type GameData } from '../contexts/GameContext';
 import type { GameConfiguration } from '../types/game';
 import { checkCameraAvailable } from '../utils/webrtc/peerConnection';
+import { isDevMode } from '../utils/devMode';
 import { resolveProfilePicUrl } from '../utils/profile';
 import { PlayerCardTop } from '../components/PlayerCardTop';
 import {
@@ -72,6 +73,19 @@ type PlayerStatus = 'waiting' | 'idle' | 'in_match';
 
 export type LobbyType = 'main' | 'ladies' | 'youth';
 
+function hexToRgba(hex: string, alpha: number): string {
+  if (!hex) return `rgba(0, 0, 0, ${alpha})`;
+  const c = hex.trim();
+  if (c.startsWith('#')) {
+    const h = c.slice(1);
+    const r = h.length >= 6 ? parseInt(h.slice(0, 2), 16) : parseInt(h[0] + h[0], 16);
+    const g = h.length >= 6 ? parseInt(h.slice(2, 4), 16) : parseInt(h[1] + h[1], 16);
+    const b = h.length >= 6 ? parseInt(h.slice(4, 6), 16) : parseInt(h[2] + h[2], 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  return `rgba(0, 0, 0, ${alpha})`;
+}
+
 interface AvailablePlayer {
   id: string;
   player_id: string;
@@ -95,6 +109,26 @@ interface AvailablePlayer {
   gender?: string | null;
   isYouth?: boolean;
 }
+
+/** Mock players for scroll preview: 10 total, 4 in match. */
+const MOCK_LOBBY_PLAYERS: AvailablePlayer[] = Array.from({ length: 10 }, (_, i) => ({
+  id: `mock-lobby-${i + 1}`,
+  player_id: `mock-lobby-${i + 1}`,
+  granboardName: `Demo Player ${i + 1}`,
+  accentColor: '#a855f7',
+  mprNumeric: 3.42,
+  pprNumeric: 72.5,
+  overallNumeric: 68.1,
+  mprLetter: 'B',
+  pprLetter: 'A',
+  overallLetter: 'B',
+  isDoublesTeam: false,
+  status: i >= 6 ? 'in_match' : 'waiting',
+  granid: `DEMO${String(i + 1).padStart(2, '0')}`,
+  friendCount: 42,
+  onlineGameCount: 128,
+  partnerName: null,
+}));
 
 export function OnlineLobby({
   onBack,
@@ -325,9 +359,14 @@ export function OnlineLobby({
     };
   }, [canAccess, cameraError, checkingCamera, resetActivity, startIdleCountdown, supabase, userId]);
 
-  // Check camera availability on mount - required for online play
+  // Check camera availability on mount - required for online play (skipped in dev mode)
   useEffect(() => {
     if (!canAccess) return;
+    if (isDevMode()) {
+      setCameraError(null);
+      setCheckingCamera(false);
+      return;
+    }
 
     async function verifyCameraAccess() {
       setCheckingCamera(true);
@@ -1355,34 +1394,27 @@ export function OnlineLobby({
             <div className="text-center text-gray-400 py-12 w-full">
               Loading available players...
             </div>
-          ) : availablePlayers.length === 0 ? (
-            <div className="text-center text-gray-400 py-12 w-full">
-              <p style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                No players available. Waiting for opponents...
-              </p>
-            </div>
           ) : (
             <div
               className={`grid transition-opacity duration-200 ${isRefreshing ? 'opacity-50' : 'opacity-100'}`}
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
                 gap: '16px',
                 justifyItems: 'center',
               }}
             >
-              {availablePlayers.map((player) => {
+              {[...MOCK_LOBBY_PLAYERS, ...availablePlayers].map((player) => {
                 const playerAccentColor = player.accentColor;
                 const isIdle = player.status === 'idle';
                 const isInMatch = player.status === 'in_match';
-                const isWaiting = player.status === 'waiting';
 
                 // Calculate idle progress (0-1, where 1 = full time remaining)
                 const idleProgress = isIdle && player.idleTimeRemaining !== undefined
                   ? player.idleTimeRemaining / IDLE_WARNING_DURATION_S
                   : 0;
 
-                // SVG circle properties for countdown border
+                // SVG countdown border for idle
                 const strokeDasharray = 500;
                 const strokeDashoffset = strokeDasharray * (1 - idleProgress);
 
@@ -1391,64 +1423,67 @@ export function OnlineLobby({
                     key={player.id}
                     className="flex items-center justify-center"
                     style={{
-                      width: '180px',
+                      width: '240px',
                       height: '280px',
                     }}
                   >
                     <div
                       onClick={() => !isInMatch && handlePlayerClick(player)}
-                      className={`relative rounded-lg overflow-hidden ${isInMatch ? 'cursor-not-allowed' : 'cursor-pointer hover:scale-[1.05]'} transition-transform origin-center`}
+                      className={`relative rounded-xl overflow-hidden ${isInMatch ? 'cursor-not-allowed' : 'cursor-pointer hover:scale-[1.02]'} transition-transform origin-center`}
                       style={{
                         filter: isIdle || isInMatch ? 'grayscale(0.7) brightness(0.6)' : 'none',
-                        width: '180px',
+                        width: '240px',
                         height: '280px',
+                        border: '3px solid',
+                        borderColor: playerAccentColor,
+                        backgroundColor: 'rgba(24, 24, 27, 0.95)',
+                        boxShadow: `0 4px 24px rgba(0,0,0,0.4), 0 0 14px ${hexToRgba(playerAccentColor, 0.35)}`,
                       }}
                     >
-                    {/* SVG Countdown Border for Idle Players */}
-                    {isIdle && (
-                      <svg
-                        className="absolute inset-0 w-full h-full pointer-events-none z-10"
-                        viewBox="0 0 100 155"
-                        preserveAspectRatio="none"
-                      >
-                        <rect
-                          x="2"
-                          y="2"
-                          width="96"
-                          height="151"
-                          rx="6"
-                          ry="6"
-                          fill="none"
-                          stroke={playerAccentColor}
-                          strokeWidth="2"
-                          strokeDasharray={strokeDasharray}
-                          strokeDashoffset={strokeDashoffset}
-                          style={{
-                            transition: 'stroke-dashoffset 1s linear',
-                          }}
-                        />
-                      </svg>
-                    )}
+                      {/* SVG countdown border for idle players */}
+                      {isIdle && (
+                        <svg
+                          className="absolute inset-0 w-full h-full pointer-events-none z-10"
+                          viewBox="0 0 100 155"
+                          preserveAspectRatio="none"
+                        >
+                          <rect
+                            x="2"
+                            y="2"
+                            width="96"
+                            height="151"
+                            rx="6"
+                            ry="6"
+                            fill="none"
+                            stroke={playerAccentColor}
+                            strokeWidth="2"
+                            strokeDasharray={strokeDasharray}
+                            strokeDashoffset={strokeDashoffset}
+                            style={{ transition: 'stroke-dashoffset 1s linear' }}
+                          />
+                        </svg>
+                      )}
 
-                    <PlayerCardTop
-                      variant="card"
-                      data={{
-                        granboardName: player.granboardName,
-                        profilePic: player.profilePic,
-                        accentColor: playerAccentColor,
-                        granid: player.granid,
-                        friendCount: player.friendCount,
-                        onlineGameCount: player.onlineGameCount,
-                        pprLetter: player.pprLetter,
-                        pprNumeric: player.pprNumeric,
-                        overallLetter: player.overallLetter,
-                        overallNumeric: player.overallNumeric,
-                        mprLetter: player.mprLetter,
-                        mprNumeric: player.mprNumeric,
-                        partnerName: player.partnerName,
-                      }}
-                      status={player.status}
-                    />
+                      <PlayerCardTop
+                        variant="panel"
+                        llogbBadge
+                        data={{
+                          granboardName: player.granboardName,
+                          profilePic: player.profilePic,
+                          accentColor: playerAccentColor,
+                          granid: player.granid ?? null,
+                          friendCount: player.friendCount,
+                          onlineGameCount: player.onlineGameCount,
+                          pprLetter: player.pprLetter ?? null,
+                          pprNumeric: player.pprNumeric,
+                          overallLetter: player.overallLetter ?? null,
+                          overallNumeric: player.overallNumeric,
+                          mprLetter: player.mprLetter ?? null,
+                          mprNumeric: player.mprNumeric,
+                          partnerName: player.partnerName ?? null,
+                        }}
+                        resolvedProfilePic={resolveProfilePicUrl(player.profilePic)}
+                      />
                     </div>
                   </div>
                 );

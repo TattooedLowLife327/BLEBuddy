@@ -603,7 +603,12 @@ export default function App() {
           bleStatus={bleStatus === 'error' ? 'disconnected' : bleStatus}
           onBLEConnect={bleConnect}
           onBLEDisconnect={bleDisconnect}
-          onNavigateToOnlineLobby={(lobbyType) => navigate(`/online-lobby${lobbyType ? `?type=${lobbyType}` : ''}`)}
+          onNavigateToOnlineLobby={(lobbyType) => {
+            const params = new URLSearchParams(location.search);
+            if (lobbyType) params.set('type', lobbyType);
+            const q = params.toString();
+            navigate(q ? `/online-lobby?${q}` : '/online-lobby');
+          }}
           onNavigateToLocalDubs={() => navigate('/local-dubs-setup')}
           onNavigateToRemoteDubs={() => navigate('/remote-dubs-setup')}
           onNavigateToInhouse01={(gameType) => navigate(`/game/01-inhouse?type=${gameType}`)}
@@ -618,7 +623,7 @@ export default function App() {
       <Route path="/online-lobby" element={
         !isAuthenticated ? <Navigate to={`/login${queryString}`} /> :
         <OnlineLobby
-          onBack={() => { setPartner(null); setActiveGame(null); navigate('/dashboard'); }}
+          onBack={() => { setPartner(null); setActiveGame(null); navigate(`/dashboard${location.search}`); }}
           accentColor={accentColor}
           userId={userId}
           isYouthPlayer={isYouthPlayer}

@@ -8,6 +8,7 @@ import { UserMenu, type CustomMenuItem } from './UserMenu';
 import { Bluetooth, X, WifiOff, RefreshCw, DoorOpen } from 'lucide-react';
 import type { DartThrowData } from '../utils/ble/bleConnection';
 import { isDevMode } from '../utils/devMode';
+import { playSound } from '../utils/sounds';
 import { createClient } from '../utils/supabase/client';
 
 interface CorkScreenProps {
@@ -182,7 +183,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
   // Intro animation sequence
   useEffect(() => {
     const timers: NodeJS.Timeout[] = [];
-    timers.push(setTimeout(() => setPhase(1), 200));
+    timers.push(setTimeout(() => { setPhase(1); playSound('corkLoading'); }, 200));
     timers.push(setTimeout(() => setPhase(2), 1000));
     return () => timers.forEach(clearTimeout);
   }, [animKey]);
@@ -270,6 +271,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
       timestamp: new Date().toISOString(),
     };
     const { score, valid, display } = getCorkScore(fakeThrow);
+    playSound('corkHit');
     sendCorkThrow(score, valid, display);
   };
 
@@ -393,6 +395,7 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
     }
 
     const { score, valid, display } = getCorkScore(lastThrow);
+    playSound('corkHit');
     sendCorkThrow(score, valid, display);
   }, [lastThrow, lastTs, winner, myThrowSent, sendCorkThrow]);
 
@@ -405,9 +408,11 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
       setRevealed(true);
       setTimeout(() => {
         if (p1State.score! > p2State.score!) {
+          playSound('corkWinner');
           setWinner(player1.id);
           setTimeout(() => onCorkComplete(player1.id), 2500);
         } else if (p2State.score! > p1State.score!) {
+          playSound('corkWinner');
           setWinner(player2.id);
           setTimeout(() => onCorkComplete(player2.id), 2500);
         } else {
