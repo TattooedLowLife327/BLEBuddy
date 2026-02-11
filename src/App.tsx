@@ -19,6 +19,8 @@ import { O1OnlineGameScreen } from './pages/01OnlineGameScreen';
 import { MedleyMatchManager } from './pages/MedleyMatchManager';
 import { InhousePlayerSelectScreen } from './pages/InhousePlayerSelectScreen';
 import { SettingsModal } from './components/SettingsModal';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { InAppBrowserBlock } from './components/InAppBrowserBlock';
 import { createClient } from './utils/supabase/client';
 import { useBLE } from './contexts/BLEContext';
 import { useGame, type GameData } from './contexts/GameContext';
@@ -117,9 +119,18 @@ export default function App() {
   const rawNavigate = useNavigate();
   const location = useLocation();
 
-  // Wrap navigate to preserve query params (like ?dev=1)
+  // Preserve only app-relevant query params (e.g. dev=1, type=ladies). Strip tracking params
+  // (fbclid, utm_*, etc.) so they don't bloat URLs or get displayed as content in Bluefy/iOS.
+  const safeSearch = (() => {
+    const tracking = new Set(['fbclid', 'gclid', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'mc_cid', 'mc_eid']);
+    const params = new URLSearchParams(location.search);
+    tracking.forEach((k) => params.delete(k));
+    const s = params.toString();
+    return s ? `?${s}` : '';
+  })();
+
   const navigate = (path: string) => {
-    rawNavigate(`${path}${location.search}`);
+    rawNavigate(`${path}${safeSearch}`);
   };
 
   // Context hooks
@@ -566,6 +577,13 @@ export default function App() {
   // Preview routes bypass ALL auth/loading checks
   const isPreviewRoute = location.pathname.startsWith('/preview');
 
+  // Detect Messenger / Facebook / Instagram in-app browser – app won't work there; show instructions
+  const isInAppBrowser = typeof navigator !== 'undefined' && /FBAN|FBAV|Instagram|InstagramApp/i.test(navigator.userAgent);
+
+  if (isInAppBrowser && !isPreviewRoute) {
+    return <InAppBrowserBlock />;
+  }
+
   if (loading && !isPreviewRoute) {
     return (
       <div className="min-h-screen w-full bg-black flex items-center justify-center">
@@ -593,10 +611,11 @@ export default function App() {
   }
 
   // Preserve query params (like ?dev=1) in navigations
-  const queryString = location.search;
+  const queryString = safeSearch;
 
   return (
     <>
+    <ErrorBoundary key={location.pathname} onReset={() => navigate('/dashboard')}>
     <Routes>
       {/* Preview screens - NO AUTH, must be first */}
       <Route path="/preview" element={<PreviewIndex />} />
@@ -643,7 +662,7 @@ export default function App() {
       <Route path="/online-lobby" element={
         !isAuthenticated ? <Navigate to={`/login${queryString}`} /> :
         <OnlineLobby
-          onBack={() => { setPartner(null); setActiveGame(null); navigate(`/dashboard${location.search}`); }}
+          onBack={() => { setPartner(null); setActiveGame(null); navigate('/dashboard'); }}
           accentColor={accentColor}
           userId={userId}
           isYouthPlayer={isYouthPlayer}
@@ -803,6 +822,7 @@ export default function App() {
       <Route path="/" element={<Navigate to={isAuthenticated ? `/dashboard${queryString}` : `/login${queryString}`} />} />
       <Route path="*" element={<Navigate to={isAuthenticated ? `/dashboard${queryString}` : `/login${queryString}`} />} />
     </Routes>
+    </ErrorBoundary>
 
     <SettingsModal isOpen={showSettingsModal} onClose={() => setShowSettingsModal(false)} />
 

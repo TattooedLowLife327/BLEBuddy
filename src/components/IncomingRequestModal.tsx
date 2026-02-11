@@ -2,8 +2,9 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { createClient } from '../utils/supabase/client';
 import { playSound } from '../utils/sounds';
+import { REQUEST_TIMEOUT_MS } from '../utils/constants';
 
-const REQUEST_TIMEOUT_SECONDS = 7;
+const REQUEST_TIMEOUT_SECONDS = REQUEST_TIMEOUT_MS / 1000;
 
 interface ChallengerStats {
   granid: string | null;
@@ -36,7 +37,7 @@ interface IncomingRequestModalProps {
   };
   onAccept: () => void;
   onDecline: () => void;
-  onTimeout?: () => void; // Called when request times out (7 seconds)
+  onTimeout?: () => void; // Called when request times out
   bleConnected?: boolean;
   onBLEConnect?: () => Promise<{ success: boolean; error?: string }>;
 }

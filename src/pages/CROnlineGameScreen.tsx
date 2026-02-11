@@ -9,6 +9,7 @@ import { playSound } from '../utils/sounds';
 import type { DartThrowData } from '../utils/ble/bleConnection';
 import { RefreshCw, DoorOpen } from 'lucide-react';
 import { resolveProfilePicUrl } from '../utils/profile';
+import { PLAYER_CHANGE_DELAY_MS } from '../utils/constants';
 import { useOnlineThrowSync } from '../hooks/useOnlineThrowSync';
 
 type Target = '20' | '19' | '18' | '17' | '16' | '15' | 'B';
@@ -604,7 +605,7 @@ export function CROnlineGameScreen({
         if (isLocal) {
           sendTurnEnd({ playerId: localPlayer.id });
         }
-      }, 3000);
+      }, PLAYER_CHANGE_DELAY_MS);
     }
   }, [currentDarts, currentThrower, introComplete, showPlayerChange, showWinnerScreen, p1Score, p2Score, marks, localIsP1, localPlayer.id, currentRound, sendThrow, sendTurnEnd]);
 

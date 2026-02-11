@@ -3,6 +3,7 @@ import { useBLE } from '../contexts/BLEContext';
 import { isDevMode } from '../utils/devMode';
 import { playSound } from '../utils/sounds';
 import { createClient } from '../utils/supabase/client';
+import { PLAYER_CHANGE_DELAY_MS } from '../utils/constants';
 
 // Resolve profile pic URL from various formats
 const resolveProfilePicUrl = (profilepic: string | undefined): string | undefined => {
@@ -481,7 +482,7 @@ export function CRInhouseGameScreen({
         playerChangeTimeoutRef.current = null;
         playSound('playerChange');
         setShowPlayerChange(true);
-      }, 3000);
+      }, PLAYER_CHANGE_DELAY_MS);
     }
   }, [currentDarts, currentThrower, introComplete, showPlayerChange, showWinnerScreen, p1Score, p2Score, marks, currentRound]);
 

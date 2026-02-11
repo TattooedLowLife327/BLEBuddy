@@ -2,7 +2,7 @@
 // Keeping these here avoids magic numbers being scattered in multiple files.
 
 // Online lobby / matchmaking
-export const REQUEST_TIMEOUT_MS = 7_000; // 7 seconds for outgoing game requests
+export const REQUEST_TIMEOUT_MS = 11_000; // 11 seconds for incoming/outgoing game request timeout
 
 // Idle handling
 export const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
@@ -14,6 +14,9 @@ export const LOBBY_HEARTBEAT_INTERVAL_MS = 30_000; // 30 seconds
 
 // Game status / disconnect timeout
 export const DISCONNECT_TIMEOUT_SECONDS = 60;
+
+// Delay before auto player change (time to pull darts) - local and online
+export const PLAYER_CHANGE_DELAY_MS = 7000; // 7 seconds (was 3s, +4s)
 
 // Protected lobby access (hardcoded passwords for Ladies / Youth cards)
 export const LADIES_LOBBY_PASSWORD = 'blebuddy-ladies';

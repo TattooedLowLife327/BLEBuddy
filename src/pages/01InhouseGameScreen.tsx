@@ -4,6 +4,7 @@ import { isDevMode } from '../utils/devMode';
 import { getCheckoutSuggestion } from '../utils/checkoutSolver';
 import { playSound } from '../utils/sounds';
 import { createClient } from '../utils/supabase/client';
+import { PLAYER_CHANGE_DELAY_MS } from '../utils/constants';
 import type { DartThrowData } from '../utils/ble/bleConnection';
 
 // Resolve profile pic URL from various formats
@@ -807,7 +808,7 @@ export function O1InhouseGameScreen({
         playerChangeTimeoutRef.current = null;
         playSound('playerChange');
         setShowPlayerChange(true);
-      }, 3000);
+      }, PLAYER_CHANGE_DELAY_MS);
       return;
     }
 
@@ -851,7 +852,7 @@ export function O1InhouseGameScreen({
             playerChangeTimeoutRef.current = null;
             playSound('playerChange');
             setShowPlayerChange(true);
-          }, 3000);
+          }, PLAYER_CHANGE_DELAY_MS);
         }
         return;
       }
@@ -862,7 +863,7 @@ export function O1InhouseGameScreen({
       playerChangeTimeoutRef.current = setTimeout(() => {
         playerChangeTimeoutRef.current = null;
         setShowPlayerChange(true);
-      }, 3000);
+      }, PLAYER_CHANGE_DELAY_MS);
     }
   }, [currentDarts, currentScore, currentThrower, roundScore, showPlayerChange, introComplete, p1Score, p2Score, p1HasStarted, p2HasStarted, inMode, outMode, detectAchievement, triggerAchievement, currentRound, isFreeze, isCountUp]);
 

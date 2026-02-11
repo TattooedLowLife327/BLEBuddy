@@ -9,6 +9,7 @@ import type { GameConfiguration, GameInOut } from '../types/game';
 import { getCheckoutSuggestion } from '../utils/checkoutSolver';
 import { playSound } from '../utils/sounds';
 import { createClient } from '../utils/supabase/client';
+import { PLAYER_CHANGE_DELAY_MS } from '../utils/constants';
 import { useOnlineThrowSync } from '../hooks/useOnlineThrowSync';
 import { resolveProfilePicUrl } from '../utils/profile';
 
@@ -700,7 +701,7 @@ export function O1OnlineGameScreen({
         if (isLocal) {
           sendTurnEnd({ playerId: localPlayer.id });
         }
-      }, 3000);
+      }, PLAYER_CHANGE_DELAY_MS);
       return;
     }
     const didWin = potentialNewScore === 0;
@@ -737,7 +738,7 @@ export function O1OnlineGameScreen({
             if (isLocal) {
               sendTurnEnd({ playerId: localPlayer.id });
             }
-          }, 3000);
+          }, PLAYER_CHANGE_DELAY_MS);
         }
         return;
       }
@@ -757,7 +758,7 @@ export function O1OnlineGameScreen({
         if (isLocal) {
           sendTurnEnd({ playerId: localPlayer.id });
         }
-      }, 3000);
+      }, PLAYER_CHANGE_DELAY_MS);
     }
   }, [currentDarts, currentScore, currentThrower, roundScore, showPlayerChange, introComplete, p1Score, p2Score, p1HasStarted, p2HasStarted, inMode, outMode, detectAchievement, triggerAchievement, currentRound, localIsP1, localPlayer.id, sendThrow, sendTurnEnd]);
 

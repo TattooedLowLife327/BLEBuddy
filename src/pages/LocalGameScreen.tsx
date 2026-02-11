@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { PLAYER_CHANGE_DELAY_MS } from '../utils/constants';
 
 interface DartThrow {
   segment: string;
@@ -816,7 +817,7 @@ export function LocalGameScreen({ onLeaveMatch }: LocalGameScreenProps) {
       // Trigger bust achievement
       const achievement = detectAchievement(newDarts, newRoundScore, true, false);
       triggerAchievement(achievement);
-      setTimeout(() => setShowPlayerChange(true), 2000); // Wait for animation
+      setTimeout(() => setShowPlayerChange(true), PLAYER_CHANGE_DELAY_MS); // Wait for animation
       return;
     }
 
@@ -843,7 +844,7 @@ export function LocalGameScreen({ onLeaveMatch }: LocalGameScreenProps) {
         triggerAchievement(achievement, winner);
         // Don't show player change on win - winners screen will show
         if (!didWin) {
-          setTimeout(() => setShowPlayerChange(true), 2000); // Wait for animation
+          setTimeout(() => setShowPlayerChange(true), PLAYER_CHANGE_DELAY_MS); // Wait for animation
         }
         return;
       }
