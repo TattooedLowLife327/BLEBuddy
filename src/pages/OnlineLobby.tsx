@@ -145,6 +145,8 @@ export function OnlineLobby({
   const [requestResultMessage, setRequestResultMessage] = useState<{ type: 'timeout' | 'declined'; name: string } | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [checkingCamera, setCheckingCamera] = useState(true);
+  const [joinDeniedAlreadyInUse, setJoinDeniedAlreadyInUse] = useState(false);
+  const joinedLobbyRef = useRef(false);
   const outgoingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const supabase = createClient();
   const [searchParams] = useSearchParams();
@@ -392,35 +394,35 @@ export function OnlineLobby({
     }
   }, [supabase, userId]);
 
-  // Join lobby on mount (only if camera is available)
+  // Join lobby on mount (only if camera is available). Single session: second device is denied.
   useEffect(() => {
     if (!canAccess || cameraError || checkingCamera) return;
 
     async function joinLobby() {
       try {
         console.log('Joining online lobby...');
-
-        // Perform shared stale game cleanup once on lobby join
         await cleanupStaleGames();
 
-        // Insert current user into online_lobby (companion schema)
-        const { error: insertError } = await (supabase as any)
+        const { data, error } = await (supabase as any)
           .schema('companion')
-          .from('online_lobby')
-          .upsert({
-            player_id: userId,
-            granboard_name: userName || 'Unknown',
-            is_youth: isYouthPlayer,
-            partner_id: partnerId || null,
-            partner_granboard_name: partnerName || null,
-            status: 'waiting',
-            last_seen: new Date().toISOString(),
-          }, { onConflict: 'player_id' });
+          .rpc('try_join_online_lobby', {
+            p_granboard_name: userName || 'Unknown',
+            p_is_youth: isYouthPlayer,
+            p_partner_id: partnerId || null,
+            p_partner_granboard_name: partnerName || null,
+          });
 
-        if (insertError) {
-          console.error('Error joining lobby:', insertError);
-        } else {
+        if (error) {
+          console.error('Error joining lobby:', error);
+          return;
+        }
+        const result = data as { allowed: boolean; reason?: string } | null;
+        if (result?.allowed === true) {
+          joinedLobbyRef.current = true;
           console.log('Successfully joined lobby');
+        } else if (result?.reason === 'already_in_use') {
+          setJoinDeniedAlreadyInUse(true);
+          joinedLobbyRef.current = false;
         }
       } catch (err) {
         console.error('Error in joinLobby:', err);
@@ -429,26 +431,24 @@ export function OnlineLobby({
 
     joinLobby();
 
-    // Cleanup: leave lobby when component unmounts
     return () => {
+      if (!joinedLobbyRef.current) return;
       (supabase as any)
         .schema('companion')
         .from('online_lobby')
         .delete()
         .eq('player_id', userId)
         .then(({ error }: { error: any }) => {
-          if (error) {
-            console.error('Error leaving lobby:', error);
-          } else {
-            console.log('Left lobby');
-          }
+          if (error) console.error('Error leaving lobby:', error);
+          else console.log('Left lobby');
+          joinedLobbyRef.current = false;
         });
     };
   }, [canAccess, cameraError, checkingCamera, userId, userName, isYouthPlayer, isDoublesTeam, partnerId, partnerName, cleanupStaleGames]);
 
-  // Heartbeat: update last_seen every 30 seconds
+  // Heartbeat: update last_seen every 30 seconds (only when we actually joined)
   useEffect(() => {
-    if (!canAccess || cameraError || checkingCamera) return;
+    if (!canAccess || cameraError || checkingCamera || joinDeniedAlreadyInUse) return;
 
     const heartbeatInterval = setInterval(async () => {
       if (document.visibilityState === 'hidden') {
@@ -466,7 +466,7 @@ export function OnlineLobby({
     }, LOBBY_HEARTBEAT_INTERVAL_MS);
 
     return () => clearInterval(heartbeatInterval);
-  }, [canAccess, cameraError, checkingCamera, userId]);
+  }, [canAccess, cameraError, checkingCamera, joinDeniedAlreadyInUse, userId]);
 
   // Sort players by status priority: waiting -> idle -> in_match
   const sortByStatus = (players: AvailablePlayer[]) => {
@@ -633,6 +633,13 @@ export function OnlineLobby({
           );
 
         let validPlayers = playersWithData.filter((p): p is AvailablePlayer => p !== null);
+        // One instance per account: dedupe by player_id (DB has unique constraint; this guards legacy data)
+        const seenPlayerIds = new Set<string>();
+        validPlayers = validPlayers.filter((p) => {
+          if (seenPlayerIds.has(p.player_id)) return false;
+          seenPlayerIds.add(p.player_id);
+          return true;
+        });
         // Filter by lobby type: ladies only female; youth only youth accounts
         if (lobbyType === 'ladies') {
           validPlayers = validPlayers.filter((p) => p.gender === 'female');
@@ -1095,6 +1102,43 @@ export function OnlineLobby({
             <p className="text-gray-300" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
               Verifying camera access for online play.
             </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Single session: account already in online play on another device
+  if (joinDeniedAlreadyInUse) {
+    return (
+      <div className="h-screen w-full overflow-hidden bg-black flex items-center justify-center p-6">
+        <div className="max-w-md w-full">
+          <div
+            className="rounded-lg border p-8 text-center backdrop-blur-sm bg-white/5"
+            style={{
+              borderColor: accentColor,
+              boxShadow: `0 0 20px rgba(168, 85, 247, 0.3)`,
+            }}
+          >
+            <h2
+              className="text-2xl mb-4 text-white"
+              style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
+            >
+              Already in use elsewhere
+            </h2>
+            <p className="text-gray-300 mb-6" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+              You can only be in online play in one place. Your account is already signed in there. Sign out or leave the lobby on the other device to use this one.
+            </p>
+            <button
+              onClick={onBack}
+              className="w-full py-3 rounded-lg text-white font-bold transition-colors"
+              style={{
+                backgroundColor: accentColor,
+                fontFamily: 'Helvetica, Arial, sans-serif',
+              }}
+            >
+              Go Back
+            </button>
           </div>
         </div>
       </div>

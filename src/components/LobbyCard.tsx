@@ -35,8 +35,8 @@ interface LobbyCardProps {
   onNavigateToLocalDubs?: () => void;
   onNavigateToRemoteDubs?: () => void;
   // In-house game navigation
-  onNavigateToInhouse01?: (gameType: '301' | '501' | '701') => void;
-  onNavigateToCricket?: () => void;
+  onNavigateToInhouse01?: (gameType: '301' | '501' | '701' | 'freeze' | 'count_up') => void;
+  onNavigateToCricket?: (variant?: 'standard' | 'wild_card' | 'hidden' | 'double_down') => void;
 }
 
 export function LobbyCard({
@@ -97,9 +97,9 @@ export function LobbyCard({
     ? `0 0 20px ${hexToRgba(accentColor, 0.6)}, 0 0 40px ${hexToRgba(accentColor, 0.35)}, inset 0 0 20px ${hexToRgba(accentColor, 0.15)}`
     : 'none';
 
-  // Smaller cards on phones only (not tablets)
+  // Much smaller cards on phones only (not tablets)
   const cardSize = isPhone
-    ? { width: 'clamp(160px, 52vw, 220px)', height: 'clamp(140px, 44vw, 190px)' }
+    ? { width: 'clamp(120px, 42vw, 170px)', height: 'clamp(100px, 36vw, 150px)' }
     : {
         width: 'clamp(240px, 65vw, 320px)',
         height: 'clamp(200px, 52vw, 260px)',
@@ -128,7 +128,7 @@ export function LobbyCard({
         }}
       >
         {/* Badges */}
-        <div className="absolute top-3 right-3 flex gap-2">
+        <div className={`absolute flex gap-1 ${isPhone ? 'top-1.5 right-1.5' : 'top-3 right-3 gap-2'}`}>
           {ageGated && (
             <Badge 
               variant="secondary" 
@@ -147,10 +147,10 @@ export function LobbyCard({
 
         {/* Icon */}
         {id !== 'youth-lobby' && (
-          <div className="flex items-center justify-center mb-0" style={{ marginTop: '-1rem' }}>
+          <div className="flex items-center justify-center mb-0" style={{ marginTop: isPhone ? '-0.25rem' : '-1rem' }}>
             {(id === 'local-play' || id === 'ladies-only') ? (
               // Special styling for local play, ladies - bigger, full width, sideways, no border/background
-              <div className="w-full flex items-center justify-center" style={{ height: 'clamp(120px, 34vw, 170px)' }}>
+              <div className="w-full flex items-center justify-center" style={{ height: isPhone ? 'clamp(36px, 20vw, 56px)' : 'clamp(120px, 34vw, 170px)' }}>
                 {customIcon && (
                   <img 
                     src={customIcon} 
@@ -172,15 +172,15 @@ export function LobbyCard({
               </div>
             ) : id === 'cash-sets' ? (
             // Cash sets - smaller and NOT sideways with padding for spacing
-            <div className="w-full flex items-center justify-center py-8" style={{ height: 'clamp(120px, 34vw, 170px)' }}>
+            <div className={`w-full flex items-center justify-center ${isPhone ? 'py-1' : 'py-8'}`} style={{ height: isPhone ? 'clamp(36px, 20vw, 56px)' : 'clamp(120px, 34vw, 170px)' }}>
               {customIcon && (
                 <img 
                   src={customIcon} 
                   alt={title} 
                   className="h-full object-contain"
                   style={{
-                    maxWidth: '120px',
-                    maxHeight: '120px',
+                    maxWidth: isPhone ? 56 : 120,
+                    maxHeight: isPhone ? 56 : 120,
                   }}
                 />
               )}
@@ -188,23 +188,23 @@ export function LobbyCard({
                 <Icon 
                   className="h-full text-white"
                   style={{
-                    maxWidth: '120px',
-                    maxHeight: '120px',
+                    maxWidth: isPhone ? 56 : 120,
+                    maxHeight: isPhone ? 56 : 120,
                   }}
                 />
               )}
             </div>
           ) : id === 'online-play' ? (
             // Online play - larger icon with less padding
-            <div className="w-full flex items-center justify-center py-4" style={{ height: 'clamp(120px, 34vw, 170px)' }}>
+            <div className={`w-full flex items-center justify-center ${isPhone ? 'py-1' : 'py-4'}`} style={{ height: isPhone ? 'clamp(36px, 20vw, 56px)' : 'clamp(120px, 34vw, 170px)' }}>
               {customIcon && (
                 <img 
                   src={customIcon} 
                   alt={title} 
                   className="h-full object-contain"
                   style={{
-                    maxWidth: '160px',
-                    maxHeight: '160px',
+                    maxWidth: isPhone ? 64 : 160,
+                    maxHeight: isPhone ? 64 : 160,
                   }}
                 />
               )}
@@ -212,23 +212,23 @@ export function LobbyCard({
                 <Icon 
                   className="h-full text-white"
                   style={{
-                    maxWidth: '160px',
-                    maxHeight: '160px',
+                    maxWidth: isPhone ? 64 : 160,
+                    maxHeight: isPhone ? 64 : 160,
                   }}
                 />
               )}
             </div>
           ) : (
             // All other cards - standard sizing with padding
-            <div className="w-full flex items-center justify-center py-8" style={{ height: 'clamp(120px, 34vw, 170px)' }}>
+            <div className={`w-full flex items-center justify-center ${isPhone ? 'py-1' : 'py-8'}`} style={{ height: isPhone ? 'clamp(36px, 20vw, 56px)' : 'clamp(120px, 34vw, 170px)' }}>
               {customIcon && (
                 <img 
                   src={customIcon} 
                   alt={title} 
                   className="h-full object-contain"
                   style={{
-                    maxWidth: '120px',
-                    maxHeight: '120px',
+                    maxWidth: isPhone ? 56 : 120,
+                    maxHeight: isPhone ? 56 : 120,
                   }}
                 />
               )}
@@ -236,8 +236,8 @@ export function LobbyCard({
                 <Icon 
                   className="h-full text-white"
                   style={{
-                    maxWidth: '120px',
-                    maxHeight: '120px',
+                    maxWidth: isPhone ? 56 : 120,
+                    maxHeight: isPhone ? 56 : 120,
                   }}
                 />
               )}
@@ -249,12 +249,12 @@ export function LobbyCard({
         {/* Content */}
         <div className="flex-1 flex flex-col items-center justify-center text-center">
           {id === 'youth-lobby' ? (
-            <div className="w-full h-full flex items-center justify-center px-8">
+            <div className={`w-full h-full flex items-center justify-center ${isPhone ? 'px-2' : 'px-8'}`}>
               <img 
                 src={nextUpLogo} 
                 alt="NextUP" 
                 className="w-full h-auto object-contain"
-                style={{ maxWidth: '280px' }}
+                style={{ maxWidth: isPhone ? 140 : 280 }}
               />
             </div>
           ) : (
@@ -398,16 +398,18 @@ export function LobbyCard({
                     701
                   </button>
                   <button
-                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/5 text-white/40 cursor-not-allowed text-center"
+                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/10 text-white hover:bg-white/20 transition-colors text-center"
                     style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
-                    onClick={(e) => e.stopPropagation()}
-                    disabled
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onNavigateToInhouse01?.('freeze');
+                    }}
                   >
                     Freeze
                   </button>
                 </>
               ) : expandedMenu === 'cr-games' ? (
-                // CR Games submenu
+                // CR Games submenu – same screen, variant changes rules
                 <>
                   <button
                     className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/10 text-white hover:bg-white/20 transition-colors text-center"
@@ -420,26 +422,32 @@ export function LobbyCard({
                     Standard Cricket
                   </button>
                   <button
-                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/5 text-white/40 cursor-not-allowed text-center"
+                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/10 text-white hover:bg-white/20 transition-colors text-center"
                     style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
-                    onClick={(e) => e.stopPropagation()}
-                    disabled
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onNavigateToCricket?.('wild_card');
+                    }}
                   >
                     Wild Card Cricket
                   </button>
                   <button
-                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/5 text-white/40 cursor-not-allowed text-center"
+                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/10 text-white hover:bg-white/20 transition-colors text-center"
                     style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
-                    onClick={(e) => e.stopPropagation()}
-                    disabled
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onNavigateToCricket?.('hidden');
+                    }}
                   >
                     Hidden Cricket
                   </button>
                   <button
-                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/5 text-white/40 cursor-not-allowed text-center"
+                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/10 text-white hover:bg-white/20 transition-colors text-center"
                     style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
-                    onClick={(e) => e.stopPropagation()}
-                    disabled
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onNavigateToCricket?.('double_down');
+                    }}
                   >
                     Double Down
                   </button>
@@ -465,13 +473,15 @@ export function LobbyCard({
                   </button>
                 </>
               ) : expandedMenu === 'practice' ? (
-                // Practice submenu
+                // Practice submenu – Count Up uses 01 screen with add-up logic
                 <>
                   <button
-                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/5 text-white/40 cursor-not-allowed text-center"
+                    className="w-full py-3 px-4 rounded-lg backdrop-blur-sm bg-white/10 text-white hover:bg-white/20 transition-colors text-center"
                     style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 'bold' }}
-                    onClick={(e) => e.stopPropagation()}
-                    disabled
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onNavigateToInhouse01?.('count_up');
+                    }}
                   >
                     Count Up
                   </button>

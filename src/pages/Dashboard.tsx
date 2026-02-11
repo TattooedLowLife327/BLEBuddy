@@ -38,8 +38,8 @@ interface DashboardProps {
   onNavigateToOnlineLobby: (lobbyType?: 'main' | 'ladies' | 'youth') => void;
   onNavigateToLocalDubs: () => void;
   onNavigateToRemoteDubs: () => void;
-  onNavigateToInhouse01: (gameType: '301' | '501' | '701') => void;
-  onNavigateToCricket: () => void;
+  onNavigateToInhouse01: (gameType: '301' | '501' | '701' | 'freeze' | 'count_up') => void;
+  onNavigateToCricket: (variant?: 'standard' | 'wild_card' | 'hidden' | 'double_down') => void;
   missedRequests: GameRequestNotification[];
   onClearMissedRequests: () => void;
   onLogout: () => void;

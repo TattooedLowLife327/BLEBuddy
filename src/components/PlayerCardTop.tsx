@@ -98,25 +98,29 @@ export function PlayerCardTop({
         )}
         {hasSkinImage && <div className="absolute inset-0 z-0 bg-black" />}
 
-        {/* Player's skin image – hole cut out for PFP, light gradient so skin stays visible */}
+        {/* Player's skin image – top half only, hole for PFP, fades out above stat section */}
         {hasSkinImage && (
           <div className="absolute inset-0 overflow-hidden z-[1] rounded-tl-lg rounded-bl-lg">
             <div
-              className="absolute inset-0"
+              className="absolute left-0 right-0 top-0"
               style={{
+                height: '50%',
                 backgroundImage: `url(${data.skin!.trim()})`,
                 backgroundSize: 'cover',
                 backgroundPosition: 'center top',
                 backgroundRepeat: 'no-repeat',
                 opacity: 0.65,
-                mask: 'radial-gradient(circle 52px at 50% 76px, transparent 100%, black 100%)',
-                WebkitMask: 'radial-gradient(circle 52px at 50% 76px, transparent 100%, black 100%)',
+                maskImage: 'radial-gradient(circle 52px at 50% 76px, transparent 100%, black 100%), linear-gradient(to bottom, black 0%, black 50%, transparent 85%)',
+                WebkitMaskImage: 'radial-gradient(circle 52px at 50% 76px, transparent 100%, black 100%), linear-gradient(to bottom, black 0%, black 50%, transparent 85%)',
+                maskComposite: 'intersect',
+                WebkitMaskComposite: 'source-in',
               }}
             />
+            {/* Fade overlay: skin stays in top half and fades into black at stat section */}
             <div
               className="absolute inset-0"
               style={{
-                background: 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.05) 35%, rgba(0,0,0,0.35) 55%, rgba(0,0,0,0.7) 75%, black 95%)',
+                background: 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.08) 30%, rgba(0,0,0,0.5) 48%, black 58%)',
               }}
             />
           </div>

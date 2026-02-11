@@ -3,6 +3,7 @@ import { useBLE } from '../contexts/BLEContext';
 import { isDevMode } from '../utils/devMode';
 import { getCheckoutSuggestion } from '../utils/checkoutSolver';
 import { playSound } from '../utils/sounds';
+import { createClient } from '../utils/supabase/client';
 import type { DartThrowData } from '../utils/ble/bleConnection';
 
 // Resolve profile pic URL from various formats
@@ -343,7 +344,10 @@ interface GameScreenProps {
   startingPlayer?: 'p1' | 'p2';
   onGameComplete?: (winner: 'p1' | 'p2') => void;
   player1?: PlayerData;
+  player2?: PlayerData;
   playerMode?: 'solo' | 'guest';
+  /** When Player 2 was scanned in, host must validate session; if revoked, we exit. */
+  localSessionId?: string | null;
 }
 
 export function O1InhouseGameScreen({
@@ -353,7 +357,9 @@ export function O1InhouseGameScreen({
   startingPlayer,
   onGameComplete,
   player1,
+  player2,
   playerMode = 'guest',
+  localSessionId,
 }: GameScreenProps) {
   // BLE integration
   const { lastThrow, simulateThrow: bleSimulateThrow, clearLEDs } = useBLE();
@@ -363,8 +369,9 @@ export function O1InhouseGameScreen({
   const animationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isSoloMode = playerMode === 'solo';
+  const [accessRevoked, setAccessRevoked] = useState(false);
 
-  // Build players object from props or defaults
+  // Build players object from props or defaults (scanned player2 overrides guest)
   const PLAYERS = useMemo(() => ({
     p1: player1 ? {
       id: player1.id,
@@ -372,16 +379,45 @@ export function O1InhouseGameScreen({
       profilecolor: player1.profileColor,
       profilePic: player1.profilePic,
     } : DEFAULT_PLAYERS.p1,
-    p2: isSoloMode ? null : { id: 'guest', name: 'GUEST', profilecolor: '#FB00FF', profilePic: undefined },
-  }), [player1, isSoloMode]);
+    p2: isSoloMode ? null : (player2 ? {
+      id: player2.id,
+      name: player2.name,
+      profilecolor: player2.profileColor,
+      profilePic: player2.profilePic,
+    } : { id: 'guest', name: 'GUEST', profilecolor: '#FB00FF', profilePic: undefined }),
+  }), [player1, player2, isSoloMode]);
+
+  // When playing with scanned Player 2, validate session periodically; if revoked, show message and leave
+  useEffect(() => {
+    if (!localSessionId || !onLeaveMatch) return;
+    const supabase = createClient();
+    const check = async () => {
+      const { data: valid } = await (supabase as any).schema('companion').rpc('validate_local_session', { p_session_id: localSessionId });
+      if (valid === false) setAccessRevoked(true);
+    };
+    const interval = setInterval(check, 60000);
+    const onFocus = () => { check(); };
+    window.addEventListener('focus', onFocus);
+    check();
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [localSessionId, onLeaveMatch]);
 
   const resolvedGameType = useMemo(() => {
-    const raw = gameType || '501';
-    const normalized = typeof raw === 'string' ? raw.toUpperCase() : '501';
-    return normalized === '301' ? '301' : '501';
-  }, [gameType]);
+    const raw = (gameType || '501').toString().toLowerCase();
+    if (raw === '301') return '301';
+    if (raw === '701') return '701';
+    if (raw === 'freeze') return 'freeze';
+    if (raw === 'count_up') return 'count_up';
+    return '501';
+  }, [gameType]) as '301' | '501' | '701' | 'freeze' | 'count_up';
 
-  const startScore = resolvedGameType === '301' ? 301 : 501;
+  const startScore = resolvedGameType === '301' ? 301 : resolvedGameType === '701' ? 701 : resolvedGameType === 'freeze' ? 501 : resolvedGameType === 'count_up' ? 0 : 501;
+  const isCountUp = resolvedGameType === 'count_up';
+  const isFreeze = resolvedGameType === 'freeze';
+  const COUNT_UP_ROUNDS = 10;
 
   const [p1Score, setP1Score] = useState(startScore);
   const [p2Score, setP2Score] = useState(startScore);
@@ -437,9 +473,8 @@ export function O1InhouseGameScreen({
   const isCricketGame = false;
 
   // 80% threshold: points remaining when stats should freeze
-  // 301: <=50 remaining (scored >=251)
-  // 501: <=100 remaining (scored >=401)
-  const eightyPercentThreshold = startScore === 501 ? 100 : 50;
+  // 301: <=50; 501: <=100; 701: <=140
+  const eightyPercentThreshold = startScore === 301 ? 50 : startScore === 701 ? 140 : 100;
 
   // Calculate live PPR for each player (Points Per Round = points scored / darts thrown * 3)
   // PPR = (startScore - currentScore) / dartsThrown * 3
@@ -583,9 +618,8 @@ export function O1InhouseGameScreen({
           setP2ThrewThisRound(true);
         }
 
-        // 80% Stat Check: At end of player's turn, check if they crossed threshold
-        // If ANY player reaches 80%, freeze BOTH players' stats immediately
-        if (isOhOneGame && !eightyPercentTriggered) {
+        // 80% Stat Check (01 only, not count up): freeze both PPRs when someone reaches 80%
+        if (isOhOneGame && !isCountUp && !eightyPercentTriggered) {
           const playerScore = currentThrower === 'p1' ? p1Score : p2Score;
           if (playerScore <= eightyPercentThreshold) {
             // First player to reach 80% - freeze both stats
@@ -616,26 +650,31 @@ export function O1InhouseGameScreen({
         const willCompleteRound = (currentThrower === 'p1' && p2ThrewThisRound) ||
                                    (currentThrower === 'p2' && p1ThrewThisRound);
 
-        // Round 20 limit: If round 20 completes without a winner, determine by tiebreaker
-        if (willCompleteRound && currentRound === 20 && !gameWinner) {
+        // Count up: after N rounds, highest score wins
+        if (isCountUp && willCompleteRound && currentRound === COUNT_UP_ROUNDS && !gameWinner) {
           let winner: 'p1' | 'p2';
-          if (p1Score < p2Score) {
-            // P1 has lower score (closer to 0) - P1 wins
-            winner = 'p1';
-          } else if (p2Score < p1Score) {
-            // P2 has lower score (closer to 0) - P2 wins
-            winner = 'p2';
-          } else {
-            // Scores tied - whoever reached that score first wins
-            winner = p1ScoreReachedRound <= p2ScoreReachedRound ? 'p1' : 'p2';
-          }
+          if (p1Score > p2Score) winner = 'p1';
+          else if (p2Score > p1Score) winner = 'p2';
+          else winner = p1ScoreReachedRound <= p2ScoreReachedRound ? 'p1' : 'p2';
+          setGameWinner(winner);
+          setTimeout(() => { playSound('gameEnd'); setShowWinnerScreen(true); }, 500);
+          return;
+        }
+
+        // Round 20 limit (01): If round 20 completes without a winner, determine by tiebreaker
+        if (!isCountUp && willCompleteRound && currentRound === 20 && !gameWinner) {
+          let winner: 'p1' | 'p2';
+          if (p1Score < p2Score) winner = 'p1';
+          else if (p2Score < p1Score) winner = 'p2';
+          else winner = p1ScoreReachedRound <= p2ScoreReachedRound ? 'p1' : 'p2';
           setGameWinner(winner);
           setTimeout(() => { playSound('gameEnd'); setShowWinnerScreen(true); }, 500);
           return;
         }
 
         if (willCompleteRound) {
-          if (currentRound + 1 === 20) playSound('lastRound');
+          const lastRound = isCountUp ? COUNT_UP_ROUNDS : 20;
+          if (currentRound + 1 === lastRound) playSound('lastRound');
           // Start round exit animation
           setRoundAnimState('out');
           setTimeout(() => {
@@ -654,7 +693,7 @@ export function O1InhouseGameScreen({
       }, 800);
       return () => clearTimeout(timer);
     }
-  }, [showPlayerChange, currentThrower, p1ThrewThisRound, p2ThrewThisRound, isOhOneGame, eightyPercentTriggered, p1Score, p2Score, eightyPercentThreshold, p1DartsThrown, p2DartsThrown, startScore, isSoloMode, currentRound, gameWinner, p1ScoreReachedRound, p2ScoreReachedRound]);
+  }, [showPlayerChange, currentThrower, p1ThrewThisRound, p2ThrewThisRound, isOhOneGame, eightyPercentTriggered, p1Score, p2Score, eightyPercentThreshold, p1DartsThrown, p2DartsThrown, startScore, isSoloMode, currentRound, gameWinner, p1ScoreReachedRound, p2ScoreReachedRound, isCountUp]);
 
   const throwDart = useCallback((segment: string, score: number, multiplier: number) => {
     if (currentDarts.length >= 3 || showPlayerChange || !introComplete) return;
@@ -705,37 +744,35 @@ export function O1InhouseGameScreen({
                       (inMode === 'master' && (isDouble || isTriple || isAnyBull)) ||
                       (inMode === 'double' && isDouble); // D25 is multiplier 2, so isDouble covers it
 
+    // Freeze: must hit a double to "unfreeze" (start) – then normal 501
+    const validIn = isFreeze && !hasStarted ? isDouble : isValidIn;
+
     // If player hasn't started and this isn't a valid in, dart counts but scores 0
     let effectiveScore = score;
     let playerStartsNow = false;
 
     if (!hasStarted) {
-      if (isValidIn && score > 0) {
-        // Player starts with this dart
+      if (validIn && score > 0) {
         playerStartsNow = true;
         effectiveScore = score;
       } else {
-        // Dart thrown but doesn't count toward score
         effectiveScore = 0;
       }
     }
 
-    // Valid OUT check based on outMode:
+    // Valid OUT check based on outMode (count up has no checkout):
     // - open: any dart that makes score exactly 0
     // - master: double, triple, or any bull AND makes score exactly 0
     // - double: outer ring double OR double bull (D25) AND makes score exactly 0
-    const potentialNewScore = currentScore - effectiveScore;
-    const isValidOut = outMode === 'open' ||
+    const potentialNewScore = isCountUp ? currentScore + effectiveScore : currentScore - effectiveScore;
+    const isValidOut = isCountUp ? false : (outMode === 'open' ||
                        (outMode === 'master' && (isDouble || isTriple || isAnyBull)) ||
-                       (outMode === 'double' && isDouble); // D25 is multiplier 2
+                       (outMode === 'double' && isDouble));
 
-    // Bust conditions:
-    // 1. Score goes below 0
-    // 2. Score lands on exactly 1 (can't finish with 1 remaining)
-    // 3. Score lands on 0 but the dart wasn't a valid out
-    const isBust = potentialNewScore < 0 ||
+    // Bust: not in count up; in 01: below 0, 1 remaining, or 0 without valid out
+    const isBust = !isCountUp && (potentialNewScore < 0 ||
                    potentialNewScore === 1 ||
-                   (potentialNewScore === 0 && !isValidOut);
+                   (potentialNewScore === 0 && !isValidOut));
 
     const newDart: DartThrow = { segment, score: effectiveScore, multiplier };
     const newDarts = [...currentDarts, newDart];
@@ -774,8 +811,8 @@ export function O1InhouseGameScreen({
       return;
     }
 
-    // Check for win (score reaches exactly 0)
-    const didWin = potentialNewScore === 0;
+    // Win: 01/freeze = reach 0 with valid out; count up = decided after N rounds
+    const didWin = isCountUp ? false : potentialNewScore === 0;
 
     // Update state
     setCurrentDarts(newDarts);
@@ -827,7 +864,7 @@ export function O1InhouseGameScreen({
         setShowPlayerChange(true);
       }, 3000);
     }
-  }, [currentDarts, currentScore, currentThrower, roundScore, showPlayerChange, introComplete, p1Score, p2Score, p1HasStarted, p2HasStarted, inMode, outMode, detectAchievement, triggerAchievement, currentRound]);
+  }, [currentDarts, currentScore, currentThrower, roundScore, showPlayerChange, introComplete, p1Score, p2Score, p1HasStarted, p2HasStarted, inMode, outMode, detectAchievement, triggerAchievement, currentRound, isFreeze, isCountUp]);
 
   const endTurnWithMisses = useCallback(() => {
     if (showPlayerChange || !introComplete || showWinnerScreen) return;
@@ -940,6 +977,22 @@ export function O1InhouseGameScreen({
       setSplitBull(true);
     }
   }, [inMode, outMode]);
+
+  if (accessRevoked && onLeaveMatch) {
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: '#000', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 9999 }}>
+        <p style={{ color: '#fff', fontFamily: "'Helvetica Condensed', sans-serif", fontSize: 20, marginBottom: 16, textAlign: 'center' }}>
+          Player 2 has revoked access. They can no longer play as their account on this device.
+        </p>
+        <button
+          onClick={onLeaveMatch}
+          style={{ padding: '12px 24px', background: '#a855f7', color: '#fff', border: 'none', borderRadius: 8, fontFamily: "'Helvetica Condensed', sans-serif", fontWeight: 600, cursor: 'pointer' }}
+        >
+          Leave game
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div style={{

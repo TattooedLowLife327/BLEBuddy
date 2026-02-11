@@ -9,7 +9,7 @@ interface PlayerData {
 
 interface InhousePlayerSelectScreenProps {
   player1: PlayerData;
-  gameType: 'cricket' | '301' | '501' | '701';
+  gameType: 'cricket' | '301' | '501' | '701' | 'freeze' | 'count_up';
   onBack: () => void;
 }
 
@@ -50,21 +50,23 @@ export function InhousePlayerSelectScreen({
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  const gameLabel = gameType === 'cricket' ? 'CRICKET' : gameType;
+  const gameLabel = gameType === 'cricket' ? 'CRICKET' : gameType === 'freeze' ? 'FREEZE' : gameType === 'count_up' ? 'COUNT UP' : gameType;
+
+  const cricketVariant = searchParams.get('variant') || undefined;
 
   const handleSoloPlay = () => {
-    // Navigate to game with solo mode (no player 2)
     if (gameType === 'cricket') {
-      navigate(`/game/cricket-inhouse?mode=solo${searchParams.get('dev') ? '&dev=1' : ''}`);
+      const v = cricketVariant ? `&variant=${cricketVariant}` : '';
+      navigate(`/game/cricket-inhouse?mode=solo${v}${searchParams.get('dev') ? '&dev=1' : ''}`);
     } else {
       navigate(`/game/01-inhouse?type=${gameType}&mode=solo${searchParams.get('dev') ? '&dev=1' : ''}`);
     }
   };
 
   const handleVsGuest = () => {
-    // Navigate to game with guest mode (player 2 is a guest)
     if (gameType === 'cricket') {
-      navigate(`/game/cricket-inhouse?mode=guest${searchParams.get('dev') ? '&dev=1' : ''}`);
+      const v = cricketVariant ? `&variant=${cricketVariant}` : '';
+      navigate(`/game/cricket-inhouse?mode=guest${v}${searchParams.get('dev') ? '&dev=1' : ''}`);
     } else {
       navigate(`/game/01-inhouse?type=${gameType}&mode=guest${searchParams.get('dev') ? '&dev=1' : ''}`);
     }

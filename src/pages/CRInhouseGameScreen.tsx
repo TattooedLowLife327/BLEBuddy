@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useBLE } from '../contexts/BLEContext';
 import { isDevMode } from '../utils/devMode';
 import { playSound } from '../utils/sounds';
+import { createClient } from '../utils/supabase/client';
 
 // Resolve profile pic URL from various formats
 const resolveProfilePicUrl = (profilepic: string | undefined): string | undefined => {
@@ -58,13 +59,20 @@ interface PlayerData {
   profileColor: string;
 }
 
+export type CricketVariant = 'standard' | 'wild_card' | 'hidden' | 'double_down';
+
 interface CRInhouseGameScreenProps {
   onLeaveMatch: () => void;
   backgroundImage?: string;
   startingPlayer?: 'p1' | 'p2';
   onGameComplete?: (winner: 'p1' | 'p2') => void;
   player1?: PlayerData;
+  player2?: PlayerData;
   playerMode?: 'solo' | 'guest';
+  /** When Player 2 was scanned in, host must validate session; if revoked, we exit. */
+  localSessionId?: string | null;
+  /** Variant: same screen, different rules. Standard = current logic. */
+  variant?: CricketVariant;
 }
 
 // Safe color alpha helper - handles any hex length, rgb(), whitespace, null
@@ -217,7 +225,10 @@ export function CRInhouseGameScreen({
   startingPlayer,
   onGameComplete,
   player1,
+  player2,
   playerMode = 'guest',
+  localSessionId,
+  variant = 'standard',
 }: CRInhouseGameScreenProps) {
   // BLE for throw detection
   const { lastThrow, isConnected: bleConnected, connect: bleConnect, disconnect: bleDisconnect, status: bleStatus } = useBLE();
@@ -226,8 +237,9 @@ export function CRInhouseGameScreen({
   const animationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isSoloMode = playerMode === 'solo';
+  const [accessRevoked, setAccessRevoked] = useState(false);
 
-  // Build players object from props or defaults
+  // Build players object from props or defaults (scanned player2 overrides guest)
   const PLAYERS = useMemo(() => ({
     p1: player1 ? {
       id: player1.id,
@@ -235,8 +247,31 @@ export function CRInhouseGameScreen({
       profilecolor: player1.profileColor,
       profilePic: player1.profilePic,
     } : DEFAULT_PLAYERS.p1,
-    p2: isSoloMode ? null : { id: 'guest', name: 'GUEST', profilecolor: '#FB00FF', profilePic: undefined },
-  }), [player1, isSoloMode]);
+    p2: isSoloMode ? null : (player2 ? {
+      id: player2.id,
+      name: player2.name,
+      profilecolor: player2.profileColor,
+      profilePic: player2.profilePic,
+    } : { id: 'guest', name: 'GUEST', profilecolor: '#FB00FF', profilePic: undefined }),
+  }), [player1, player2, isSoloMode]);
+
+  // When playing with scanned Player 2, validate session periodically; if revoked, show message and leave
+  useEffect(() => {
+    if (!localSessionId || !onLeaveMatch) return;
+    const supabase = createClient();
+    const check = async () => {
+      const { data: valid } = await (supabase as any).schema('companion').rpc('validate_local_session', { p_session_id: localSessionId });
+      if (valid === false) setAccessRevoked(true);
+    };
+    const interval = setInterval(check, 60000);
+    const onFocus = () => { check(); };
+    window.addEventListener('focus', onFocus);
+    check();
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [localSessionId, onLeaveMatch]);
 
   // Cricket state
   const [marks, setMarks] = useState<Record<PlayerId, Record<Target, number>>>({
@@ -639,6 +674,22 @@ export function CRInhouseGameScreen({
       </div>
     );
   };
+
+  if (accessRevoked && onLeaveMatch) {
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: '#000', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 9999 }}>
+        <p style={{ color: '#fff', fontFamily: FONT_NAME, fontSize: 20, marginBottom: 16, textAlign: 'center' }}>
+          Player 2 has revoked access. They can no longer play as their account on this device.
+        </p>
+        <button
+          onClick={onLeaveMatch}
+          style={{ padding: '12px 24px', background: '#a855f7', color: '#fff', border: 'none', borderRadius: 8, fontFamily: FONT_NAME, fontWeight: 600, cursor: 'pointer' }}
+        >
+          Leave game
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div style={{
