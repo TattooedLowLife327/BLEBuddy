@@ -48,3 +48,9 @@ public/figmaframereferences/
 
 # Local Netlify folder
 .netlify
+
+# Local Claude/editor settings
+.claude/settings.local.json
+
+# Windows reserved name (accidental file)
+nul
