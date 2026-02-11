@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getCameraPreference, setCameraPreference, getAvailableCameras, type CameraDevice } from '../utils/webrtc/peerConnection';
+import { createClient } from '../utils/supabase/client';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -12,6 +13,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [cameras, setCameras] = useState<CameraDevice[]>([]);
   const [selectedCamera, setSelectedCamera] = useState<string>(getCameraPreference());
   const [loadingCameras, setLoadingCameras] = useState(false);
+  const [revoking, setRevoking] = useState(false);
+  const [revoked, setRevoked] = useState(false);
 
   // Load available cameras when modal opens
   useEffect(() => {
@@ -60,10 +63,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-      <div className="bg-zinc-900 border border-zinc-700 rounded-xl max-w-md w-full relative">
+    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+      <div className="bg-zinc-900 border border-zinc-700 rounded-xl max-w-md w-full relative flex flex-col max-h-[calc(100vh-1.5rem)] sm:max-h-[90vh] my-auto">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-zinc-700">
+        <div className="flex items-center justify-between p-4 border-b border-zinc-700 flex-shrink-0">
           <h2 className="text-white text-lg font-bold">Settings</h2>
           <button
             onClick={handleClose}
@@ -73,8 +76,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           </button>
         </div>
 
-        {/* Content */}
-        <div className="p-4 space-y-4">
+        {/* Content - scrollable on mobile */}
+        <div className="p-4 space-y-4 overflow-y-auto min-h-0 flex-1">
           {/* Camera Selection Section */}
           <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4">
             <h3 className="text-white font-semibold mb-1">Camera Selection</h3>
@@ -110,6 +113,41 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             <p className="text-zinc-500 text-xs mt-2">
               On mobile: use Front/Back. On desktop: select your webcam.
             </p>
+          </div>
+
+          {/* Revoke local access - play-only pairing, no account changes */}
+          <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4">
+            <h3 className="text-white font-semibold mb-1">Revoke local access</h3>
+            <p className="text-zinc-400 text-sm mb-2">
+              When you join a local game with your QR, the other device can only show your name and photo for that game. They cannot change your account, password, or data.
+            </p>
+            <p className="text-zinc-400 text-sm mb-3">
+              If someone is no longer allowed to play as you on their device, revoke access below. Any game using your profile on another device will end.
+            </p>
+            {revoked ? (
+              <div className="px-4 py-2 bg-green-600/20 border border-green-600 text-green-400 rounded-lg text-sm font-semibold text-center">
+                Access revoked
+              </div>
+            ) : (
+              <button
+                onClick={async () => {
+                  setRevoking(true);
+                  try {
+                    const supabase = createClient();
+                    await (supabase as any).schema('companion').rpc('revoke_my_local_sessions');
+                    setRevoked(true);
+                    setTimeout(() => setRevoked(false), 3000);
+                  } catch {
+                    setRevoking(false);
+                  }
+                  setRevoking(false);
+                }}
+                disabled={revoking}
+                className="w-full px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-lg text-sm font-semibold transition-colors"
+              >
+                {revoking ? 'Revoking…' : 'Revoke access on other devices'}
+              </button>
+            )}
           </div>
 
           {/* Clear App Data Section */}

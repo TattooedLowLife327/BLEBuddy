@@ -5,6 +5,7 @@ import { createClient } from '../utils/supabase/client';
 import type { GameConfiguration } from '../types/game';
 import { resolveProfilePicUrl, resolveSkinUrl } from '../utils/profile';
 import { PlayerCardTop } from './PlayerCardTop';
+import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 
 // Convert hex color to hue value (0-360)
 function hexToHue(hex: string): number {
@@ -809,56 +810,63 @@ export function PlayerGameSetup({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center p-6"
+            className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
           >
             <motion.div
               initial={{ scale: 0.96, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.96, opacity: 0 }}
-              className="bg-zinc-900 rounded-xl border border-zinc-700 p-6 max-w-sm w-full shadow-xl"
+              className="bg-zinc-900 rounded-2xl border border-zinc-700 shadow-2xl w-full max-w-md max-h-[calc(100vh-2rem)] my-auto flex flex-col overflow-hidden"
             >
-              <h3 className="text-base font-semibold text-white mb-4 text-center" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
-                Confirm Game Request
-              </h3>
-              <dl className="space-y-3 mb-5">
-                <div className="flex gap-3 items-baseline">
-                  <dt className="text-zinc-400 text-sm shrink-0 w-20" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Opponent</dt>
-                  <dd className="text-white font-medium text-sm truncate" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>{player.granboardName}</dd>
+              {/* Opponent header */}
+              <div
+                className="flex items-center gap-3 px-5 py-4 shrink-0"
+                style={{ backgroundColor: hexToRgba(player.accentColor, 0.15), borderBottom: `1px solid ${hexToRgba(player.accentColor, 0.35)}` }}
+              >
+                <Avatar className="h-12 w-12 rounded-full border-2 shrink-0" style={{ borderColor: hexToRgba(player.accentColor, 0.6) }}>
+                  <AvatarImage src={fetchedProfilePic ?? resolveProfilePicUrl(player.profilePic)} />
+                  <AvatarFallback className="bg-zinc-700 text-white text-lg" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                    {player.granboardName?.charAt(0) ?? '?'}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <p className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Sending request to</p>
+                  <p className="text-white font-semibold truncate" style={{ fontFamily: 'Helvetica, Arial, sans-serif', color: player.accentColor }}>{player.granboardName}</p>
                 </div>
-                <div className="flex gap-3 items-baseline">
-                  <dt className="text-zinc-400 text-sm shrink-0 w-20" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Legs</dt>
-                  <dd className="text-white font-medium text-sm" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>{legs}</dd>
+              </div>
+
+              {/* Summary — games | format | handicap */}
+              <div className="p-5 overflow-y-auto min-h-0 flex-1">
+                <div className="space-y-2 text-sm" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>
+                  <p className="text-white font-semibold">
+                    {games.filter(g => g).join(' | ')}
+                  </p>
+                  {getFormatDescription() && (
+                    <p className="text-zinc-400">
+                      {getFormatDescription()}
+                    </p>
+                  )}
+                  <p className={handicap ? 'text-amber-400 font-medium' : 'text-zinc-500'}>
+                    Handicap {handicap ? 'On' : 'Off'}
+                  </p>
                 </div>
-                <div className="flex gap-3 items-baseline">
-                  <dt className="text-zinc-400 text-sm shrink-0 w-20" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Games</dt>
-                  <dd className="text-white font-medium text-sm" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>{games.filter(g => g).join(', ')}</dd>
-                </div>
-                {getFormatDescription() && (
-                  <div className="flex gap-3">
-                    <dt className="text-zinc-400 text-sm shrink-0 w-20" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Format</dt>
-                    <dd className="text-white/90 text-sm leading-snug" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>{getFormatDescription()}</dd>
-                  </div>
-                )}
-                {handicap && (
-                  <div className="flex gap-3 items-baseline">
-                    <dt className="text-zinc-400 text-sm shrink-0 w-20" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>Handicap</dt>
-                    <dd className="text-white font-medium text-sm" style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}>On</dd>
-                  </div>
-                )}
-              </dl>
-              <div className="flex gap-3">
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 p-5 pt-0 shrink-0">
                 <button
                   onClick={() => setShowConfirmModal(false)}
-                  className="flex-1 py-2.5 rounded-lg bg-zinc-700 text-white hover:bg-zinc-600 transition-colors text-sm font-medium"
+                  className="flex-1 py-3 rounded-xl bg-zinc-700/80 text-white hover:bg-zinc-600 transition-colors text-sm font-semibold border border-zinc-600"
                   style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}
                 >
                   Cancel
                 </button>
                 <button
                   onClick={confirmAndSendRequest}
-                  className="flex-1 py-2.5 rounded-lg text-white text-sm font-semibold transition-colors hover:opacity-95"
+                  className="flex-1 py-3 rounded-xl text-white text-sm font-semibold transition-all hover:brightness-110 flex items-center justify-center gap-2"
                   style={{ backgroundColor: player.accentColor, fontFamily: 'Helvetica, Arial, sans-serif' }}
                 >
+                  <Send className="w-4 h-4" />
                   Send Request
                 </button>
               </div>
