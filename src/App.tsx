@@ -507,6 +507,11 @@ export default function App() {
     corkCompleteHandledRef.current = true;
     if (!activeGame) return;
     setActiveGame({ ...activeGame, corkWinnerId: firstPlayerId });
+  }, [activeGame, setActiveGame]);
+
+  // Navigate to the actual game after cork winner is in state (avoids race where route mounted before context updated)
+  useEffect(() => {
+    if (location.pathname !== '/cork' || !activeGame?.corkWinnerId) return;
     const configuredGames = activeGame.gameConfig?.games || [];
     const isMedley = configuredGames.length > 1 || activeGame.gameType === 'medley';
     const route = isMedley ? '/game/match' : (() => {
@@ -515,7 +520,7 @@ export default function App() {
       return n === 'cricket' || n === 'cr' ? '/game/cricket' : '/game/01-online';
     })();
     navigate(route);
-  }, [activeGame, setActiveGame, navigate]);
+  }, [location.pathname, activeGame, navigate]);
 
   const handleCorkCancel = async () => {
     corkCompleteHandledRef.current = false;
