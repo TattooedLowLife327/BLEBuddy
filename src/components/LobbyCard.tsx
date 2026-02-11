@@ -2,6 +2,21 @@ import { LucideIcon, Lock, ChevronLeft, ChevronDown } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { Badge } from './ui/badge';
 
+// Phones only (not tablets): typically max 640px
+const PHONE_MEDIA = typeof window !== 'undefined' ? window.matchMedia('(max-width: 640px)') : null;
+
+function useIsPhone() {
+  const [isPhone, setIsPhone] = useState(false);
+  useEffect(() => {
+    if (!PHONE_MEDIA) return;
+    setIsPhone(PHONE_MEDIA.matches);
+    const handler = () => setIsPhone(PHONE_MEDIA.matches);
+    PHONE_MEDIA.addEventListener('change', handler);
+    return () => PHONE_MEDIA.removeEventListener('change', handler);
+  }, []);
+  return isPhone;
+}
+
 const nextUpLogo = '/assets/NextUPicon.png';
 
 interface LobbyCardProps {
@@ -45,7 +60,8 @@ export function LobbyCard({
   const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
   const [showScrollIndicator, setShowScrollIndicator] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  
+  const isPhone = useIsPhone();
+
   // Convert hex to rgba for box shadows
   const hexToRgba = (hex: string, alpha: number) => {
     const r = parseInt(hex.slice(1, 3), 16);
@@ -81,10 +97,13 @@ export function LobbyCard({
     ? `0 0 20px ${hexToRgba(accentColor, 0.6)}, 0 0 40px ${hexToRgba(accentColor, 0.35)}, inset 0 0 20px ${hexToRgba(accentColor, 0.15)}`
     : 'none';
 
-  const cardSize = {
-    width: 'clamp(240px, 65vw, 320px)',
-    height: 'clamp(200px, 52vw, 260px)',
-  };
+  // Smaller cards on phones only (not tablets)
+  const cardSize = isPhone
+    ? { width: 'clamp(160px, 52vw, 220px)', height: 'clamp(140px, 44vw, 190px)' }
+    : {
+        width: 'clamp(240px, 65vw, 320px)',
+        height: 'clamp(200px, 52vw, 260px)',
+      };
 
   return (
     <div
@@ -99,7 +118,7 @@ export function LobbyCard({
     >
       {/* Front face */}
       <div
-        className="absolute inset-0 p-6 flex flex-col items-center justify-center text-center"
+        className={`absolute inset-0 flex flex-col items-center justify-center text-center ${isPhone ? 'p-3' : 'p-6'}`}
         style={{
           backfaceVisibility: 'hidden',
           transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
@@ -240,11 +259,11 @@ export function LobbyCard({
             </div>
           ) : (
             <h3 
-              className="text-white text-4xl mb-0 whitespace-nowrap"
+              className={`text-white mb-0 whitespace-nowrap ${isPhone ? 'text-2xl' : 'text-4xl'}`}
               style={{ 
                 fontFamily: 'Helvetica, Arial, sans-serif', 
                 fontWeight: 'bold',
-                fontSize: id === 'tournament' ? '2rem' : id === 'cash-sets' ? '2rem' : undefined
+                fontSize: id === 'tournament' ? (isPhone ? '1.25rem' : '2rem') : id === 'cash-sets' ? (isPhone ? '1.25rem' : '2rem') : undefined
               }}
             >
               {id === 'local-play' ? 'In House' : id === 'ladies-only' ? 'Ladies' : id === 'cash-sets' ? 'Cash Sets' : title}
@@ -256,7 +275,7 @@ export function LobbyCard({
 
       {/* Back face */}
       <div
-        className="absolute inset-0 p-5 flex flex-col items-center justify-center text-center"
+        className={`absolute inset-0 flex flex-col items-center justify-center text-center ${isPhone ? 'p-3' : 'p-5'}`}
         style={{
           transform: isFlipped ? 'rotateY(0deg)' : 'rotateY(180deg)',
           backfaceVisibility: 'hidden',
