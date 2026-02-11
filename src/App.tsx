@@ -35,7 +35,7 @@ type GameRequestNotification = {
 function InhousePlayerSelectRoute({ userId, userName, profilePic, accentColor }: { userId: string; userName: string; profilePic: string | null; accentColor: string }) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const gameType = (searchParams.get('game') || '501') as 'cricket' | '301' | '501' | '701';
+  const gameType = (searchParams.get('game') || '501') as 'cricket' | '301' | '501' | '701' | 'freeze' | 'count_up';
 
   return (
     <InhousePlayerSelectScreen
@@ -51,14 +51,15 @@ function InhousePlayerSelectRoute({ userId, userName, profilePic, accentColor }:
   );
 }
 
-// Wrapper component for in-house 01 games - reads URL params and passes user data
+// Wrapper component for in-house 01 games - reads URL params and location state (scanned player2)
 function Inhouse01Route({ userId, userName, profilePic, accentColor }: { userId: string; userName: string; profilePic: string | null; accentColor: string }) {
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const gameType = searchParams.get('type') || '501';
   const mode = searchParams.get('mode');
+  const state = location.state as { player2?: { id: string; name: string; profilePic?: string; profileColor: string }; sessionId?: string } | null;
 
-  // If no mode selected, redirect to player selection
   if (!mode) {
     return <Navigate to={`/game/inhouse-select?game=${gameType}`} replace />;
   }
@@ -74,19 +75,25 @@ function Inhouse01Route({ userId, userName, profilePic, accentColor }: { userId:
         profilePic: profilePic || undefined,
         profileColor: accentColor,
       }}
+      player2={state?.player2}
+      localSessionId={state?.sessionId ?? null}
     />
   );
 }
 
-// Wrapper component for in-house Cricket games - passes user data
+// Wrapper component for in-house Cricket games - passes user data, optional scanned player2, variant
 function CricketInhouseRoute({ userId, userName, profilePic, accentColor }: { userId: string; userName: string; profilePic: string | null; accentColor: string }) {
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const mode = searchParams.get('mode');
+  const variantParam = searchParams.get('variant');
+  const state = location.state as { player2?: { id: string; name: string; profilePic?: string; profileColor: string }; sessionId?: string } | null;
+  const variant = (variantParam === 'wild_card' || variantParam === 'hidden' || variantParam === 'double_down') ? variantParam : 'standard';
 
-  // If no mode selected, redirect to player selection
   if (!mode) {
-    return <Navigate to="/game/inhouse-select?game=cricket" replace />;
+    const v = variantParam ? `&variant=${variantParam}` : '';
+    return <Navigate to={`/game/inhouse-select?game=cricket${v}`} replace />;
   }
 
   return (
@@ -99,6 +106,9 @@ function CricketInhouseRoute({ userId, userName, profilePic, accentColor }: { us
         profilePic: profilePic || undefined,
         profileColor: accentColor,
       }}
+      player2={state?.player2}
+      localSessionId={state?.sessionId ?? null}
+      variant={variant}
     />
   );
 }
@@ -495,23 +505,17 @@ export default function App() {
   const handleCorkComplete = useCallback((firstPlayerId: string) => {
     if (corkCompleteHandledRef.current) return;
     corkCompleteHandledRef.current = true;
-    setActiveGame((prev) => (prev ? { ...prev, corkWinnerId: firstPlayerId } : prev));
-  }, [setActiveGame]);
-
-  // Navigate to game screen only after state has corkWinnerId (avoids white screen from stale state)
-  useEffect(() => {
-    if (!activeGame?.corkWinnerId || location.pathname !== '/cork') return;
+    if (!activeGame) return;
+    setActiveGame({ ...activeGame, corkWinnerId: firstPlayerId });
     const configuredGames = activeGame.gameConfig?.games || [];
     const isMedley = configuredGames.length > 1 || activeGame.gameType === 'medley';
-    if (isMedley) {
-      navigate('/game/match');
-      return;
-    }
-    const firstGame = configuredGames.find((g) => g) || activeGame.gameType || 'cricket';
-    const normalized = String(firstGame).toLowerCase();
-    const nextRoute = normalized === 'cricket' || normalized === 'cr' ? '/game/cricket' : '/game/01-online';
-    navigate(nextRoute);
-  }, [activeGame?.corkWinnerId, activeGame?.gameConfig?.games, activeGame?.gameType, location.pathname, navigate]);
+    const route = isMedley ? '/game/match' : (() => {
+      const firstGame = configuredGames.find((g) => g) || activeGame.gameType || 'cricket';
+      const n = String(firstGame).toLowerCase();
+      return n === 'cricket' || n === 'cr' ? '/game/cricket' : '/game/01-online';
+    })();
+    navigate(route);
+  }, [activeGame, setActiveGame, navigate]);
 
   const handleCorkCancel = async () => {
     corkCompleteHandledRef.current = false;
@@ -622,8 +626,8 @@ export default function App() {
           }}
           onNavigateToLocalDubs={() => navigate('/local-dubs-setup')}
           onNavigateToRemoteDubs={() => navigate('/remote-dubs-setup')}
-          onNavigateToInhouse01={(gameType) => navigate(`/game/01-inhouse?type=${gameType}`)}
-          onNavigateToCricket={() => navigate('/game/cricket-inhouse')}
+          onNavigateToInhouse01={(gameType) => navigate(`/game/inhouse-select?game=${gameType}`)}
+          onNavigateToCricket={(variant) => navigate(`/game/inhouse-select?game=cricket${variant ? `&variant=${variant}` : ''}`)}
           missedRequests={missedRequests}
           onClearMissedRequests={() => setMissedRequests([])}
           onLogout={handleLogout}
