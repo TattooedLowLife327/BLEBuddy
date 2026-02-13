@@ -53,9 +53,6 @@ const LED_PALETTE = {
   WHITE:       0x07,
 } as const;
 
-type LEDEffectKey = keyof typeof LED_EFFECT;
-type LEDPaletteKey = keyof typeof LED_PALETTE;
-
 export type BLEStatus = 'disconnected' | 'scanning' | 'connecting' | 'connected' | 'error';
 export type SegmentType = 'SINGLE_INNER' | 'SINGLE_OUTER' | 'DOUBLE' | 'TRIPLE' | 'BULL' | 'DBL_BULL' | 'MISS' | 'RESET' | 'BUTTON';
 
