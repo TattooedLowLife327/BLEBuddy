@@ -3,8 +3,58 @@
 // Using ACTUAL Granboard segment mapping from granboard2-app-by-JW
 
 const SERVICE_UUID = '442f1570-8a00-9a28-cbe1-e1d4212d53eb';
-const RX_UUID = '442f1572-8a00-9a28-cbe1-e1d4212d53eb';  // Notify (board -> app)
-const TX_UUID = '442f1571-8a00-9a28-cbe1-e1d4212d53eb';  // Write (app -> board) - for LED control
+// Per GranBoard-with-Autodarts MITM analysis: 1571=notify, 1572=write
+const RX_UUID = '442f1571-8a00-9a28-cbe1-e1d4212d53eb';  // Notify (board -> app) - dart throws
+const TX_UUID = '442f1572-8a00-9a28-cbe1-e1d4212d53eb';  // Write (app -> board) - LED control
+
+// ============================================================================
+// LED PROTOCOL CONSTANTS
+// Source: GranBoard-with-Autodarts reverse engineering (Lennart-Jerome)
+// ============================================================================
+
+// Segment number (1-20) → internal target ID for hit effects (bytes [10-11] LE)
+const SEGMENT_TARGET_ID: Record<number, number> = {
+   1: 0x001C,   2: 0x0031,   3: 0x0037,   4: 0x0022,   5: 0x0016,
+   6: 0x0028,   7: 0x0001,   8: 0x0007,   9: 0x0010,  10: 0x002B,
+  11: 0x000A,  12: 0x0013,  13: 0x0025,  14: 0x000D,  15: 0x002E,
+  16: 0x0004,  17: 0x0034,  18: 0x001F,  19: 0x003A,  20: 0x0019
+};
+
+// LED effect opcodes (16-byte frames)
+const LED_EFFECT = {
+  HIT_SINGLE:    0x01,  // Single segment hit (needs target ID + 2 colors)
+  HIT_DOUBLE:    0x02,  // Double segment hit
+  HIT_TRIPLE:    0x03,  // Triple segment hit
+  TOUCH_RAINBOW: 0x0C,  // Rainbow on touch (no color params)
+  EVENT:         0x0D,  // Ring + touch combined (no color params)
+  RAINBOW:       0x0F,  // 3-segment rainbow rotation (no color params)
+  SPLIT_RAINBOW: 0x10,  // Split rainbow (no color params)
+  NEXT:          0x11,  // Two-color segment transition (2 colors)
+  PULSE:         0x14,  // Pulsing glow (1 color, byte[4]=0x7D)
+  DARK_SOLID:    0x15,  // Low-brightness solid (1 color)
+  COLOR_CYCLE:   0x16,  // Auto color cycle (no color params)
+  FLASH:         0x17,  // Flashing/blink (1 color)
+  FLICKER:       0x18,  // Candle flicker (1 color)
+  HUNT_FLICKER:  0x19,  // Pattern flicker (no color params)
+  SHAKE:         0x1B,  // Shaking vibrate (1 color)
+  FADE:          0x1D,  // Sweeping fade (1 color)
+  BULL_FADE:     0x1F,  // 3-color fade from bull outward (3 colors)
+} as const;
+
+// Static ring palette codes (20-byte frames, 1 byte per segment)
+const LED_PALETTE = {
+  OFF:         0x00,
+  RED:         0x01,
+  ORANGE:      0x02,
+  YELLOW:      0x03,
+  LIGHT_GREEN: 0x04,
+  CYAN:        0x05,
+  PURPLE:      0x06,
+  WHITE:       0x07,
+} as const;
+
+type LEDEffectKey = keyof typeof LED_EFFECT;
+type LEDPaletteKey = keyof typeof LED_PALETTE;
 
 export type BLEStatus = 'disconnected' | 'scanning' | 'connecting' | 'connected' | 'error';
 export type SegmentType = 'SINGLE_INNER' | 'SINGLE_OUTER' | 'DOUBLE' | 'TRIPLE' | 'BULL' | 'DBL_BULL' | 'MISS' | 'RESET' | 'BUTTON';
@@ -649,20 +699,17 @@ class BLEConnection {
   }
 
   // ============================================================================
-  // LED CONTROL - EXPERIMENTAL
-  // Note: Protocol for GB3s may differ from GB3. This is exploratory.
+  // LED CONTROL
+  // Protocol from GranBoard-with-Autodarts reverse engineering (Lennart-Jerome)
+  // Two frame types: 16-byte effect frames, 20-byte static ring frames
   // ============================================================================
 
-  /**
-   * Check if LED control is available
-   */
   hasLEDControl(): boolean {
     return this.txCharacteristic !== null;
   }
 
   /**
-   * Send raw bytes to the board (for LED control experimentation)
-   * @param bytes - Raw byte array to send
+   * Send raw bytes to the board via TX (write) characteristic
    */
   async sendRawCommand(bytes: Uint8Array): Promise<boolean> {
     if (!this.txCharacteristic) {
@@ -671,105 +718,221 @@ class BLEConnection {
     }
 
     try {
-      console.log('📤 Sending raw command:', Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' '));
-      
+      console.log('📤 TX:', Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' '));
+
       if (this.txCharacteristic.properties.writeWithoutResponse) {
         await this.txCharacteristic.writeValueWithoutResponse(bytes);
       } else {
         await this.txCharacteristic.writeValue(bytes);
       }
-      
-      console.log('✅ Command sent');
+
       return true;
     } catch (error) {
-      console.error('❌ Failed to send command:', error);
+      console.error('❌ TX failed:', error);
       return false;
     }
   }
 
-  /**
-   * Convert hex color string to RGB values
-   * @param hexColor - Color in format '#RRGGBB' or 'RRGGBB'
-   * @returns Object with r, g, b values (0-255)
-   */
   private hexToRGB(hexColor: string): { r: number; g: number; b: number } {
     const hex = hexColor.replace('#', '');
-    const r = parseInt(hex.substring(0, 2), 16);
-    const g = parseInt(hex.substring(2, 4), 16);
-    const b = parseInt(hex.substring(4, 6), 16);
-    return { r, g, b };
+    return {
+      r: parseInt(hex.substring(0, 2), 16),
+      g: parseInt(hex.substring(2, 4), 16),
+      b: parseInt(hex.substring(4, 6), 16),
+    };
   }
 
   /**
-   * Trigger LED animation with player color
-   * Sends custom LED animation to board based on player's profile color
-   * @param profileColor - Player's profile color in hex format (e.g., '5b21b6' from player.profilecolor)
-   * @param animationType - Type of animation (pulse, wave, spin, rainbow, flash)
+   * Build a 16-byte LED effect frame
+   * Layout: [opcode, R1,G1,B1, R2,G2,B2, R3,G3,B3, targetLo,targetHi, speed, 0,0, 0x01]
    */
-  async triggerDartLED(profileColor: string, animationType: string = 'pulse'): Promise<boolean> {
+  private buildEffectFrame(
+    opcode: number,
+    colorA?: { r: number; g: number; b: number },
+    colorB?: { r: number; g: number; b: number },
+    colorC?: { r: number; g: number; b: number },
+    targetId?: number,
+    speed: number = 10
+  ): Uint8Array {
+    const frame = new Uint8Array(16);
+    frame[0] = opcode & 0xFF;
+    if (colorA) { frame[1] = colorA.r; frame[2] = colorA.g; frame[3] = colorA.b; }
+    if (colorB) { frame[4] = colorB.r; frame[5] = colorB.g; frame[6] = colorB.b; }
+    if (colorC) { frame[7] = colorC.r; frame[8] = colorC.g; frame[9] = colorC.b; }
+    if (targetId !== undefined) {
+      frame[10] = targetId & 0xFF;
+      frame[11] = (targetId >> 8) & 0xFF;
+    }
+    frame[12] = speed & 0xFF;
+    frame[15] = 0x01;  // Frame terminator - always 0x01
+    return frame;
+  }
+
+  /**
+   * Trigger LED effect on the whole board with player color
+   * This is the main method called on dart throws
+   * @param profileColor - Hex color (e.g., '5b21b6')
+   * @param animationType - pulse, flash, rainbow, shake, fade, flicker, color_cycle
+   * @param speed - 0 (fastest) to 35 (slowest), default 10
+   */
+  async triggerDartLED(profileColor: string, animationType: string = 'pulse', speed: number = 10): Promise<boolean> {
     if (!this.txCharacteristic) {
       console.warn('❌ LED control not available');
       return false;
     }
 
     try {
-      const { r, g, b } = this.hexToRGB(profileColor);
-      
-      // Map animation types to Granboard hex codes from reverse engineering
-      let animationCode = '14'; // Default: pulse
-      
+      const color = this.hexToRGB(profileColor);
+      let frame: Uint8Array;
+
       switch (animationType.toLowerCase()) {
-        case 'wave':
-          animationCode = '11111'; // Yellow wave
-          break;
-        case 'spin':
-          animationCode = '21'; // Red spin
-          break;
-        case 'rainbow':
-          animationCode = '10'; // Rainbow spin
+        case 'pulse':
+          frame = this.buildEffectFrame(LED_EFFECT.PULSE, color, undefined, undefined, undefined, speed);
+          frame[4] = 0x7D;  // Brightness accent parameter for pulse
           break;
         case 'flash':
-          animationCode = '1b'; // White shake (fast flash)
+          frame = this.buildEffectFrame(LED_EFFECT.FLASH, color, undefined, undefined, undefined, speed);
           break;
-        case 'pulse':
+        case 'shake':
+          frame = this.buildEffectFrame(LED_EFFECT.SHAKE, color, undefined, undefined, undefined, speed);
+          break;
+        case 'fade':
+          frame = this.buildEffectFrame(LED_EFFECT.FADE, color, undefined, undefined, undefined, speed);
+          break;
+        case 'flicker':
+          frame = this.buildEffectFrame(LED_EFFECT.FLICKER, color, undefined, undefined, undefined, speed);
+          break;
+        case 'solid':
+          frame = this.buildEffectFrame(LED_EFFECT.DARK_SOLID, color, undefined, undefined, undefined, speed);
+          break;
+        case 'rainbow':
+          frame = this.buildEffectFrame(LED_EFFECT.RAINBOW, undefined, undefined, undefined, undefined, speed);
+          break;
+        case 'split_rainbow':
+          frame = this.buildEffectFrame(LED_EFFECT.SPLIT_RAINBOW, undefined, undefined, undefined, undefined, speed);
+          break;
+        case 'color_cycle':
+          frame = this.buildEffectFrame(LED_EFFECT.COLOR_CYCLE, undefined, undefined, undefined, undefined, speed);
+          break;
         default:
-          animationCode = '14'; // Pulse
+          frame = this.buildEffectFrame(LED_EFFECT.PULSE, color, undefined, undefined, undefined, speed);
+          frame[4] = 0x7D;
           break;
       }
 
-      // Build command: animation code + RGB values
-      const commandStr = animationCode;
-      const bytes = new Uint8Array(commandStr.length / 2 + 3);
-      
-      // Convert hex string to bytes
-      for (let i = 0; i < commandStr.length; i += 2) {
-        bytes[i / 2] = parseInt(commandStr.substr(i, 2), 16);
-      }
-      
-      // Append RGB values
-      bytes[bytes.length - 3] = r;
-      bytes[bytes.length - 2] = g;
-      bytes[bytes.length - 1] = b;
-
-      console.log(`💡 Triggering dart LED: color=${profileColor}, animation=${animationType}, RGB(${r},${g},${b})`);
-      return this.sendRawCommand(bytes);
+      console.log(`💡 LED effect: ${animationType}, color=${profileColor}, speed=${speed}`);
+      return this.sendRawCommand(frame);
     } catch (error) {
-      console.error('❌ Error triggering dart LED:', error);
+      console.error('❌ Error triggering LED:', error);
       return false;
     }
   }
 
   /**
-   * Turn off all LEDs
+   * Trigger a hit-specific LED effect on a particular segment
+   * @param segmentNumber - Board segment 1-20
+   * @param hitType - 'single', 'double', or 'triple'
+   * @param colorA - Primary hit color hex
+   * @param colorB - Secondary hit color hex (optional, defaults to white)
+   * @param speed - 0x00 (fast) to 0xFF (slow), default 0x14
    */
-  async clearLEDs(): Promise<boolean> {
-    if (!this.txCharacteristic) {
+  async triggerHitLED(
+    segmentNumber: number,
+    hitType: 'single' | 'double' | 'triple' = 'single',
+    colorA: string = 'ff0000',
+    colorB: string = 'ffffff',
+    speed: number = 0x14
+  ): Promise<boolean> {
+    if (!this.txCharacteristic) return false;
+
+    const targetId = SEGMENT_TARGET_ID[segmentNumber];
+    if (targetId === undefined) {
+      console.warn(`❌ Unknown segment number: ${segmentNumber}`);
       return false;
     }
 
-    const command = new Uint8Array([0x50, 0x00, 0x00, 0x00, 0x00]);
+    const opcode = hitType === 'triple' ? LED_EFFECT.HIT_TRIPLE
+                 : hitType === 'double' ? LED_EFFECT.HIT_DOUBLE
+                 : LED_EFFECT.HIT_SINGLE;
+
+    const frame = this.buildEffectFrame(
+      opcode,
+      this.hexToRGB(colorA),
+      this.hexToRGB(colorB),
+      undefined,
+      targetId,
+      speed
+    );
+
+    console.log(`💡 Hit LED: segment=${segmentNumber}, type=${hitType}, target=0x${targetId.toString(16)}`);
+    return this.sendRawCommand(frame);
+  }
+
+  /**
+   * Two-color transition effect (NEXT - opcode 0x11)
+   */
+  async triggerTwoColorEffect(colorA: string, colorB: string, speed: number = 7): Promise<boolean> {
+    if (!this.txCharacteristic) return false;
+    const frame = this.buildEffectFrame(
+      LED_EFFECT.NEXT,
+      this.hexToRGB(colorA),
+      this.hexToRGB(colorB),
+      undefined,
+      0x0010,  // Fixed target for NEXT effect
+      speed
+    );
+    return this.sendRawCommand(frame);
+  }
+
+  /**
+   * Three-color bull fade effect (opcode 0x1F)
+   */
+  async triggerBullFade(colorA: string, colorB: string, colorC: string, speed: number = 12): Promise<boolean> {
+    if (!this.txCharacteristic) return false;
+    const frame = this.buildEffectFrame(
+      LED_EFFECT.BULL_FADE,
+      this.hexToRGB(colorA),
+      this.hexToRGB(colorB),
+      this.hexToRGB(colorC),
+      undefined,
+      speed
+    );
+    return this.sendRawCommand(frame);
+  }
+
+  /**
+   * Set static colors on each of the 20 ring segments using palette codes
+   * @param colors - Array of 20 palette codes (0x00=off, 0x01=red, 0x02=orange,
+   *                 0x03=yellow, 0x04=green, 0x05=cyan, 0x06=purple, 0x07=white)
+   */
+  async setRingColors(colors: number[]): Promise<boolean> {
+    if (!this.txCharacteristic) return false;
+    const frame = new Uint8Array(20);
+    for (let i = 0; i < 20; i++) {
+      frame[i] = (colors[i] ?? 0x00) & 0xFF;
+    }
+    console.log('💡 Ring colors:', Array.from(frame).map(b => b.toString(16)).join(' '));
+    return this.sendRawCommand(frame);
+  }
+
+  /**
+   * Light up a single segment with a palette color (all others off)
+   */
+  async highlightSegment(segmentIndex: number, paletteColor: number = LED_PALETTE.RED): Promise<boolean> {
+    const colors = new Array(20).fill(LED_PALETTE.OFF);
+    if (segmentIndex >= 0 && segmentIndex < 20) {
+      colors[segmentIndex] = paletteColor;
+    }
+    return this.setRingColors(colors);
+  }
+
+  /**
+   * Turn off all LEDs - sends 20-byte ring frame of all zeros
+   */
+  async clearLEDs(): Promise<boolean> {
+    if (!this.txCharacteristic) return false;
     console.log('💡 Clearing all LEDs');
-    return this.sendRawCommand(command);
+    return this.sendRawCommand(new Uint8Array(20));
   }
 
   // ============================================================================
@@ -833,4 +996,5 @@ class BLEConnection {
 
 export const bleConnection = new BLEConnection();
 export default bleConnection;
+export { LED_EFFECT, LED_PALETTE, SEGMENT_TARGET_ID };
 (window as any).bleConnection = bleConnection;

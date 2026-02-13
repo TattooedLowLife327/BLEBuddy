@@ -104,9 +104,19 @@ export function useBLEThrows(matchId?: string, playerId?: string): UseBLEThrowsR
       console.log('🎯 New throw detected:', throwData);
       await saveThrowToDatabase(throwData);
       
-      // Trigger LED animation with player color
+      // Trigger LED animation on the hit segment
       if (playerId && playerColor) {
-        bleConnection.triggerDartLED(playerColor, 'pulse');
+        const hitType = throwData.segmentType === 'TRIPLE' ? 'triple'
+                      : throwData.segmentType === 'DOUBLE' || throwData.segmentType === 'DBL_BULL' ? 'double'
+                      : 'single';
+
+        if (throwData.baseValue >= 1 && throwData.baseValue <= 20) {
+          // Light up the specific segment that was hit
+          bleConnection.triggerHitLED(throwData.baseValue, hitType, playerColor);
+        } else {
+          // Bull, miss, or other - use whole-board pulse effect
+          bleConnection.triggerDartLED(playerColor, 'pulse');
+        }
       }
     };
 
