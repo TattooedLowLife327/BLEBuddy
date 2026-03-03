@@ -3,6 +3,8 @@ import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { createClient } from '../utils/supabase/client';
 import { playSound } from '../utils/sounds';
 import { REQUEST_TIMEOUT_MS } from '../utils/constants';
+import { playMorseLL } from '../utils/ble/ledEffects';
+import bleConnection from '../utils/ble/bleConnection';
 
 const REQUEST_TIMEOUT_SECONDS = REQUEST_TIMEOUT_MS / 1000;
 
@@ -57,6 +59,7 @@ export function IncomingRequestModal({ request, onAccept, onDecline, onTimeout, 
   const [timeRemaining, setTimeRemaining] = useState(REQUEST_TIMEOUT_SECONDS);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const hasTimedOutRef = useRef(false);
+  const morseAbortRef = useRef<AbortController | null>(null);
 
   const supabase = createClient();
 
@@ -91,9 +94,18 @@ export function IncomingRequestModal({ request, onAccept, onDecline, onTimeout, 
     };
   }, [request.id, onTimeout]);
 
-  // Play incoming request sound when modal is shown
+  // Play incoming request sound and start Morse LL on board LEDs
   useEffect(() => {
     playSound('gameRequest');
+    // Start morse LL loop (uses profileColor state, defaults to purple until fetched)
+    const abort = new AbortController();
+    morseAbortRef.current = abort;
+    const color = profileColor.replace('#', '');
+    playMorseLL(color, abort.signal);
+    return () => {
+      abort.abort();
+      bleConnection.clearLEDs();
+    };
   }, [request.id]);
 
   // Parse game config
@@ -395,7 +407,7 @@ export function IncomingRequestModal({ request, onAccept, onDecline, onTimeout, 
         {/* Action Buttons */}
         <div className="flex gap-3 p-4">
           <button
-            onClick={onDecline}
+            onClick={() => { morseAbortRef.current?.abort(); bleConnection.clearLEDs(); onDecline(); }}
             className="flex-1 py-3 rounded-lg text-white transition-all hover:scale-[1.02]"
             style={{
               fontFamily: 'Helvetica, Arial, sans-serif',
@@ -407,7 +419,7 @@ export function IncomingRequestModal({ request, onAccept, onDecline, onTimeout, 
             Decline
           </button>
           <button
-            onClick={bleConnected ? onAccept : onBLEConnect}
+            onClick={bleConnected ? () => { morseAbortRef.current?.abort(); bleConnection.clearLEDs(); onAccept(); } : onBLEConnect}
             disabled={!bleConnected && !onBLEConnect}
             className={`flex-1 py-3 rounded-lg text-white transition-all ${bleConnected ? 'hover:scale-[1.02]' : 'opacity-70 cursor-pointer'}`}
             style={{

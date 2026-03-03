@@ -3,6 +3,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import bleConnection, { BLEStatus, DartThrowData } from '../utils/ble/bleConnection';
+import { playConnectEffect } from '../utils/ble/ledEffects';
 
 interface BLEContextType {
   status: BLEStatus;
@@ -19,6 +20,9 @@ interface BLEContextType {
   triggerDartLED: (color: string, animation?: string, speed?: number) => Promise<boolean>;
   triggerHitLED: (segment: number, hitType?: 'single' | 'double' | 'triple', colorA?: string, colorB?: string) => Promise<boolean>;
   triggerTwoColorEffect: (colorA: string, colorB: string, speed?: number) => Promise<boolean>;
+  triggerBullFade: (colorA: string, colorB: string, colorC: string, speed?: number) => Promise<boolean>;
+  setRingColors: (colors: number[]) => Promise<boolean>;
+  sendRawCommand: (bytes: Uint8Array) => Promise<boolean>;
   isSupported: boolean;
 }
 
@@ -122,8 +126,8 @@ export function BLEProvider({ children }: BLEProviderProps) {
     if (result.success && result.device) {
       setDeviceName(result.device.name || 'Granboard');
       setCanAutoReconnect(true);
-      // Rainbow pulse on successful connection
-      bleConnection.triggerDartLED('00ff00', 'pulse', 8);
+      // Fade/sweep green on successful connection
+      playConnectEffect('00ff00');
     }
     return result;
   };
@@ -132,7 +136,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
     const result = await bleConnection.autoReconnect();
     if (result.success && result.device) {
       setDeviceName(result.device.name || 'Granboard');
-      bleConnection.triggerDartLED('00ff00', 'pulse', 8);
+      playConnectEffect('00ff00');
     }
     return result;
   };
@@ -163,6 +167,18 @@ export function BLEProvider({ children }: BLEProviderProps) {
     return bleConnection.triggerTwoColorEffect(colorA, colorB, speed);
   };
 
+  const triggerBullFade = (colorA: string, colorB: string, colorC: string, speed: number = 12): Promise<boolean> => {
+    return bleConnection.triggerBullFade(colorA, colorB, colorC, speed);
+  };
+
+  const setRingColors = (colors: number[]): Promise<boolean> => {
+    return bleConnection.setRingColors(colors);
+  };
+
+  const sendRawCommand = (bytes: Uint8Array): Promise<boolean> => {
+    return bleConnection.sendRawCommand(bytes);
+  };
+
   const value: BLEContextType = {
     status,
     isConnected: status === 'connected',
@@ -178,6 +194,9 @@ export function BLEProvider({ children }: BLEProviderProps) {
     triggerDartLED,
     triggerHitLED,
     triggerTwoColorEffect,
+    triggerBullFade,
+    setRingColors,
+    sendRawCommand,
     isSupported
   };
 

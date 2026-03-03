@@ -4,6 +4,11 @@ import { isDevMode } from '../utils/devMode';
 import { playSound } from '../utils/sounds';
 import { createClient } from '../utils/supabase/client';
 import { PLAYER_CHANGE_DELAY_MS } from '../utils/constants';
+import {
+  playBullHit, playGameWinEffect, playThreeInBedEffect, playThreeInBlackEffect,
+  playHatTrickEffect, playTon80Effect, playWhiteHorseEffect,
+  playCricketCloseEffect, playConnectEffect, CRICKET_NUMS,
+} from '../utils/ble/ledEffects';
 
 // Resolve profile pic URL from various formats
 const resolveProfilePicUrl = (profilepic: string | undefined): string | undefined => {
@@ -232,7 +237,7 @@ export function CRInhouseGameScreen({
   variant = 'standard',
 }: CRInhouseGameScreenProps) {
   // BLE for throw detection
-  const { lastThrow, isConnected: bleConnected, connect: bleConnect, disconnect: bleDisconnect, status: bleStatus, clearLEDs, triggerHitLED, triggerDartLED } = useBLE();
+  const { lastThrow, isConnected: bleConnected, connect: bleConnect, disconnect: bleDisconnect, status: bleStatus, clearLEDs, triggerHitLED } = useBLE();
   const lastProcessedThrowRef = useRef<string | null>(null);
   const playerChangeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const animationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -398,13 +403,16 @@ export function CRInhouseGameScreen({
     setCurrentDarts(newDarts);
     playSound('dart');
 
-    // LED hit effect — light up the segment that was hit
+    // LED hit effect — only fire for cricket numbers (20,19,18,17,16,15) and bull
     if (segment !== 'MISS') {
       const playerColor = ((currentThrower === 'p1' ? PLAYERS.p1?.profilecolor : PLAYERS.p2?.profilecolor) || '#ffffff').replace('#', '');
-      const hitType = multiplier === 3 ? 'triple' : multiplier === 2 ? 'double' : 'single';
-      const baseVal = (segment === 'S25' || segment === 'D25') ? 25 : parseInt(segment.replace(/^[SDT]/, ''), 10);
-      if (baseVal >= 1 && baseVal <= 25) {
-        triggerHitLED(baseVal, hitType, playerColor);
+      const isBull = segment === 'S25' || segment === 'D25';
+      const baseVal = isBull ? 25 : parseInt(segment.replace(/^[SDT]/, ''), 10);
+      if (isBull) {
+        playBullHit(playerColor, segment === 'D25');
+      } else if (CRICKET_NUMS.includes(baseVal)) {
+        const hitType = multiplier === 3 ? 'triple' : multiplier === 2 ? 'double' : 'single';
+        triggerHitLED(baseVal, hitType, playerColor, playerColor);
       }
     }
 
@@ -434,6 +442,10 @@ export function CRInhouseGameScreen({
 
     // Apply marks if valid target
     if (target) {
+      // Check if this throw will close a number (for cricket close LED animation)
+      const prevMarks = marks[currentThrower][target];
+      const willClose = prevMarks < 3 && Math.min(3, prevMarks + hitMarks) >= 3 && target !== 'B';
+
       setMarks(prev => {
         const next = JSON.parse(JSON.stringify(prev));
         const opp: PlayerId = currentThrower === 'p1' ? 'p2' : 'p1';
@@ -473,7 +485,7 @@ export function CRInhouseGameScreen({
           if (myScore >= theirScore) {
             playSound('win');
             const winColor = ((currentThrower === 'p1' ? PLAYERS.p1?.profilecolor : PLAYERS.p2?.profilecolor) || '#ffffff').replace('#', '');
-            triggerDartLED(winColor, 'rainbow', 5);
+            playGameWinEffect(winColor);
             setGameWinner(currentThrower);
             setTimeout(() => setShowWinnerScreen(true), 500);
           }
@@ -481,6 +493,18 @@ export function CRInhouseGameScreen({
 
         return next;
       });
+
+      // Cricket close LED animation when a number just got closed
+      if (willClose) {
+        const closedNum = parseInt(target, 10);
+        // Determine which cricket numbers are still open (excluding the one just closed)
+        const openNums = CRICKET_NUMS.filter(n => {
+          const t = n.toString() as Target;
+          if (t === target) return false; // just closed
+          return marks[currentThrower][t] < 3;
+        });
+        playCricketCloseEffect(closedNum, openNums);
+      }
     }
 
     // Check achievements & end turn on 3rd dart
@@ -489,7 +513,16 @@ export function CRInhouseGameScreen({
       if (achievement) {
         playSound('achievement');
         const achColor = ((currentThrower === 'p1' ? PLAYERS.p1?.profilecolor : PLAYERS.p2?.profilecolor) || '#ffffff').replace('#', '');
-        triggerDartLED(achColor, 'pulse', 6);
+        // Trigger specific LED effect per achievement
+        const segNum = newDarts[0] ? parseInt(newDarts[0].segment.replace(/^[SDT]/, ''), 10) : 0;
+        switch (achievement) {
+          case 'ton80': playTon80Effect(achColor); break;
+          case 'threeInBlack': playThreeInBlackEffect(achColor); break;
+          case 'threeInBed': playThreeInBedEffect(segNum, achColor); break;
+          case 'hatTrick': playHatTrickEffect(achColor); break;
+          case 'whiteHorse': playWhiteHorseEffect(newDarts.map(d => parseInt(d.segment.replace(/^[SDT]/, ''), 10)), achColor); break;
+          default: break;
+        }
         setActiveAnimation(achievement);
         // 3 seconds to let award videos play fully (button can skip via animationTimeoutRef)
         animationTimeoutRef.current = setTimeout(() => {
@@ -504,7 +537,7 @@ export function CRInhouseGameScreen({
         setShowPlayerChange(true);
       }, PLAYER_CHANGE_DELAY_MS);
     }
-  }, [currentDarts, currentThrower, introComplete, showPlayerChange, showWinnerScreen, p1Score, p2Score, marks, currentRound, PLAYERS, triggerHitLED, triggerDartLED]);
+  }, [currentDarts, currentThrower, introComplete, showPlayerChange, showWinnerScreen, p1Score, p2Score, marks, currentRound, PLAYERS, triggerHitLED]);
 
   const endTurnWithMisses = useCallback(() => {
     if (showPlayerChange || !introComplete || showWinnerScreen) return;
@@ -569,6 +602,8 @@ export function CRInhouseGameScreen({
   useEffect(() => {
     if (showPlayerChange) {
       clearLEDs();
+      const incomingColor = ((currentThrower === 'p1' ? PLAYERS.p2?.profilecolor : PLAYERS.p1?.profilecolor) || '#ffffff').replace('#', '');
+      playConnectEffect(incomingColor);
       const timer = setTimeout(() => {
         if (currentThrower === 'p1') {
           setP1ThrewThisRound(true);

@@ -12,6 +12,12 @@ import { createClient } from '../utils/supabase/client';
 import { PLAYER_CHANGE_DELAY_MS } from '../utils/constants';
 import { useOnlineThrowSync } from '../hooks/useOnlineThrowSync';
 import { resolveProfilePicUrl } from '../utils/profile';
+import {
+  playBustEffect, playGameWinEffect, playBullHit, playEnhancedTripleHit,
+  playHighTonEffect, playLowTonEffect, playThreeInBedEffect, playThreeInBlackEffect,
+  playHatTrickEffect, playTon80Effect, playShanghaiEffect, playWhiteHorseEffect,
+  playMadhouseOutEffect, playConnectEffect, playDisconnectEffect, playReconnectEffect,
+} from '../utils/ble/ledEffects';
 
 interface DartThrow {
   segment: string;
@@ -72,6 +78,7 @@ type AchievementType =
   | 'shanghai'
   | 'highTon'
   | 'lowTon'
+  | 'madhouseOut'
   | null;
 
 const INACTIVE = '#7E7E7E';
@@ -135,6 +142,7 @@ const ACHIEVEMENT_LABELS: Record<Exclude<AchievementType, null>, string> = {
   shanghai: 'SHANGHAI!',
   highTon: 'HIGH TON!',
   lowTon: 'LOW TON!',
+  madhouseOut: 'MADHOUSE OUT!',
 };
 
 const AWARD_VIDEOS: Partial<Record<Exclude<AchievementType, null>, string>> = {
@@ -350,7 +358,7 @@ export function O1OnlineGameScreen({
   const supabase = createClient();
 
   // BLE integration
-  const { lastThrow, isConnected, simulateThrow: bleSimulateThrow, status: bleStatus, connect: bleConnect, disconnect: bleDisconnect, clearLEDs, triggerHitLED, triggerDartLED } = useBLE();
+  const { lastThrow, isConnected, simulateThrow: bleSimulateThrow, status: bleStatus, connect: bleConnect, disconnect: bleDisconnect, clearLEDs, triggerHitLED } = useBLE();
   const devMode = isDevMode();
   const lastProcessedThrowRef = useRef<string | null>(null);
   const playerChangeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -379,6 +387,8 @@ export function O1OnlineGameScreen({
     remotePlayerId: remotePlayer.id,
     remotePlayerName: remotePlayer.name,
     onOpponentLeft: () => onLeaveMatch?.(),
+    onOpponentDisconnected: () => playDisconnectEffect(),
+    onOpponentReconnected: () => playReconnectEffect(),
   });
 
   // Determine which player is p1/p2 based on startingPlayer (cork winner)
@@ -511,7 +521,7 @@ export function O1OnlineGameScreen({
         if (cricketNumbers.includes(triples[0])) return 'threeInBed';
       }
     }
-    if (totalScore >= 150) return 'highTon';
+    if (totalScore >= 151) return 'highTon';
     if (totalScore >= 100) return 'lowTon';
     if (didBust) return 'bust';
     return null;
@@ -570,6 +580,9 @@ export function O1OnlineGameScreen({
   useEffect(() => {
     if (!showPlayerChange) return;
     clearLEDs();
+    // Show incoming player's color on the board
+    const incomingColor = (currentThrower === 'p1' ? p2.accentColor : p1.accentColor).replace('#', '');
+    playConnectEffect(incomingColor);
     const timer = setTimeout(() => {
       // Read all state from snapshot ref so this effect doesn't depend on
       // (and get cleaned up by) every piece of game state.
@@ -701,10 +714,20 @@ export function O1OnlineGameScreen({
     // LED hit effect — light up the segment that was hit
     if (isLocal && segment !== 'MISS') {
       const playerColor = (currentThrower === 'p1' ? p1.accentColor : p2.accentColor).replace('#', '');
-      const hitType = isTriple ? 'triple' : isDouble || isDoubleBull ? 'double' : 'single';
-      const baseVal = isAnyBull ? 25 : parseInt(segment.replace(/^[SDT]/, ''), 10);
-      if (baseVal >= 1 && baseVal <= 25) {
-        triggerHitLED(baseVal, hitType, playerColor);
+      if (isAnyBull) {
+        // Bull gets its own bull fade effect
+        playBullHit(playerColor, isDoubleBull);
+      } else {
+        const hitType = isTriple ? 'triple' : isDouble ? 'double' : 'single';
+        const baseVal = parseInt(segment.replace(/^[SDT]/, ''), 10);
+        if (baseVal >= 1 && baseVal <= 20) {
+          // Dart 2 escalation: if dart 1 was same triple, play enhanced effect
+          if (currentDarts.length === 1 && isTriple && currentDarts[0].segment === segment) {
+            playEnhancedTripleHit(baseVal, playerColor);
+          } else {
+            triggerHitLED(baseVal, hitType, playerColor, playerColor);
+          }
+        }
       }
     }
     if (currentThrower === 'p1') setP1DartsThrown(prev => prev + 1);
@@ -732,7 +755,7 @@ export function O1OnlineGameScreen({
 
       setCurrentDarts(newDarts);
       playSound('bust');
-      if (isLocal) triggerDartLED('ff0000', 'flash', 6);
+      if (isLocal) playBustEffect();
       const achievement = detectAchievement(newDarts, newRoundScore, true, false);
       triggerAchievement(achievement);
       // Use timeout ref so button can cancel it
@@ -764,16 +787,42 @@ export function O1OnlineGameScreen({
     }
     if (playerStartsNow) setHasStarted(true);
     if (newDarts.length === 3 || didWin) {
-      const achievement = detectAchievement(newDarts, newRoundScore, false, didWin);
+      // Check for madhouseOut: winning with D1
+      let achievement: AchievementType;
+      if (didWin && segment === 'D1') {
+        achievement = 'madhouseOut';
+      } else {
+        achievement = detectAchievement(newDarts, newRoundScore, false, didWin);
+      }
       if (achievement) {
+        const achColor = (currentThrower === 'p1' ? p1.accentColor : p2.accentColor).replace('#', '');
         if (didWin) {
           playSound('out'); playSound('win');
-          const winColor = (currentThrower === 'p1' ? p1.accentColor : p2.accentColor).replace('#', '');
-          triggerDartLED(winColor, 'rainbow', 5);
+          if (isLocal) {
+            // madhouseOut plays its own animation, then Grand Finale plays after
+            if (achievement === 'madhouseOut') {
+              playMadhouseOutEffect(achColor).then(() => playGameWinEffect(achColor));
+            } else {
+              playGameWinEffect(achColor);
+            }
+          }
         } else {
           playSound('achievement');
-          const achColor = (currentThrower === 'p1' ? p1.accentColor : p2.accentColor).replace('#', '');
-          triggerDartLED(achColor, 'pulse', 6);
+          if (isLocal) {
+            // Trigger specific LED effect per achievement
+            const segNum = newDarts[0] ? parseInt(newDarts[0].segment.replace(/^[SDT]/, ''), 10) : 0;
+            switch (achievement) {
+              case 'ton80': playTon80Effect(achColor); break;
+              case 'threeInBlack': playThreeInBlackEffect(achColor); break;
+              case 'threeInBed': playThreeInBedEffect(segNum, achColor); break;
+              case 'hatTrick': playHatTrickEffect(achColor); break;
+              case 'shanghai': playShanghaiEffect(segNum, achColor); break;
+              case 'whiteHorse': playWhiteHorseEffect(newDarts.map(d => parseInt(d.segment.replace(/^[SDT]/, ''), 10)), achColor); break;
+              case 'highTon': playHighTonEffect(achColor); break;
+              case 'lowTon': playLowTonEffect(achColor); break;
+              default: break;
+            }
+          }
         }
         setShowDoubleBullEffect(false);
         const winner = didWin ? currentThrower : undefined;
@@ -810,7 +859,7 @@ export function O1OnlineGameScreen({
         }
       }, PLAYER_CHANGE_DELAY_MS);
     }
-  }, [currentDarts, currentScore, currentThrower, roundScore, showPlayerChange, introComplete, p1Score, p2Score, p1HasStarted, p2HasStarted, inMode, outMode, detectAchievement, triggerAchievement, currentRound, localIsP1, localPlayer.id, sendThrow, sendTurnEnd, p1, p2, triggerHitLED, triggerDartLED]);
+  }, [currentDarts, currentScore, currentThrower, roundScore, showPlayerChange, introComplete, p1Score, p2Score, p1HasStarted, p2HasStarted, inMode, outMode, detectAchievement, triggerAchievement, currentRound, localIsP1, localPlayer.id, sendThrow, sendTurnEnd, p1, p2, triggerHitLED]);
 
   // Keep throwDartRef in sync so broadcast handler always calls the latest version
   useEffect(() => { throwDartRef.current = throwDart; }, [throwDart]);
