@@ -363,11 +363,15 @@ export function O1InhouseGameScreen({
   localSessionId,
 }: GameScreenProps) {
   // BLE integration
-  const { lastThrow, simulateThrow: bleSimulateThrow, clearLEDs } = useBLE();
+  const { lastThrow, simulateThrow: bleSimulateThrow, clearLEDs, triggerHitLED, triggerDartLED } = useBLE();
   const devMode = isDevMode();
   const lastProcessedThrowRef = useRef<string | null>(null);
   const playerChangeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const animationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastAppliedThrowTimeRef = useRef<number>(0);
+
+  /** Min ms after last throw before we accept a button (avoids board sending button right after a single throw). */
+  const BUTTON_DEBOUNCE_MS = 1500;
 
   const isSoloMode = playerMode === 'solo';
   const [accessRevoked, setAccessRevoked] = useState(false);
@@ -781,6 +785,18 @@ export function O1InhouseGameScreen({
 
     playSound('dart');
 
+    // LED hit effect — light up the segment that was hit
+    if (segment !== 'MISS') {
+      const playerColor = ((currentThrower === 'p1' ? PLAYERS.p1?.profilecolor : PLAYERS.p2?.profilecolor) || '#ffffff').replace('#', '');
+      const hitType = isTriple ? 'triple' : isDouble || isDoubleBull ? 'double' : 'single';
+      const baseVal = isAnyBull ? 25 : parseInt(segment.replace(/^[SDT]/, ''), 10);
+      if (baseVal >= 1 && baseVal <= 25) {
+        triggerHitLED(baseVal, hitType, playerColor);
+      }
+    }
+
+    lastAppliedThrowTimeRef.current = Date.now();
+
     // Track darts thrown for PPR calculation
     if (currentThrower === 'p1') {
       setP1DartsThrown(prev => prev + 1);
@@ -800,6 +816,7 @@ export function O1InhouseGameScreen({
       // Show the dart but don't keep the scoring change, then switch players
       setCurrentDarts(newDarts);
       playSound('bust');
+      triggerDartLED('ff0000', 'flash', 6);
       // Trigger bust achievement
       const achievement = detectAchievement(newDarts, newRoundScore, true, false);
       triggerAchievement(achievement);
@@ -840,8 +857,15 @@ export function O1InhouseGameScreen({
     if (newDarts.length === 3 || didWin) {
       const achievement = detectAchievement(newDarts, newRoundScore, false, didWin);
       if (achievement) {
-        if (didWin) { playSound('out'); playSound('win'); }
-        else playSound('achievement');
+        if (didWin) {
+          playSound('out'); playSound('win');
+          const winColor = ((currentThrower === 'p1' ? PLAYERS.p1?.profilecolor : PLAYERS.p2?.profilecolor) || '#ffffff').replace('#', '');
+          triggerDartLED(winColor, 'rainbow', 5);
+        } else {
+          playSound('achievement');
+          const achColor = ((currentThrower === 'p1' ? PLAYERS.p1?.profilecolor : PLAYERS.p2?.profilecolor) || '#ffffff').replace('#', '');
+          triggerDartLED(achColor, 'pulse', 6);
+        }
         // Pass winner for win achievements (single game = show winner screen after)
         const winner = didWin ? currentThrower : undefined;
         triggerAchievement(achievement, winner);
@@ -865,7 +889,7 @@ export function O1InhouseGameScreen({
         setShowPlayerChange(true);
       }, PLAYER_CHANGE_DELAY_MS);
     }
-  }, [currentDarts, currentScore, currentThrower, roundScore, showPlayerChange, introComplete, p1Score, p2Score, p1HasStarted, p2HasStarted, inMode, outMode, detectAchievement, triggerAchievement, currentRound, isFreeze, isCountUp]);
+  }, [currentDarts, currentScore, currentThrower, roundScore, showPlayerChange, introComplete, p1Score, p2Score, p1HasStarted, p2HasStarted, inMode, outMode, detectAchievement, triggerAchievement, currentRound, isFreeze, isCountUp, PLAYERS, triggerHitLED, triggerDartLED]);
 
   const endTurnWithMisses = useCallback(() => {
     if (showPlayerChange || !introComplete || showWinnerScreen) return;
@@ -907,6 +931,10 @@ export function O1InhouseGameScreen({
     if (lastThrow.timestamp === lastProcessedThrowRef.current) return;
     lastProcessedThrowRef.current = lastThrow.timestamp;
     if (lastThrow.segmentType === 'BUTTON' || lastThrow.segment === 'BTN') {
+      if (currentDarts.length === 1 && (Date.now() - lastAppliedThrowTimeRef.current) < BUTTON_DEBOUNCE_MS) {
+        console.log('[01InhouseGame] Ignoring button – too soon after single throw (possible board glitch)');
+        return;
+      }
       endTurnWithMisses();
       return;
     }
@@ -922,7 +950,7 @@ export function O1InhouseGameScreen({
     }
 
     throwDart(segment, score, lastThrow.multiplier);
-  }, [lastThrow, throwDart, endTurnWithMisses, splitBull]);
+  }, [lastThrow, throwDart, endTurnWithMisses, splitBull, currentDarts.length]);
 
   const handleDevSimulateThrow = useCallback(() => {
     if (!devMode) return;

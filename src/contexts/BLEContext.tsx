@@ -16,6 +16,9 @@ interface BLEContextType {
   disconnect: () => Promise<void>;
   simulateThrow: (segment?: string, score?: number) => DartThrowData;
   clearLEDs: () => Promise<boolean>;
+  triggerDartLED: (color: string, animation?: string, speed?: number) => Promise<boolean>;
+  triggerHitLED: (segment: number, hitType?: 'single' | 'double' | 'triple', colorA?: string, colorB?: string) => Promise<boolean>;
+  triggerTwoColorEffect: (colorA: string, colorB: string, speed?: number) => Promise<boolean>;
   isSupported: boolean;
 }
 
@@ -119,6 +122,8 @@ export function BLEProvider({ children }: BLEProviderProps) {
     if (result.success && result.device) {
       setDeviceName(result.device.name || 'Granboard');
       setCanAutoReconnect(true);
+      // Rainbow pulse on successful connection
+      bleConnection.triggerDartLED('00ff00', 'pulse', 8);
     }
     return result;
   };
@@ -127,6 +132,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
     const result = await bleConnection.autoReconnect();
     if (result.success && result.device) {
       setDeviceName(result.device.name || 'Granboard');
+      bleConnection.triggerDartLED('00ff00', 'pulse', 8);
     }
     return result;
   };
@@ -145,6 +151,18 @@ export function BLEProvider({ children }: BLEProviderProps) {
     return bleConnection.clearLEDs();
   };
 
+  const triggerDartLED = (color: string, animation: string = 'pulse', speed: number = 10): Promise<boolean> => {
+    return bleConnection.triggerDartLED(color, animation, speed);
+  };
+
+  const triggerHitLED = (segment: number, hitType: 'single' | 'double' | 'triple' = 'single', colorA: string = 'ff0000', colorB: string = 'ffffff'): Promise<boolean> => {
+    return bleConnection.triggerHitLED(segment, hitType, colorA, colorB);
+  };
+
+  const triggerTwoColorEffect = (colorA: string, colorB: string, speed: number = 7): Promise<boolean> => {
+    return bleConnection.triggerTwoColorEffect(colorA, colorB, speed);
+  };
+
   const value: BLEContextType = {
     status,
     isConnected: status === 'connected',
@@ -157,6 +175,9 @@ export function BLEProvider({ children }: BLEProviderProps) {
     disconnect,
     simulateThrow,
     clearLEDs,
+    triggerDartLED,
+    triggerHitLED,
+    triggerTwoColorEffect,
     isSupported
   };
 

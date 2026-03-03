@@ -232,10 +232,14 @@ export function CRInhouseGameScreen({
   variant = 'standard',
 }: CRInhouseGameScreenProps) {
   // BLE for throw detection
-  const { lastThrow, isConnected: bleConnected, connect: bleConnect, disconnect: bleDisconnect, status: bleStatus } = useBLE();
+  const { lastThrow, isConnected: bleConnected, connect: bleConnect, disconnect: bleDisconnect, status: bleStatus, clearLEDs, triggerHitLED, triggerDartLED } = useBLE();
   const lastProcessedThrowRef = useRef<string | null>(null);
   const playerChangeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const animationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastAppliedThrowTimeRef = useRef<number>(0);
+
+  /** Min ms after last throw before we accept a button (avoids board sending button right after a single throw). */
+  const BUTTON_DEBOUNCE_MS = 1500;
 
   const isSoloMode = playerMode === 'solo';
   const [accessRevoked, setAccessRevoked] = useState(false);
@@ -394,6 +398,16 @@ export function CRInhouseGameScreen({
     setCurrentDarts(newDarts);
     playSound('dart');
 
+    // LED hit effect — light up the segment that was hit
+    if (segment !== 'MISS') {
+      const playerColor = ((currentThrower === 'p1' ? PLAYERS.p1?.profilecolor : PLAYERS.p2?.profilecolor) || '#ffffff').replace('#', '');
+      const hitType = multiplier === 3 ? 'triple' : multiplier === 2 ? 'double' : 'single';
+      const baseVal = (segment === 'S25' || segment === 'D25') ? 25 : parseInt(segment.replace(/^[SDT]/, ''), 10);
+      if (baseVal >= 1 && baseVal <= 25) {
+        triggerHitLED(baseVal, hitType, playerColor);
+      }
+    }
+
     // Count marks for MPR, but don't credit marks beyond closing a dead target
     if (target) {
       const opp: PlayerId = currentThrower === 'p1' ? 'p2' : 'p1';
@@ -408,6 +422,8 @@ export function CRInhouseGameScreen({
         }
       }
     }
+
+    lastAppliedThrowTimeRef.current = Date.now();
 
     // Increment darts thrown
     if (currentThrower === 'p1') {
@@ -456,6 +472,8 @@ export function CRInhouseGameScreen({
           const theirScore = currentThrower === 'p1' ? p2Score : p1Score;
           if (myScore >= theirScore) {
             playSound('win');
+            const winColor = ((currentThrower === 'p1' ? PLAYERS.p1?.profilecolor : PLAYERS.p2?.profilecolor) || '#ffffff').replace('#', '');
+            triggerDartLED(winColor, 'rainbow', 5);
             setGameWinner(currentThrower);
             setTimeout(() => setShowWinnerScreen(true), 500);
           }
@@ -470,6 +488,8 @@ export function CRInhouseGameScreen({
       const achievement = detectAchievement(newDarts);
       if (achievement) {
         playSound('achievement');
+        const achColor = ((currentThrower === 'p1' ? PLAYERS.p1?.profilecolor : PLAYERS.p2?.profilecolor) || '#ffffff').replace('#', '');
+        triggerDartLED(achColor, 'pulse', 6);
         setActiveAnimation(achievement);
         // 3 seconds to let award videos play fully (button can skip via animationTimeoutRef)
         animationTimeoutRef.current = setTimeout(() => {
@@ -484,7 +504,7 @@ export function CRInhouseGameScreen({
         setShowPlayerChange(true);
       }, PLAYER_CHANGE_DELAY_MS);
     }
-  }, [currentDarts, currentThrower, introComplete, showPlayerChange, showWinnerScreen, p1Score, p2Score, marks, currentRound]);
+  }, [currentDarts, currentThrower, introComplete, showPlayerChange, showWinnerScreen, p1Score, p2Score, marks, currentRound, PLAYERS, triggerHitLED, triggerDartLED]);
 
   const endTurnWithMisses = useCallback(() => {
     if (showPlayerChange || !introComplete || showWinnerScreen) return;
@@ -528,6 +548,10 @@ export function CRInhouseGameScreen({
     if (throwKey === lastProcessedThrowRef.current) return;
     lastProcessedThrowRef.current = throwKey;
     if (lastThrow.segmentType === 'BUTTON' || lastThrow.segment === 'BTN') {
+      if (currentDarts.length === 1 && (Date.now() - lastAppliedThrowTimeRef.current) < BUTTON_DEBOUNCE_MS) {
+        console.log('[CRInhouseGame] Ignoring button – too soon after single throw (possible board glitch)');
+        return;
+      }
       endTurnWithMisses();
       return;
     }
@@ -539,11 +563,12 @@ export function CRInhouseGameScreen({
     const multiplier = lastThrow.multiplier;
 
     applyThrow(segment, multiplier);
-  }, [lastThrow, applyThrow, endTurnWithMisses]);
+  }, [lastThrow, applyThrow, endTurnWithMisses, currentDarts.length]);
 
   // Handle player change
   useEffect(() => {
     if (showPlayerChange) {
+      clearLEDs();
       const timer = setTimeout(() => {
         if (currentThrower === 'p1') {
           setP1ThrewThisRound(true);

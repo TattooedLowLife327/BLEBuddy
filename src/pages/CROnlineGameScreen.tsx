@@ -232,7 +232,7 @@ export function CROnlineGameScreen({
   const p2 = localIsP1 ? remotePlayer : localPlayer;
 
   // BLE for throw detection and status
-  const { lastThrow, isConnected: bleConnected, connect: bleConnect, disconnect: bleDisconnect, status: bleStatus } = useBLE();
+  const { lastThrow, isConnected: bleConnected, connect: bleConnect, disconnect: bleDisconnect, status: bleStatus, clearLEDs, triggerHitLED, triggerDartLED } = useBLE();
   const lastProcessedThrowRef = useRef<string | null>(null);
   const playerChangeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const animationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -518,6 +518,16 @@ export function CROnlineGameScreen({
     setCurrentDarts(newDarts);
     playSound('dart');
 
+    // LED hit effect — light up the segment that was hit
+    if (isLocal && segment !== 'MISS') {
+      const playerColor = (currentThrower === 'p1' ? p1.accentColor : p2.accentColor).replace('#', '');
+      const hitType = multiplier === 3 ? 'triple' : multiplier === 2 ? 'double' : 'single';
+      const baseVal = (segment === 'S25' || segment === 'D25') ? 25 : parseInt(segment.replace(/^[SDT]/, ''), 10);
+      if (baseVal >= 1 && baseVal <= 25) {
+        triggerHitLED(baseVal, hitType, playerColor);
+      }
+    }
+
     // Count marks for MPR, but don't credit marks beyond closing a dead target
     if (target) {
       const opp: PlayerId = currentThrower === 'p1' ? 'p2' : 'p1';
@@ -583,6 +593,8 @@ export function CROnlineGameScreen({
           const theirScore = currentThrower === 'p1' ? p2Score : p1Score;
           if (myScoreBefore + pointsAddedThisThrow >= theirScore) {
             playSound('win');
+            const winColor = (currentThrower === 'p1' ? p1.accentColor : p2.accentColor).replace('#', '');
+            triggerDartLED(winColor, 'rainbow', 5);
             setGameWinner(currentThrower);
             setTimeout(() => { playSound('gameEnd'); setShowWinnerScreen(true); }, 500);
           }
@@ -603,6 +615,8 @@ export function CROnlineGameScreen({
       const achievement = detectAchievement(newDarts);
       if (achievement) {
         playSound('achievement');
+        const achColor = (currentThrower === 'p1' ? p1.accentColor : p2.accentColor).replace('#', '');
+        triggerDartLED(achColor, 'pulse', 6);
         setActiveAnimation(achievement);
         // 3 seconds to let award videos play fully (button can skip via animationTimeoutRef)
         animationTimeoutRef.current = setTimeout(() => {
@@ -629,7 +643,7 @@ export function CROnlineGameScreen({
         }, PLAYER_CHANGE_DELAY_MS);
       }
     }
-  }, [currentDarts, currentThrower, introComplete, showPlayerChange, showWinnerScreen, p1Score, p2Score, marks, localIsP1, localPlayer.id, currentRound, sendThrow, sendTurnEnd]);
+  }, [currentDarts, currentThrower, introComplete, showPlayerChange, showWinnerScreen, p1Score, p2Score, marks, localIsP1, localPlayer.id, currentRound, sendThrow, sendTurnEnd, p1, p2, triggerHitLED, triggerDartLED]);
 
   // Keep ref in sync so broadcast handler always has latest applyThrow
   useEffect(() => { applyThrowRef.current = applyThrow; }, [applyThrow]);
@@ -715,6 +729,7 @@ export function CROnlineGameScreen({
   // isn't killed by unrelated state changes (same fix as the cork effect pattern).
   useEffect(() => {
     if (!showPlayerChange) return;
+    clearLEDs();
     const timer = setTimeout(() => {
       const s = pcStateRef.current;
       if (s.currentThrower === 'p1') setP1ThrewThisRound(true);

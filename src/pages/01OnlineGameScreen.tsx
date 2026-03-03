@@ -350,11 +350,15 @@ export function O1OnlineGameScreen({
   const supabase = createClient();
 
   // BLE integration
-  const { lastThrow, isConnected, simulateThrow: bleSimulateThrow, status: bleStatus, connect: bleConnect, disconnect: bleDisconnect, clearLEDs } = useBLE();
+  const { lastThrow, isConnected, simulateThrow: bleSimulateThrow, status: bleStatus, connect: bleConnect, disconnect: bleDisconnect, clearLEDs, triggerHitLED, triggerDartLED } = useBLE();
   const devMode = isDevMode();
   const lastProcessedThrowRef = useRef<string | null>(null);
   const playerChangeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const animationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastAppliedThrowTimeRef = useRef<number>(0);
+
+  /** Min ms after last throw before we accept a button (avoids board sending button right after a single throw). */
+  const BUTTON_DEBOUNCE_MS = 1500;
 
   // Video element refs
   const localVideoRef = useRef<HTMLVideoElement>(null);
@@ -694,6 +698,15 @@ export function O1OnlineGameScreen({
     const newDarts = [...currentDarts, newDart];
     const newRoundScore = roundScore + effectiveScore;
     playSound('dart');
+    // LED hit effect — light up the segment that was hit
+    if (isLocal && segment !== 'MISS') {
+      const playerColor = (currentThrower === 'p1' ? p1.accentColor : p2.accentColor).replace('#', '');
+      const hitType = isTriple ? 'triple' : isDouble || isDoubleBull ? 'double' : 'single';
+      const baseVal = isAnyBull ? 25 : parseInt(segment.replace(/^[SDT]/, ''), 10);
+      if (baseVal >= 1 && baseVal <= 25) {
+        triggerHitLED(baseVal, hitType, playerColor);
+      }
+    }
     if (currentThrower === 'p1') setP1DartsThrown(prev => prev + 1);
     else setP2DartsThrown(prev => prev + 1);
 
@@ -705,6 +718,7 @@ export function O1OnlineGameScreen({
         score,
         multiplier,
       });
+      lastAppliedThrowTimeRef.current = Date.now();
     }
 
     if (isBust) {
@@ -718,6 +732,7 @@ export function O1OnlineGameScreen({
 
       setCurrentDarts(newDarts);
       playSound('bust');
+      if (isLocal) triggerDartLED('ff0000', 'flash', 6);
       const achievement = detectAchievement(newDarts, newRoundScore, true, false);
       triggerAchievement(achievement);
       // Use timeout ref so button can cancel it
@@ -751,8 +766,15 @@ export function O1OnlineGameScreen({
     if (newDarts.length === 3 || didWin) {
       const achievement = detectAchievement(newDarts, newRoundScore, false, didWin);
       if (achievement) {
-        if (didWin) { playSound('out'); playSound('win'); }
-        else playSound('achievement');
+        if (didWin) {
+          playSound('out'); playSound('win');
+          const winColor = (currentThrower === 'p1' ? p1.accentColor : p2.accentColor).replace('#', '');
+          triggerDartLED(winColor, 'rainbow', 5);
+        } else {
+          playSound('achievement');
+          const achColor = (currentThrower === 'p1' ? p1.accentColor : p2.accentColor).replace('#', '');
+          triggerDartLED(achColor, 'pulse', 6);
+        }
         setShowDoubleBullEffect(false);
         const winner = didWin ? currentThrower : undefined;
         triggerAchievement(achievement, winner);
@@ -788,7 +810,7 @@ export function O1OnlineGameScreen({
         }
       }, PLAYER_CHANGE_DELAY_MS);
     }
-  }, [currentDarts, currentScore, currentThrower, roundScore, showPlayerChange, introComplete, p1Score, p2Score, p1HasStarted, p2HasStarted, inMode, outMode, detectAchievement, triggerAchievement, currentRound, localIsP1, localPlayer.id, sendThrow, sendTurnEnd]);
+  }, [currentDarts, currentScore, currentThrower, roundScore, showPlayerChange, introComplete, p1Score, p2Score, p1HasStarted, p2HasStarted, inMode, outMode, detectAchievement, triggerAchievement, currentRound, localIsP1, localPlayer.id, sendThrow, sendTurnEnd, p1, p2, triggerHitLED, triggerDartLED]);
 
   // Keep throwDartRef in sync so broadcast handler always calls the latest version
   useEffect(() => { throwDartRef.current = throwDart; }, [throwDart]);
@@ -844,6 +866,10 @@ export function O1OnlineGameScreen({
     lastProcessedThrowRef.current = lastThrow.timestamp;
     if (!isLocalTurn) return;
     if (lastThrow.segmentType === 'BUTTON' || lastThrow.segment === 'BTN') {
+      if (currentDarts.length === 1 && (Date.now() - lastAppliedThrowTimeRef.current) < BUTTON_DEBOUNCE_MS) {
+        console.log('[01OnlineGame] Ignoring button – too soon after single throw (possible board glitch)');
+        return;
+      }
       endTurnWithMisses();
       return;
     }
@@ -858,7 +884,7 @@ export function O1OnlineGameScreen({
     }
 
     throwDart(segment, score, lastThrow.multiplier, true);
-  }, [lastThrow, throwDart, endTurnWithMisses, splitBull, isLocalTurn]);
+  }, [lastThrow, throwDart, endTurnWithMisses, splitBull, isLocalTurn, currentDarts.length]);
 
   // Dev mode throw simulator
   const handleDevSimulateThrow = useCallback(() => {
