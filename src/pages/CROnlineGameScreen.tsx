@@ -238,6 +238,7 @@ export function CROnlineGameScreen({
   const animationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentDartsRef = useRef<DartThrow[]>([]);
   const lastAppliedThrowTimeRef = useRef<number>(0);
+  const pendingTurnEndRef = useRef(false); // Queued remote turn_end that arrived before 3rd throw
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
 
   /** Min ms after last throw before we accept a button (avoids board sending button right after a single throw). */
@@ -400,6 +401,15 @@ export function CROnlineGameScreen({
   const p1MPR = p1DartsThrown >= 3 ? (p1TotalMarks / (p1DartsThrown / 3)).toFixed(2) : '0.00';
   const p2MPR = p2DartsThrown >= 3 ? (p2TotalMarks / (p2DartsThrown / 3)).toFixed(2) : '0.00';
 
+  // Snapshot ref for the showPlayerChange timer body so the effect only
+  // depends on showPlayerChange, preventing cleanup from killing the timer.
+  const pcStateRef = useRef<any>({});
+  pcStateRef.current = {
+    currentThrower, p1ThrewThisRound, p2ThrewThisRound, currentRound,
+    gameWinner, p1Score, p2Score, p1TotalMarks, p2TotalMarks,
+    p1ScoreReachedRound, p2ScoreReachedRound,
+  };
+
   // Display layout: p1 (starting player) always on LEFT, p2 always on RIGHT for both players
   // This ensures both players see the same consistent layout
 
@@ -480,9 +490,13 @@ export function CROnlineGameScreen({
       applyThrowRef.current(segment, multiplier, false);
     },
     onRemoteTurnEnd: () => {
-      // Only switch when we've applied all 3 remote throws; avoids switching before throws arrive
-      if (currentDartsRef.current.length === 3) {
+      // If all 3 throws have arrived, switch immediately. Otherwise queue the
+      // turn end so applyThrow can trigger it when the 3rd dart lands.
+      if (currentDartsRef.current.length >= 3) {
+        pendingTurnEndRef.current = false;
         setShowPlayerChange(true);
+      } else {
+        pendingTurnEndRef.current = true;
       }
     },
   });
@@ -596,16 +610,24 @@ export function CROnlineGameScreen({
           setActiveAnimation(null);
         }, 3000);
       }
-      // Add delay before player change to let dart effects complete (button press skips this)
-      playerChangeTimeoutRef.current = setTimeout(() => {
-        playerChangeTimeoutRef.current = null;
+
+      // For remote throws: if turn_end arrived before this 3rd dart, process it now
+      if (!isLocal && pendingTurnEndRef.current) {
+        pendingTurnEndRef.current = false;
         playSound('playerChange');
         setShowPlayerChange(true);
-        // Broadcast turn end if local
-        if (isLocal) {
-          sendTurnEnd({ playerId: localPlayer.id });
-        }
-      }, PLAYER_CHANGE_DELAY_MS);
+      } else {
+        // Add delay before player change to let dart effects complete (button press skips this)
+        playerChangeTimeoutRef.current = setTimeout(() => {
+          playerChangeTimeoutRef.current = null;
+          playSound('playerChange');
+          setShowPlayerChange(true);
+          // Broadcast turn end if local
+          if (isLocal) {
+            sendTurnEnd({ playerId: localPlayer.id });
+          }
+        }, PLAYER_CHANGE_DELAY_MS);
+      }
     }
   }, [currentDarts, currentThrower, introComplete, showPlayerChange, showWinnerScreen, p1Score, p2Score, marks, localIsP1, localPlayer.id, currentRound, sendThrow, sendTurnEnd]);
 
@@ -646,8 +668,12 @@ export function CROnlineGameScreen({
       playSound('playerChange');
       setShowPlayerChange(true);
     }
+    // Broadcast miss throws so opponent stays in sync, then send turn end
+    for (let i = 0; i < remaining; i++) {
+      sendThrow({ playerId: localPlayer.id, segment: 'MISS', multiplier: 0 });
+    }
     sendTurnEnd({ playerId: localPlayer.id });
-  }, [activeAnimation, currentDarts, currentThrower, introComplete, localIsP1, localPlayer.id, showPlayerChange, showWinnerScreen, sendTurnEnd]);
+  }, [activeAnimation, currentDarts, currentThrower, introComplete, localIsP1, localPlayer.id, showPlayerChange, showWinnerScreen, sendThrow, sendTurnEnd]);
 
   // Handle BLE throws
   useEffect(() => {
@@ -685,63 +711,57 @@ export function CROnlineGameScreen({
     applyThrow(segment, multiplier, true);
   }, [lastThrow, isLocalTurn, localIsP1, currentThrower, currentDarts.length, applyThrow, endTurnWithMisses]);
 
-  // Handle player change
+  // Handle player change — reads state from snapshot ref so the 800ms timer
+  // isn't killed by unrelated state changes (same fix as the cork effect pattern).
   useEffect(() => {
-    if (showPlayerChange) {
-      const timer = setTimeout(() => {
-        if (currentThrower === 'p1') {
-          setP1ThrewThisRound(true);
+    if (!showPlayerChange) return;
+    const timer = setTimeout(() => {
+      const s = pcStateRef.current;
+      if (s.currentThrower === 'p1') setP1ThrewThisRound(true);
+      else setP2ThrewThisRound(true);
+
+      const willCompleteRound = (s.currentThrower === 'p1' && s.p2ThrewThisRound) ||
+                                 (s.currentThrower === 'p2' && s.p1ThrewThisRound);
+
+      // Round 20 limit: If round 20 completes without a winner, determine by tiebreaker
+      if (willCompleteRound && s.currentRound === 20 && !s.gameWinner) {
+        let winner: 'p1' | 'p2';
+        if (s.p1Score > s.p2Score) {
+          winner = 'p1';
+        } else if (s.p2Score > s.p1Score) {
+          winner = 'p2';
+        } else if (s.p1TotalMarks > s.p2TotalMarks) {
+          winner = 'p1';
+        } else if (s.p2TotalMarks > s.p1TotalMarks) {
+          winner = 'p2';
         } else {
-          setP2ThrewThisRound(true);
+          winner = s.p1ScoreReachedRound <= s.p2ScoreReachedRound ? 'p1' : 'p2';
         }
+        playSound('win');
+        setGameWinner(winner);
+        setTimeout(() => { playSound('gameEnd'); setShowWinnerScreen(true); }, 500);
+        return;
+      }
 
-        const willCompleteRound = (currentThrower === 'p1' && p2ThrewThisRound) ||
-                                   (currentThrower === 'p2' && p1ThrewThisRound);
+      if (willCompleteRound) {
+        if (s.currentRound + 1 === 20) playSound('lastRound');
+        setRoundAnimState('out');
+        setTimeout(() => {
+          setCurrentRound(prev => prev + 1);
+          setRoundKey(prev => prev + 1);
+          setP1ThrewThisRound(false);
+          setP2ThrewThisRound(false);
+          setRoundAnimState('in');
+        }, 500);
+      }
 
-        // Round 20 limit: If round 20 completes without a winner, determine by tiebreaker
-        if (willCompleteRound && currentRound === 20 && !gameWinner) {
-          let winner: 'p1' | 'p2';
-          if (p1Score > p2Score) {
-            // P1 has more points - P1 wins
-            winner = 'p1';
-          } else if (p2Score > p1Score) {
-            // P2 has more points - P2 wins
-            winner = 'p2';
-          } else if (p1TotalMarks > p2TotalMarks) {
-            // Points tied, P1 has more marks - P1 wins
-            winner = 'p1';
-          } else if (p2TotalMarks > p1TotalMarks) {
-            // Points tied, P2 has more marks - P2 wins
-            winner = 'p2';
-          } else {
-            // Points and marks both tied - whoever reached that point total first wins
-            winner = p1ScoreReachedRound <= p2ScoreReachedRound ? 'p1' : 'p2';
-          }
-          playSound('win');
-          setGameWinner(winner);
-          setTimeout(() => { playSound('gameEnd'); setShowWinnerScreen(true); }, 500);
-          return;
-        }
-
-        if (willCompleteRound) {
-          if (currentRound + 1 === 20) playSound('lastRound');
-          setRoundAnimState('out');
-          setTimeout(() => {
-            setCurrentRound(prev => prev + 1);
-            setRoundKey(prev => prev + 1);
-            setP1ThrewThisRound(false);
-            setP2ThrewThisRound(false);
-            setRoundAnimState('in');
-          }, 500);
-        }
-
-        setShowPlayerChange(false);
-        setCurrentThrower(t => t === 'p1' ? 'p2' : 'p1');
-        setCurrentDarts([]);
-      }, 800);
-      return () => clearTimeout(timer);
-    }
-  }, [showPlayerChange, currentThrower, p1ThrewThisRound, p2ThrewThisRound, currentRound, gameWinner, p1Score, p2Score, p1TotalMarks, p2TotalMarks, p1ScoreReachedRound, p2ScoreReachedRound]);
+      setShowPlayerChange(false);
+      setCurrentThrower(t => t === 'p1' ? 'p2' : 'p1');
+      setCurrentDarts([]);
+      pendingTurnEndRef.current = false;
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [showPlayerChange]);
 
   const formatDart = (segment: string) => {
     if (segment === 'MISS') return 'MISS';

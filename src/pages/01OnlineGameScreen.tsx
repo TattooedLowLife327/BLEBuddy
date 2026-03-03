@@ -450,6 +450,17 @@ export function O1OnlineGameScreen({
   // 80% threshold
   const eightyPercentThreshold = startScore === 501 ? 100 : 50;
 
+  // Snapshot ref for the showPlayerChange timer. All values the timer body needs
+  // are read from this ref so the effect only depends on showPlayerChange itself,
+  // preventing the cleanup from killing the 800ms timer on unrelated state changes.
+  const pcStateRef = useRef<any>({});
+  pcStateRef.current = {
+    currentThrower, p1ThrewThisRound, p2ThrewThisRound, isOhOneGame,
+    eightyPercentTriggered, p1Score, p2Score, eightyPercentThreshold,
+    p1DartsThrown, p2DartsThrown, startScore, currentRound, gameWinner,
+    p1ScoreReachedRound, p2ScoreReachedRound,
+  };
+
   // Calculate live PPR
   const p1LivePPR = p1DartsThrown > 0 ? ((startScore - p1Score) / p1DartsThrown) * 3 : 0;
   const p2LivePPR = p2DartsThrown > 0 ? ((startScore - p2Score) / p2DartsThrown) * 3 : 0;
@@ -553,66 +564,83 @@ export function O1OnlineGameScreen({
   }, [showDoubleBullEffect, doubleBullEffectKey]);
 
   useEffect(() => {
-    if (showPlayerChange) {
-      clearLEDs();
-      const timer = setTimeout(() => {
-        if (currentThrower === 'p1') setP1ThrewThisRound(true);
-        else setP2ThrewThisRound(true);
-        if (isOhOneGame && !eightyPercentTriggered) {
-          const playerScore = currentThrower === 'p1' ? p1Score : p2Score;
-          if (playerScore <= eightyPercentThreshold) {
-            setEightyPercentTriggered(true);
-            const p1PPR = p1DartsThrown > 0 ? ((startScore - p1Score) / p1DartsThrown) * 3 : 0;
-            const p2PPR = p2DartsThrown > 0 ? ((startScore - p2Score) / p2DartsThrown) * 3 : 0;
-            setP1FrozenPPR(p1PPR);
-            setP2FrozenPPR(p2PPR);
-          }
+    if (!showPlayerChange) return;
+    clearLEDs();
+    const timer = setTimeout(() => {
+      // Read all state from snapshot ref so this effect doesn't depend on
+      // (and get cleaned up by) every piece of game state.
+      const s = pcStateRef.current;
+      if (s.currentThrower === 'p1') setP1ThrewThisRound(true);
+      else setP2ThrewThisRound(true);
+      if (s.isOhOneGame && !s.eightyPercentTriggered) {
+        const playerScore = s.currentThrower === 'p1' ? s.p1Score : s.p2Score;
+        if (playerScore <= s.eightyPercentThreshold) {
+          setEightyPercentTriggered(true);
+          const p1PPR = s.p1DartsThrown > 0 ? ((s.startScore - s.p1Score) / s.p1DartsThrown) * 3 : 0;
+          const p2PPR = s.p2DartsThrown > 0 ? ((s.startScore - s.p2Score) / s.p2DartsThrown) * 3 : 0;
+          setP1FrozenPPR(p1PPR);
+          setP2FrozenPPR(p2PPR);
         }
-        const willCompleteRound = (currentThrower === 'p1' && p2ThrewThisRound) ||
-                                   (currentThrower === 'p2' && p1ThrewThisRound);
+      }
+      const willCompleteRound = (s.currentThrower === 'p1' && s.p2ThrewThisRound) ||
+                                 (s.currentThrower === 'p2' && s.p1ThrewThisRound);
 
-        // Round 20 limit: If round 20 completes without a winner, determine by tiebreaker
-        if (willCompleteRound && currentRound === 20 && !gameWinner) {
-          let winner: 'p1' | 'p2';
-          if (p1Score < p2Score) {
-            // P1 has lower score (closer to 0) - P1 wins
-            winner = 'p1';
-          } else if (p2Score < p1Score) {
-            // P2 has lower score (closer to 0) - P2 wins
-            winner = 'p2';
-          } else {
-            // Scores tied - whoever reached that score first wins
-            winner = p1ScoreReachedRound <= p2ScoreReachedRound ? 'p1' : 'p2';
-          }
-          setGameWinner(winner);
-          setTimeout(() => { playSound('gameEnd'); setShowWinnerScreen(true); }, 500);
-          return;
+      // Round 20 limit: If round 20 completes without a winner, determine by tiebreaker
+      if (willCompleteRound && s.currentRound === 20 && !s.gameWinner) {
+        let winner: 'p1' | 'p2';
+        if (s.p1Score < s.p2Score) {
+          winner = 'p1';
+        } else if (s.p2Score < s.p1Score) {
+          winner = 'p2';
+        } else {
+          winner = s.p1ScoreReachedRound <= s.p2ScoreReachedRound ? 'p1' : 'p2';
         }
+        setGameWinner(winner);
+        setTimeout(() => { playSound('gameEnd'); setShowWinnerScreen(true); }, 500);
+        return;
+      }
 
-        if (willCompleteRound) {
-          if (currentRound + 1 === 20) playSound('lastRound');
-          setRoundAnimState('out');
-          setTimeout(() => {
-            setCurrentRound(prev => prev + 1);
-            setRoundKey(prev => prev + 1);
-            setP1ThrewThisRound(false);
-            setP2ThrewThisRound(false);
-            setRoundAnimState('in');
-          }, 500);
-        }
-        setShowPlayerChange(false);
-        setCurrentThrower(currentThrower === 'p1' ? 'p2' : 'p1');
-        setCurrentDarts([]);
-        setRoundScore(0);
-      }, 800);
-      return () => clearTimeout(timer);
-    }
-  }, [showPlayerChange, currentThrower, p1ThrewThisRound, p2ThrewThisRound, isOhOneGame, eightyPercentTriggered, p1Score, p2Score, eightyPercentThreshold, p1DartsThrown, p2DartsThrown, startScore, currentRound, gameWinner, p1ScoreReachedRound, p2ScoreReachedRound]);
+      if (willCompleteRound) {
+        if (s.currentRound + 1 === 20) playSound('lastRound');
+        setRoundAnimState('out');
+        setTimeout(() => {
+          setCurrentRound(prev => prev + 1);
+          setRoundKey(prev => prev + 1);
+          setP1ThrewThisRound(false);
+          setP2ThrewThisRound(false);
+          setRoundAnimState('in');
+        }, 500);
+      }
+      setShowPlayerChange(false);
+      setCurrentThrower(s.currentThrower === 'p1' ? 'p2' : 'p1');
+      setCurrentDarts([]);
+      setRoundScore(0);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [showPlayerChange]);
 
   // Is it local player's turn?
   const p1Active = currentThrower === 'p1';
   const p2Active = currentThrower === 'p2';
   const isLocalTurn = (localIsP1 && p1Active) || (!localIsP1 && p2Active);
+
+  // Ref for throwDart — declared here so useOnlineThrowSync can reference it,
+  // then kept in sync after throwDart is defined below.
+  const throwDartRef = useRef<(segment: string, score: number, multiplier: number, isLocal: boolean) => void>(() => {});
+
+  // Shared realtime throw synchronization (Supabase channel) — must be above
+  // throwDart so sendThrow/sendTurnEnd are defined before use.
+  const { sendThrow, sendTurnEnd } = useOnlineThrowSync({
+    channelName: `o1:${gameId}`,
+    localPlayerId: localPlayer.id,
+    onRemoteThrow: ({ segment, score = 0, multiplier }) => {
+      throwDartRef.current(segment, score, multiplier, false);
+    },
+    onRemoteTurnEnd: () => {
+      playSound('playerChange');
+      setShowPlayerChange(true);
+    },
+  });
 
   const throwDart = useCallback((segment: string, score: number, multiplier: number, isLocal: boolean = true) => {
     if (currentDarts.length >= 3 || showPlayerChange || !introComplete) return;
@@ -762,22 +790,8 @@ export function O1OnlineGameScreen({
     }
   }, [currentDarts, currentScore, currentThrower, roundScore, showPlayerChange, introComplete, p1Score, p2Score, p1HasStarted, p2HasStarted, inMode, outMode, detectAchievement, triggerAchievement, currentRound, localIsP1, localPlayer.id, sendThrow, sendTurnEnd]);
 
-  // Keep ref in sync for broadcast handler
-  const throwDartRef = useRef(throwDart);
+  // Keep throwDartRef in sync so broadcast handler always calls the latest version
   useEffect(() => { throwDartRef.current = throwDart; }, [throwDart]);
-
-  // Shared realtime throw synchronization (Supabase channel)
-  const { sendThrow, sendTurnEnd } = useOnlineThrowSync({
-    channelName: `o1:${gameId}`,
-    localPlayerId: localPlayer.id,
-    onRemoteThrow: ({ segment, score = 0, multiplier }) => {
-      throwDartRef.current(segment, score, multiplier, false);
-    },
-    onRemoteTurnEnd: () => {
-      playSound('playerChange');
-      setShowPlayerChange(true);
-    },
-  });
 
   const endTurnWithMisses = useCallback(() => {
     if (showPlayerChange || !introComplete || showWinnerScreen) return;
@@ -814,15 +828,12 @@ export function O1OnlineGameScreen({
       playSound('playerChange');
       setShowPlayerChange(true);
     }
-    // Broadcast turn end to opponent
-    if (throwChannelRef.current) {
-      throwChannelRef.current.send({
-        type: 'broadcast',
-        event: 'turn_end',
-        payload: { playerId: localPlayer.id },
-      });
+    // Broadcast miss throws so opponent stays in sync, then send turn end
+    for (let i = 0; i < remaining; i++) {
+      sendThrow({ playerId: localPlayer.id, segment: 'MISS', score: 0, multiplier: 0 });
     }
-  }, [activeAnimation, currentDarts, currentThrower, introComplete, localIsP1, localPlayer.id, showPlayerChange, showWinnerScreen]);
+    sendTurnEnd({ playerId: localPlayer.id });
+  }, [activeAnimation, currentDarts, currentThrower, introComplete, localIsP1, localPlayer.id, showPlayerChange, showWinnerScreen, sendThrow, sendTurnEnd]);
 
   // Handle BLE throws
   useEffect(() => {

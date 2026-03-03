@@ -416,13 +416,9 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
         if (p1Score > p2Score) {
           playSound('corkWinner');
           setWinner(player1.id);
-          const t3 = setTimeout(() => onCorkComplete(player1.id), 2500);
-          corkTimeoutsRef.current.push(t3);
         } else if (p2Score > p1Score) {
           playSound('corkWinner');
           setWinner(player2.id);
-          const t3 = setTimeout(() => onCorkComplete(player2.id), 2500);
-          corkTimeoutsRef.current.push(t3);
         } else {
           setTieAlert(true);
           const t3 = setTimeout(() => {
@@ -448,7 +444,15 @@ export function CorkScreen({ player1, player2, gameId, visiblePlayerId, isInitia
       corkTimeoutsRef.current.forEach(clearTimeout);
       corkTimeoutsRef.current = [];
     };
-  }, [p1State, p2State, winner, player1.id, player2.id, onCorkComplete]);
+  }, [p1State, p2State, winner, player1.id, player2.id]);
+
+  // Navigate to game after winner animation plays out (separate effect so it doesn't get
+  // killed by the cleanup above when `winner` state change triggers a re-render)
+  useEffect(() => {
+    if (!winner) return;
+    const t = setTimeout(() => onCorkComplete(winner), 2500);
+    return () => clearTimeout(t);
+  }, [winner, onCorkComplete]);
 
   // Score display logic - show ? for opponent until both thrown
   const getScoreDisplay = (state: PlayerCorkState, playerId: string): string => {

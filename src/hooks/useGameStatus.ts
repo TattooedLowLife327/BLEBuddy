@@ -33,16 +33,18 @@ export function useGameStatus(options: UseGameStatusOptions): UseGameStatusRetur
   const presenceChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const statusChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const hasSeenOpponentRef = useRef(false); // Track if we've ever seen opponent online
+  const isOpponentOnlineRef = useRef(false); // Mirror of isOpponentOnline for use in presence handler
 
   // Use refs for callbacks to avoid stale closures in useEffect
   const onOpponentLeftRef = useRef(options.onOpponentLeft);
   const onOpponentDisconnectedRef = useRef(options.onOpponentDisconnected);
   const onOpponentReconnectedRef = useRef(options.onOpponentReconnected);
 
-  // Keep refs in sync with latest callbacks
+  // Keep refs in sync with latest values
   onOpponentLeftRef.current = options.onOpponentLeft;
   onOpponentDisconnectedRef.current = options.onOpponentDisconnected;
   onOpponentReconnectedRef.current = options.onOpponentReconnected;
+  isOpponentOnlineRef.current = isOpponentOnline;
 
   // Clear countdown timer
   const clearCountdown = useCallback(() => {
@@ -61,9 +63,13 @@ export function useGameStatus(options: UseGameStatusOptions): UseGameStatusRetur
     countdownIntervalRef.current = setInterval(() => {
       setDisconnectCountdown(prev => {
         if (prev === null || prev <= 1) {
-          clearCountdown();
-          // Timeout reached - opponent is gone
-          onOpponentLeftRef.current();
+          // Schedule side effects outside the setState updater to avoid
+          // double-firing in StrictMode and calling clearInterval from
+          // within the interval's own callback.
+          queueMicrotask(() => {
+            clearCountdown();
+            onOpponentLeftRef.current();
+          });
           return null;
         }
         return prev - 1;
@@ -154,13 +160,13 @@ export function useGameStatus(options: UseGameStatusOptions): UseGameStatusRetur
             console.log('[GameStatus] First time seeing opponent online');
             hasSeenOpponentRef.current = true;
           }
-          if (!isOpponentOnline) {
+          if (!isOpponentOnlineRef.current) {
             console.log('[GameStatus] Opponent came online/reconnected');
             clearCountdown();
             setIsOpponentOnline(true);
             onOpponentReconnectedRef.current?.();
           }
-        } else if (!opponentOnline && hasSeenOpponentRef.current && isOpponentOnline) {
+        } else if (!opponentOnline && hasSeenOpponentRef.current && isOpponentOnlineRef.current) {
           // Opponent went offline AFTER we previously saw them - start countdown
           console.log('[GameStatus] Opponent disconnected after being online - starting countdown');
           setIsOpponentOnline(false);

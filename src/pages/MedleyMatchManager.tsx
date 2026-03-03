@@ -194,7 +194,14 @@ export function MedleyMatchManager({
     });
   }, [activeCorkWinnerId, choiceChooser, choiceMode, choiceStarter, currentIndex, legs, persistConfig]);
 
-  const advanceToNextLeg = useCallback((winner: PlayerId) => {
+  const advanceToNextLeg = useCallback((childWinner: PlayerId) => {
+    // Child game screens remap p1/p2 based on startingPlayer (whoever goes
+    // first becomes the child's p1). When currentStarter is 'p2', the child's
+    // p1 is actually Medley's p2, so we need to invert the winner back to
+    // Medley's coordinate system (where p1 = initiator always).
+    const winner: PlayerId = currentStarter === 'p2'
+      ? (childWinner === 'p1' ? 'p2' : 'p1')
+      : childWinner;
     const nextMatchWinners = [...matchWinners, winner];
     const p1Wins = nextMatchWinners.filter(w => w === 'p1').length;
     const p2Wins = nextMatchWinners.filter(w => w === 'p2').length;
@@ -219,7 +226,7 @@ export function MedleyMatchManager({
     setCurrentIndex(nextIndex);
     setCurrentStarter(winner === 'p1' ? 'p2' : 'p1');
     setGameKey(prev => prev + 1);
-  }, [currentIndex, gamesNeededToWin, legs.length, matchWinners]);
+  }, [currentIndex, currentStarter, gamesNeededToWin, legs.length, matchWinners]);
 
   const handleCorkComplete = useCallback((firstPlayerId: string) => {
     setActiveCorkWinnerId(firstPlayerId);
@@ -245,7 +252,7 @@ export function MedleyMatchManager({
         visiblePlayerId={localPlayer.id}
         isInitiator={isInitiator}
         onCorkComplete={handleCorkComplete}
-        onCancel={onLeaveMatch}
+        onCancel={onLeaveMatch || (() => {})}
       />
     );
   }
@@ -342,7 +349,7 @@ export function MedleyMatchManager({
           gameType={currentLeg}
           startingPlayer={currentStarter}
           onGameComplete={advanceToNextLeg}
-          onLeaveMatch={onLeaveMatch}
+          onLeaveMatch={onLeaveMatch || (() => {})}
         />
       )}
 
@@ -362,7 +369,7 @@ export function MedleyMatchManager({
               {matchWinner === 'p1' ? p1.name : p2.name}
             </div>
             <button
-              onClick={onLeaveMatch}
+              onClick={onLeaveMatch || (() => {})}
               className="mt-8 px-6 py-3 rounded-lg border border-white/30 text-white/80 hover:bg-white/10 transition"
               style={{ fontFamily: 'Helvetica, Arial, sans-serif' }}
             >
